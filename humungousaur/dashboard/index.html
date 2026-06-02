@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Humungousaur</title>
+    <link rel="stylesheet" href="/dashboard/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>Humungousaur</h1>
+        <p id="health">Connecting to local runtime</p>
+      </div>
+      <button id="refreshBtn" class="iconButton" title="Refresh dashboard" aria-label="Refresh dashboard">R</button>
+    </header>
+
+    <main class="layout">
+      <section class="commandPanel" aria-label="Command runner">
+        <form id="commandForm">
+          <label for="commandInput">Command</label>
+          <div class="commandRow">
+            <input id="commandInput" name="command" autocomplete="off" placeholder="Summarize this project" />
+            <select id="plannerSelect" name="planner" aria-label="Planner">
+              <option value="model">Model</option>
+              <option value="explicit">Explicit command</option>
+            </select>
+            <button type="submit">Run</button>
+            <button id="cancelRunBtn" class="secondary" type="button" disabled>Stop</button>
+          </div>
+          <div class="modelRow" aria-label="Model runtime options">
+            <select id="modelProviderSelect" name="model_provider" aria-label="Model provider">
+              <option value="auto">Auto</option>
+              <option value="openai-responses">OpenAI Responses</option>
+              <option value="openai-chat">OpenAI Chat</option>
+              <option value="groq">Groq</option>
+              <option value="ollama">Ollama</option>
+              <option value="local-openai">Local OpenAI</option>
+              <option value="grok">xAI Grok</option>
+            </select>
+            <input id="modelNameInput" name="model" autocomplete="off" value="gpt-5-mini" aria-label="Model name" />
+            <input id="modelBaseUrlInput" name="model_base_url" autocomplete="off" placeholder="Base URL override" aria-label="Model base URL override" />
+            <input id="modelApiKeyEnvInput" name="model_api_key_env" autocomplete="off" placeholder="API key env" aria-label="API key environment variable" />
+            <label class="inlineToggle" for="dryRunToggle">
+              <input id="dryRunToggle" type="checkbox" />
+              Dry run
+            </label>
+          </div>
+        </form>
+        <pre id="responseBox" class="responseBox">No run yet.</pre>
+      </section>
+
+      <section class="grid">
+        <article class="panel">
+          <div class="panelHeader">
+            <h2>Approvals</h2>
+            <span id="approvalCount" class="count">0</span>
+          </div>
+          <div id="approvals" class="stack"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panelHeader">
+            <h2>Runs</h2>
+            <span id="runCount" class="count">0</span>
+          </div>
+          <div id="runs" class="stack"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panelHeader">
+            <h2>Timeline</h2>
+            <span id="timelineCount" class="count">0</span>
+          </div>
+          <div id="timeline" class="stack"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panelHeader">
+            <h2>Browser</h2>
+            <span id="browserCount" class="count">0</span>
+          </div>
+          <div id="browserSessions" class="stack"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panelHeader">
+            <h2>Screen</h2>
+            <span id="screenCaptureCount" class="count">0</span>
+          </div>
+          <div id="screenCaptures" class="stack"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panelHeader">
+            <h2>Plan Traces</h2>
+            <span id="planCount" class="count">0</span>
+          </div>
+          <div id="plans" class="stack"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panelHeader">
+            <h2>Memory</h2>
+          </div>
+          <div class="memorySearch">
+            <select id="memoryPeriod" aria-label="Memory recap period">
+              <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
+              <option value="week">Week</option>
+              <option value="recent">Recent</option>
+            </select>
+            <button id="memorySummaryBtn" type="button">Recap</button>
+          </div>
+          <pre id="memorySummary" class="memoryRecap">No memory recap yet.</pre>
+          <pre id="memoryProfile" class="memoryRecap">No profile memories yet.</pre>
+          <form id="memoryForm" class="memorySearch">
+            <input id="memoryQuery" placeholder="Search memory" />
+            <button type="submit">Search</button>
+          </form>
+          <div id="memory" class="stack"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panelHeader">
+            <h2>Permissions</h2>
+            <span id="permissionCount" class="count">0</span>
+          </div>
+          <form id="readRootForm" class="memorySearch">
+            <input id="readRootInput" placeholder="Add read folder" />
+            <button type="submit">Add</button>
+          </form>
+          <div id="permissions" class="stack"></div>
+        </article>
+      </section>
+    </main>
+
+    <script src="/dashboard/app.js"></script>
+  </body>
+</html>

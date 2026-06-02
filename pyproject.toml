@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "humungousaur"
+version = "0.1.0"
+description = "Local-first personal desktop agent runtime with safety, tools, audit logs, and memory."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+humungousaur = "humungousaur.cli:main"
+
+[tool.setuptools]
+packages = [
+  "humungousaur",
+  "humungousaur.dashboard",
+  "humungousaur.indexing",
+  "humungousaur.integrations",
+  "humungousaur.memory",
+  "humungousaur.planning",
+  "humungousaur.safety",
+  "humungousaur.tools",
+]
+
+[tool.setuptools.package-data]
+humungousaur = ["dashboard/*.html", "dashboard/*.css", "dashboard/*.js"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = ["external_repos", ".git", "artifacts"]
