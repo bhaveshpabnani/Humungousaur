@@ -42,6 +42,10 @@ from humungousaur.cognition import (
     ReflectionRecord,
     ReflectionEngine,
     ReflectionStore,
+    EvidenceSelfReviewProvider,
+    ModelSelfReviewProvider,
+    SelfReviewEngine,
+    SelfReviewStore,
     EvidenceSkillEvolutionProvider,
     ModelSkillEvolutionProvider,
     SkillEvolutionEngine,
@@ -67,6 +71,7 @@ from humungousaur.cognition.models import (
     RuntimeCycleStatus,
     RecoveryStatus,
     PersonaEvolutionStatus,
+    SelfReviewStatus,
     SkillEvolutionStatus,
     SkillLifecycleStatus,
     StepBoundaryAction,
@@ -96,6 +101,8 @@ from humungousaur.tools.cognition_tools import (
     CognitivePersonaUpdateTool,
     CognitiveReflectionStatusTool,
     CognitiveRecoveryStatusTool,
+    CognitiveSelfReviewStatusTool,
+    CognitiveSelfReviewTool,
     CognitiveSkillEvolveTool,
     CognitiveSkillEvolutionStatusTool,
     CognitiveSkillRecordTool,
@@ -668,6 +675,52 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertIn(f"knowledge:{knowledge.knowledge_id}", updated.evidence_refs)
             self.assertEqual(PersonaEvolutionStore(db).recent()[0].evolution_id, evolution.evolution_id)
 
+    def test_model_self_review_provider_records_metacognitive_judgment(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            db = Path(tmp_dir) / "cognition.sqlite3"
+            goals = GoalStore(db)
+            goal = goals.create_goal("Ship cognitive layer", ["Tests pass.", "Commit is created."])
+            task = goals.add_task(goal.goal_id, "Run verification", metadata={"success_criteria": ["Tests pass."]})
+            learning = LearningStore(db).append(
+                goal_id=goal.goal_id,
+                task_id=task.task_id,
+                outcome="in_progress",
+                lesson="Verification has not run yet, so completion remains uncertain.",
+                evidence_refs=[f"task:{task.task_id}"],
+            )
+            snapshot = CognitiveSnapshot(active_goals=[goal], active_tasks=[task], learning=[learning])
+            client = StaticModelClient(
+                json.dumps(
+                    {
+                        "status": "generated",
+                        "summary": "The task is promising but should not be claimed complete until tests and commit evidence exist.",
+                        "autonomy_posture": "continue",
+                        "confidence": 0.62,
+                        "uncertainty": 0.38,
+                        "risks": ["Claiming completion before verification."],
+                        "open_questions": ["Have full tests passed?"],
+                        "recommended_actions": ["Run the focused and full verification suites.", "Commit only after clean status checks."],
+                        "should_ask_user": False,
+                        "evidence_refs": [f"goal:{goal.goal_id}", f"task:{task.task_id}", f"learning:{learning.learning_id}"],
+                    }
+                )
+            )
+            engine = SelfReviewEngine(
+                SelfReviewStore(db),
+                provider=ModelSelfReviewProvider(client, fallback=EvidenceSelfReviewProvider()),
+            )
+
+            review = engine.review(snapshot=snapshot, purpose="pre_commit_check")
+
+            self.assertEqual(review.status, SelfReviewStatus.GENERATED)
+            self.assertEqual(review.autonomy_posture, "continue")
+            self.assertAlmostEqual(review.confidence, 0.62)
+            self.assertAlmostEqual(review.uncertainty, 0.38)
+            self.assertIn("Claiming completion", review.risks[0])
+            self.assertIn("full verification", review.recommended_actions[0])
+            self.assertFalse(review.should_ask_user)
+            self.assertEqual(SelfReviewStore(db).recent()[0].review_id, review.review_id)
+
     def test_model_consolidation_provider_falls_back_without_inferred_memory(self) -> None:
         class FailingClient(StaticModelClient):
             def complete_json(self, prompt, schema):
@@ -830,6 +883,11 @@ class CognitiveStoreTests(unittest.TestCase):
                 config,
             )
             persona_evolution_status = CognitivePersonaEvolutionStatusTool().execute({"limit": 5}, config)
+            self_review = CognitiveSelfReviewTool().execute(
+                {"purpose": "current_work", "include_state": True, "limit": 5},
+                config,
+            )
+            self_review_status = CognitiveSelfReviewStatusTool().execute({"limit": 5}, config)
             learning_record = LearningStore(config.cognition_db_path).append(
                 goal_id=goal.output["goal"]["goal_id"],
                 outcome="observed",
@@ -897,6 +955,8 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertEqual(persona.status, ActionStatus.SUCCEEDED)
             self.assertEqual(persona_evolution.status, ActionStatus.SUCCEEDED)
             self.assertEqual(persona_evolution_status.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(self_review.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(self_review_status.status, ActionStatus.SUCCEEDED)
             self.assertEqual(learning.status, ActionStatus.SUCCEEDED)
             self.assertEqual(consolidation.status, ActionStatus.SUCCEEDED)
             self.assertEqual(recovery.status, ActionStatus.SUCCEEDED)
@@ -921,6 +981,7 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertEqual(state.output["curations"][0]["status"], CurationStatus.SKIPPED)
             self.assertEqual(state.output["skill_evolutions"][0]["status"], SkillEvolutionStatus.SKIPPED)
             self.assertEqual(state.output["persona_evolutions"][0]["status"], PersonaEvolutionStatus.SKIPPED)
+            self.assertEqual(state.output["self_reviews"][0]["status"], SelfReviewStatus.SKIPPED)
             self.assertEqual(briefing.output["briefing"]["status"], BriefingStatus.SKIPPED)
             self.assertEqual(briefing_status.output["briefings"][0]["briefing_id"], briefing.output["briefing"]["briefing_id"])
             self.assertEqual(curation.output["curation"]["status"], CurationStatus.SKIPPED)
@@ -934,6 +995,11 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertEqual(
                 persona_evolution_status.output["persona_evolutions"][0]["evolution_id"],
                 persona_evolution.output["persona_evolution"]["evolution_id"],
+            )
+            self.assertEqual(self_review.output["self_review"]["status"], SelfReviewStatus.SKIPPED)
+            self.assertEqual(
+                self_review_status.output["self_reviews"][0]["review_id"],
+                self_review.output["self_review"]["review_id"],
             )
             self.assertEqual(wakeup_status.output["wakeups"][0]["wakeup_id"], scheduled_wakeup.output["wakeup"]["wakeup_id"])
             self.assertEqual(state.output["wakeups"], [])

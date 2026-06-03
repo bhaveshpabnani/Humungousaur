@@ -154,6 +154,12 @@ class PersonaEvolutionStatus(StrEnum):
     FAILED = "failed"
 
 
+class SelfReviewStatus(StrEnum):
+    GENERATED = "generated"
+    SKIPPED = "skipped"
+    FAILED = "failed"
+
+
 @dataclass(slots=True)
 class CognitiveEvent:
     event_id: str
@@ -411,6 +417,23 @@ class PersonaEvolutionRecord:
 
 
 @dataclass(slots=True)
+class SelfReviewRecord:
+    review_id: str
+    status: SelfReviewStatus = SelfReviewStatus.SKIPPED
+    purpose: str = ""
+    summary: str = ""
+    autonomy_posture: str = "normal"
+    confidence: float = 0.0
+    uncertainty: float = 0.0
+    risks: list[str] = field(default_factory=list)
+    open_questions: list[str] = field(default_factory=list)
+    recommended_actions: list[str] = field(default_factory=list)
+    should_ask_user: bool = False
+    evidence_refs: list[str] = field(default_factory=list)
+    created_at: str = field(default_factory=utc_now)
+
+
+@dataclass(slots=True)
 class CognitiveSnapshot:
     active_goals: list[GoalRecord] = field(default_factory=list)
     active_tasks: list[TaskRecord] = field(default_factory=list)
@@ -425,6 +448,7 @@ class CognitiveSnapshot:
     curations: list[CurationRecord] = field(default_factory=list)
     skill_evolutions: list[SkillEvolutionRecord] = field(default_factory=list)
     persona_evolutions: list[PersonaEvolutionRecord] = field(default_factory=list)
+    self_reviews: list[SelfReviewRecord] = field(default_factory=list)
     skills: list[SkillRecord] = field(default_factory=list)
     specialists: list[SpecialistRecord] = field(default_factory=list)
 

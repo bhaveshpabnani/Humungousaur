@@ -39,6 +39,8 @@ from .models import (
     ReflectionStatus,
     RuntimeEvent,
     RuntimeCycleStatus,
+    SelfReviewRecord,
+    SelfReviewStatus,
     SkillEvolutionRecord,
     SkillEvolutionStatus,
     SkillLifecycleStatus,
@@ -60,6 +62,7 @@ from .persona import PersonaStore
 from .recovery import EvidenceRecoveryProvider, ModelRecoveryProvider, RecoveryEngine, RecoveryProvider, RecoveryStore
 from .recorder import CognitiveRecorder
 from .reflection import EvidenceReflectionProvider, ModelReflectionProvider, ReflectionEngine, ReflectionProvider, ReflectionStore
+from .self_review import EvidenceSelfReviewProvider, ModelSelfReviewProvider, SelfReviewEngine, SelfReviewProvider, SelfReviewStore
 from .skill_evolution import (
     EvidenceSkillEvolutionProvider,
     ModelSkillEvolutionProvider,
@@ -143,6 +146,13 @@ __all__ = [
     "RuntimeCycleStatus",
     "RuntimeEvent",
     "RuntimeEventQueue",
+    "EvidenceSelfReviewProvider",
+    "ModelSelfReviewProvider",
+    "SelfReviewEngine",
+    "SelfReviewProvider",
+    "SelfReviewRecord",
+    "SelfReviewStatus",
+    "SelfReviewStore",
     "SkillEvolutionEngine",
     "SkillEvolutionProvider",
     "SkillEvolutionRecord",

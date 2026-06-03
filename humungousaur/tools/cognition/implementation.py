@@ -13,6 +13,7 @@ from humungousaur.cognition import (
     EvidenceBriefingProvider,
     EvidenceCurationProvider,
     EvidencePersonaEvolutionProvider,
+    EvidenceSelfReviewProvider,
     EvidenceSkillEvolutionProvider,
     FocusStore,
     GoalStore,
@@ -21,12 +22,15 @@ from humungousaur.cognition import (
     ModelBriefingProvider,
     ModelCurationProvider,
     ModelPersonaEvolutionProvider,
+    ModelSelfReviewProvider,
     ModelSkillEvolutionProvider,
     PersonaStore,
     PersonaEvolutionEngine,
     PersonaEvolutionStore,
     RecoveryStore,
     ReflectionStore,
+    SelfReviewEngine,
+    SelfReviewStore,
     SkillEvolutionEngine,
     SkillEvolutionStore,
     SkillStore,
@@ -64,6 +68,7 @@ class CognitiveStateTool(Tool):
         curations = CurationStore(config.cognition_db_path).recent(limit=limit)
         skill_evolutions = SkillEvolutionStore(config.cognition_db_path).recent(limit=limit)
         persona_evolutions = PersonaEvolutionStore(config.cognition_db_path).recent(limit=limit)
+        self_reviews = SelfReviewStore(config.cognition_db_path).recent(limit=limit)
         wakeups = WakeupStore(config.cognition_db_path).scheduled(limit=limit)
         payload = {
             "active_goals": [asdict(goal) for goal in snapshot.active_goals[:limit]],
@@ -79,6 +84,7 @@ class CognitiveStateTool(Tool):
             "curations": [asdict(record) for record in snapshot.curations[:limit]],
             "skill_evolutions": [asdict(record) for record in snapshot.skill_evolutions[:limit]],
             "persona_evolutions": [asdict(record) for record in snapshot.persona_evolutions[:limit]],
+            "self_reviews": [asdict(record) for record in snapshot.self_reviews[:limit]],
             "skills": [asdict(skill) for skill in snapshot.skills[:limit]],
             "specialists": [asdict(specialist) for specialist in snapshot.specialists[:limit]],
             "recent_reflections": [asdict(reflection) for reflection in reflections],
@@ -86,13 +92,14 @@ class CognitiveStateTool(Tool):
             "recent_curations": [asdict(curation) for curation in curations],
             "recent_skill_evolutions": [asdict(record) for record in skill_evolutions],
             "recent_persona_evolutions": [asdict(record) for record in persona_evolutions],
+            "recent_self_reviews": [asdict(record) for record in self_reviews],
             "scheduled_wakeups": [asdict(wakeup) for wakeup in wakeups],
         }
         return ToolResult(
             self.name,
             ActionStatus.SUCCEEDED,
             self.risk_level,
-            f"Cognitive state: {len(payload['active_goals'])} active goals, {len(payload['active_tasks'])} active tasks, {len(payload['knowledge'])} knowledge records, {len(payload['skills'])} skills, {len(payload['specialists'])} specialists, {len(payload['consolidations'])} consolidations, {len(payload['wakeups'])} wakeups, {len(payload['recoveries'])} recoveries, {len(payload['briefings'])} briefings, {len(payload['curations'])} curations, {len(payload['skill_evolutions'])} skill evolutions, {len(payload['persona_evolutions'])} persona evolutions.",
+            f"Cognitive state: {len(payload['active_goals'])} active goals, {len(payload['active_tasks'])} active tasks, {len(payload['knowledge'])} knowledge records, {len(payload['skills'])} skills, {len(payload['specialists'])} specialists, {len(payload['consolidations'])} consolidations, {len(payload['wakeups'])} wakeups, {len(payload['recoveries'])} recoveries, {len(payload['briefings'])} briefings, {len(payload['curations'])} curations, {len(payload['skill_evolutions'])} skill evolutions, {len(payload['persona_evolutions'])} persona evolutions, {len(payload['self_reviews'])} self-reviews.",
             payload,
         )
 
@@ -871,6 +878,78 @@ class CognitivePersonaEvolutionStatusTool(Tool):
         )
 
 
+class CognitiveSelfReviewTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="cognitive_self_review",
+            description="Run a model-led metacognitive self-review of uncertainty, risks, autonomy posture, open questions, and recommended next actions from current cognitive evidence.",
+            risk_level=RiskLevel.MEDIUM,
+            input_schema=object_input_schema(
+                {
+                    "purpose": {"type": "string", "description": "Self-review purpose such as current_work, before_response, autonomy_check, risk_review, or uncertainty_review."},
+                    "include_state": {"type": "boolean", "description": "Attach the bounded raw cognitive state used for the review."},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                }
+            ),
+            capability_group="cognition",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        purpose = str(tool_input.get("purpose", "self_review")).strip() or "self_review"
+        limit = min(int(tool_input.get("limit") or 20), 50)
+        recorder = CognitiveRecorder(config)
+        snapshot = recorder.snapshot()
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would run cognitive self-review.",
+                {"purpose": purpose, "state": _snapshot_payload(snapshot, limit=limit)},
+            )
+        engine = SelfReviewEngine(
+            SelfReviewStore(config.cognition_db_path),
+            provider=_build_self_review_provider(config),
+        )
+        review = engine.review(snapshot=snapshot, purpose=purpose)
+        payload: dict[str, Any] = {"self_review": asdict(review)}
+        if bool(tool_input.get("include_state", False)) or review.status.value == "skipped":
+            payload["state"] = _snapshot_payload(snapshot, limit=limit)
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Cognitive self-review {review.status.value}: {review.summary}",
+            payload,
+        )
+
+
+class CognitiveSelfReviewStatusTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="cognitive_self_review_status",
+            description="Inspect recent cognitive metacognitive self-review records.",
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema(
+                {
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                }
+            ),
+            capability_group="cognition",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        limit = min(int(tool_input.get("limit") or 10), 50)
+        reviews = SelfReviewStore(config.cognition_db_path).recent(limit=limit)
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Found {len(reviews)} cognitive self-review record(s).",
+            {"self_reviews": [asdict(record) for record in reviews]},
+        )
+
+
 class CognitiveReflectionStatusTool(Tool):
     def __init__(self) -> None:
         super().__init__(
@@ -1121,6 +1200,8 @@ def default_cognition_tools() -> dict[str, Tool]:
         CognitivePersonaUpdateTool(),
         CognitivePersonaEvolveTool(),
         CognitivePersonaEvolutionStatusTool(),
+        CognitiveSelfReviewTool(),
+        CognitiveSelfReviewStatusTool(),
         CognitiveReflectionStatusTool(),
         AutonomousEventSubmitTool(),
         AutonomousQueueStatusTool(),
@@ -1164,6 +1245,13 @@ def _build_persona_evolution_provider(config: AgentConfig) -> EvidencePersonaEvo
     return ModelPersonaEvolutionProvider(build_model_client(config), fallback=fallback)
 
 
+def _build_self_review_provider(config: AgentConfig) -> EvidenceSelfReviewProvider | ModelSelfReviewProvider:
+    fallback = EvidenceSelfReviewProvider()
+    if config.planner_provider != "model":
+        return fallback
+    return ModelSelfReviewProvider(build_model_client(config), fallback=fallback)
+
+
 def _snapshot_payload(snapshot: Any, *, limit: int) -> dict[str, Any]:
     return {
         "active_goals": [asdict(goal) for goal in snapshot.active_goals[:limit]],
@@ -1179,6 +1267,7 @@ def _snapshot_payload(snapshot: Any, *, limit: int) -> dict[str, Any]:
         "curations": [asdict(record) for record in snapshot.curations[:limit]],
         "skill_evolutions": [asdict(record) for record in snapshot.skill_evolutions[:limit]],
         "persona_evolutions": [asdict(record) for record in snapshot.persona_evolutions[:limit]],
+        "self_reviews": [asdict(record) for record in snapshot.self_reviews[:limit]],
         "skills": [asdict(record) for record in snapshot.skills[:limit]],
         "specialists": [asdict(record) for record in snapshot.specialists[:limit]],
     }

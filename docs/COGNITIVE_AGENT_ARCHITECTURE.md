@@ -12,6 +12,7 @@ The assistant should behave like a daily collaborator:
 - forget or summarize stale noise
 - practice, improve, and retire reusable skills from evidence
 - keep future tasks and blocked work in view
+- monitor its own uncertainty, risks, and autonomy posture
 - prepare concise current-work briefings for handoffs, mornings, reviews, and interruptions
 - use specialist capabilities instead of one overloaded prompt
 - act only through explicit tools and policy gates
@@ -26,7 +27,7 @@ The system is not a chatbot wrapped around tools. It is a durable control loop a
 ```text
 event/wakeup -> perception -> attention -> cognitive decision -> goal/task update
       -> specialist/tool execution -> observation -> reflection
-      -> recovery/learning/consolidation/curation/skill-evolution/persona-evolution -> briefing/response/schedule/sleep/continue
+      -> recovery/learning/consolidation/curation/skill-evolution/persona-evolution/self-review -> briefing/response/schedule/sleep/continue
 ```
 
 ## Layers
@@ -60,6 +61,7 @@ event/wakeup -> perception -> attention -> cognitive decision -> goal/task updat
    - Curation memory: exact-ID retention, summarization, and forgetting decisions with audit evidence.
    - Skill evolution memory: exact-ID skill improvement, retention, creation, and retirement decisions.
    - Persona evolution memory: assistant identity, communication style, boundaries, preferences, and stable facts updated from evidence.
+   - Self-review memory: uncertainty, confidence, risks, open questions, autonomy posture, and recommended next actions.
 
 7. Persona and user model
    - Stores assistant identity, tone, boundaries, and user preferences.
@@ -96,13 +98,17 @@ event/wakeup -> perception -> attention -> cognitive decision -> goal/task updat
     - Reviews reusable skills for exact-ID improvement, retention, creation, and retirement.
     - Uses model-led evidence review when configured and skips rather than rewriting skills without a model.
 
-16. Human interaction manager
+16. Metacognitive self-review
+    - Reviews current cognitive state for uncertainty, risks, autonomy posture, open questions, and whether to ask the user.
+    - Uses model-led review when configured and skips rather than inferring self-confidence without a model.
+
+17. Human interaction manager
     - Chooses text, voice preparation, spoken response, notification, progress update, approval request, or silence.
     - Supports interruption, pause/resume, and long-running progress.
 
 ## Implementation Principles
 
-- `docs/GLOBAL_AGENT_INSTRUCTIONS.md` is the strict global rule for intelligence: do not use pattern-based, regex-based, keyword-list-based, hardcoded-constant-based, deterministic natural-language handling, broad deterministic matching, or static routing tables for cognition, planning, routing, delegation, memory decisions, experience consolidation, skill evolution decisions, persona evolution decisions, persona update decisions, future wakeup/timing decisions, task decomposition, response strategy, recovery strategy, or completion judgment.
+- `docs/GLOBAL_AGENT_INSTRUCTIONS.md` is the strict global rule for intelligence: do not use pattern-based, regex-based, keyword-list-based, hardcoded-constant-based, deterministic natural-language handling, broad deterministic matching, or static routing tables for cognition, planning, routing, delegation, memory decisions, experience consolidation, skill evolution decisions, persona evolution decisions, metacognitive self-review, persona update decisions, future wakeup/timing decisions, task decomposition, response strategy, recovery strategy, or completion judgment.
 - Model-led cognition chooses strategy from schemas, context, permissions, and goals.
 - Deterministic code enforces safety, persistence, validation, explicit fallback commands, and evidence boundaries only.
 - Every capability is a tool or specialist with a bounded contract.
@@ -271,3 +277,15 @@ The fourteenth implementation milestone adds persona evolution:
 - model-unavailable fallback records a skipped persona review without semantic user-model inference
 
 Persona evolution is the identity gate. The model decides whether evidence supports a durable change in how the assistant presents itself, communicates, preserves boundaries, or remembers user preferences. Deterministic code only validates schema output, merges bounded additions, preserves safety boundaries, persists audit records, and skips when model reasoning is unavailable.
+
+The fifteenth implementation milestone adds metacognitive self-review:
+
+- durable self-review records with generated, skipped, and failed states
+- schema-driven self-review provider using the same configured model clients as planning, attention, reflection, consolidation, recovery, briefing, curation, skill evolution, and persona evolution
+- current focus, goals, tasks, persona, memory, learning, consolidations, curations, skill evolutions, persona evolutions, previous self-reviews, recoveries, briefings, wakeups, skills, and specialists are passed as structured evidence
+- self-reviews record autonomy posture, confidence, uncertainty, risks, open questions, recommended actions, and whether to ask the user
+- public tools run a bounded self-review pass and inspect self-review history
+- planning context includes recent self-review records so future planning can see the assistant's own uncertainty and risk posture
+- model-unavailable fallback records a skipped self-review without inferred confidence, risk, or autonomy judgment
+
+Self-review is the metacognitive gate. The model decides whether the assistant should continue, observe, ask the user, delegate, recover, or pause from structured evidence. Deterministic code only validates schema output, bounds lists, persists audit records, and skips when model reasoning is unavailable.
