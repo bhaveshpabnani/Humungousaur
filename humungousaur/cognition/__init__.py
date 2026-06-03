@@ -16,6 +16,14 @@ from .consolidation import (
     ModelConsolidationProvider,
 )
 from .curation import CurationEngine, CurationProvider, CurationStore, EvidenceCurationProvider, ModelCurationProvider
+from .environment import (
+    EnvironmentReviewEngine,
+    EnvironmentReviewProvider,
+    EnvironmentReviewStore,
+    EnvironmentStore,
+    EvidenceEnvironmentReviewProvider,
+    ModelEnvironmentReviewProvider,
+)
 from .event_bus import CognitiveEventBus
 from .focus import FocusStore
 from .goals import GoalStore
@@ -43,6 +51,10 @@ from .models import (
     ConsolidationStatus,
     CurationRecord,
     CurationStatus,
+    EnvironmentKind,
+    EnvironmentRecord,
+    EnvironmentReviewRecord,
+    EnvironmentReviewStatus,
     FocusMode,
     FocusState,
     GoalRecord,
@@ -126,11 +138,20 @@ __all__ = [
     "CurationRecord",
     "CurationStatus",
     "CurationStore",
+    "EnvironmentKind",
+    "EnvironmentRecord",
+    "EnvironmentReviewEngine",
+    "EnvironmentReviewProvider",
+    "EnvironmentReviewRecord",
+    "EnvironmentReviewStatus",
+    "EnvironmentReviewStore",
+    "EnvironmentStore",
     "FocusMode",
     "EvidenceBriefingProvider",
     "EvidenceCommitmentReviewProvider",
     "EvidenceConsolidationProvider",
     "EvidenceCurationProvider",
+    "EvidenceEnvironmentReviewProvider",
     "EvidenceInteractionReviewProvider",
     "EvidencePersonaEvolutionProvider",
     "ExplicitCognitiveDecisionProvider",
@@ -156,6 +177,7 @@ __all__ = [
     "ModelCommitmentReviewProvider",
     "ModelConsolidationProvider",
     "ModelCurationProvider",
+    "ModelEnvironmentReviewProvider",
     "ModelInteractionReviewProvider",
     "ModelPersonaEvolutionProvider",
     "PersonaEvolutionEngine",

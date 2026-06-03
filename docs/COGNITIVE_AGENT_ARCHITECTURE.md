@@ -14,6 +14,7 @@ The assistant should behave like a daily collaborator:
 - practice, improve, and retire reusable skills from evidence
 - keep future tasks and blocked work in view
 - track explicit promises, obligations, and follow-ups as durable commitments
+- maintain an evidence-backed model of the operating environment, constraints, resources, risks, opportunities, and live signals
 - monitor its own uncertainty, risks, and autonomy posture
 - prepare concise current-work briefings for handoffs, mornings, reviews, and interruptions
 - use specialist capabilities instead of one overloaded prompt
@@ -29,7 +30,7 @@ The system is not a chatbot wrapped around tools. It is a durable control loop a
 ```text
 event/wakeup -> perception -> attention -> cognitive decision -> goal/task update
       -> specialist/tool execution -> observation -> reflection
-      -> recovery/learning/consolidation/curation/skill-evolution/persona-evolution/self-review/interaction-review/commitment-review -> briefing/response/schedule/sleep/continue
+      -> recovery/learning/consolidation/curation/skill-evolution/persona-evolution/self-review/interaction-review/commitment-review/environment-review -> briefing/response/schedule/sleep/continue
 ```
 
 ## Layers
@@ -66,6 +67,7 @@ event/wakeup -> perception -> attention -> cognitive decision -> goal/task updat
    - Self-review memory: uncertainty, confidence, risks, open questions, autonomy posture, and recommended next actions.
    - Interaction-review memory: conversation state, collaboration posture, user-state hypotheses, unresolved commitments, response recommendations, and caution flags.
    - Commitment memory: explicit promises, follow-ups, owed actions, owner, status, due note, evidence refs, and model-led review history.
+   - Environment memory: workspace, system, browser, application, constraint, resource, risk, opportunity, and signal records with evidence refs.
 
 7. Persona and user model
    - Stores assistant identity, tone, boundaries, and user preferences.
@@ -114,13 +116,17 @@ event/wakeup -> perception -> attention -> cognitive decision -> goal/task updat
     - Tracks explicit user-visible promises, follow-ups, owed actions, owner, status, due note, and evidence.
     - Uses model-led review to create, update, resolve, or retain commitments from evidence; deterministic explicit tools can update exact IDs only.
 
-19. Human interaction manager
+19. Environment/world-context manager
+    - Tracks durable facts about the workspace, system, browser state, applications, constraints, resources, risks, opportunities, and live signals.
+    - Uses model-led review to create, update, archive, or retain environment records from evidence; deterministic explicit tools can update exact IDs only.
+
+20. Human interaction manager
     - Chooses text, voice preparation, spoken response, notification, progress update, approval request, or silence.
     - Supports interruption, pause/resume, and long-running progress.
 
 ## Implementation Principles
 
-- `docs/GLOBAL_AGENT_INSTRUCTIONS.md` is the strict global rule for intelligence: do not use pattern-based, regex-based, keyword-list-based, hardcoded-constant-based, deterministic natural-language handling, broad deterministic matching, or static routing tables for cognition, planning, routing, delegation, memory decisions, experience consolidation, skill evolution decisions, persona evolution decisions, metacognitive self-review, interaction review, commitment extraction, commitment resolution, relationship-state decisions, user-state hypotheses, conversation-state decisions, persona update decisions, future wakeup/timing decisions, task decomposition, response strategy, recovery strategy, or completion judgment.
+- `docs/GLOBAL_AGENT_INSTRUCTIONS.md` is the strict global rule for intelligence: do not use pattern-based, regex-based, keyword-list-based, hardcoded-constant-based, deterministic natural-language handling, broad deterministic matching, or static routing tables for cognition, planning, routing, delegation, memory decisions, experience consolidation, skill evolution decisions, persona evolution decisions, metacognitive self-review, interaction review, commitment extraction, commitment resolution, environment modeling, constraint/resource/risk/opportunity detection, relationship-state decisions, user-state hypotheses, conversation-state decisions, persona update decisions, future wakeup/timing decisions, task decomposition, response strategy, recovery strategy, or completion judgment.
 - Model-led cognition chooses strategy from schemas, context, permissions, and goals.
 - Deterministic code enforces safety, persistence, validation, explicit fallback commands, and evidence boundaries only.
 - Every capability is a tool or specialist with a bounded contract.
@@ -327,3 +333,17 @@ The seventeenth implementation milestone adds commitment tracking:
 - model-unavailable fallback records a skipped commitment review without inferred promises or follow-ups
 
 Commitment tracking is the promise ledger. The model decides which commitments are real, still open, satisfied, blocked, or dropped from evidence. Deterministic code only validates exact IDs, persists explicit structured updates, records audit history, and skips when model reasoning is unavailable.
+
+The eighteenth implementation milestone adds environment/world-context modeling:
+
+- durable environment records for workspace, system, browser, application, constraint, resource, risk, opportunity, and signal facts
+- durable environment-review records with recorded, skipped, and failed states
+- schema-driven environment review provider using the same configured model clients as planning, attention, reflection, consolidation, recovery, briefing, curation, skill evolution, persona evolution, self-review, interaction review, and commitment review
+- current focus, goals, tasks, persona, memory, learning, consolidations, curations, skill evolutions, persona evolutions, self-reviews, interaction reviews, commitments, existing environment records, previous environment reviews, recoveries, briefings, wakeups, skills, and specialists are passed as structured evidence
+- environment reviews can create new records only for stable or currently important workspace, system, browser, application, constraint, resource, risk, opportunity, or signal facts that help future decisions
+- environment reviews can update or archive only exact existing environment IDs that are present in the input
+- explicit tools record, update, inspect, and review environment facts without broad natural-language inference
+- planning context includes current environment records and recent environment reviews so future planning can reason about constraints and resources
+- model-unavailable fallback records a skipped environment review without inferred environment facts
+
+Environment modeling is the world-context ledger. The model decides which environment facts matter for future action from evidence. Deterministic code only validates exact IDs, persists explicit structured updates, archives exact records, records audit history, and skips when model reasoning is unavailable.

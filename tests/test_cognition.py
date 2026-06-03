@@ -20,11 +20,15 @@ from humungousaur.cognition import (
     EvidenceCommitmentReviewProvider,
     EvidenceConsolidationProvider,
     EvidenceCurationProvider,
+    EvidenceEnvironmentReviewProvider,
     EvidenceInteractionReviewProvider,
     EvidenceReflectionProvider,
     ExplicitCognitiveDecisionProvider,
     FocusStore,
     GoalStore,
+    EnvironmentReviewEngine,
+    EnvironmentReviewStore,
+    EnvironmentStore,
     InteractionReviewEngine,
     InteractionReviewStore,
     KnowledgeStore,
@@ -37,6 +41,7 @@ from humungousaur.cognition import (
     ModelCognitiveDecisionProvider,
     ModelConsolidationProvider,
     ModelCurationProvider,
+    ModelEnvironmentReviewProvider,
     ModelInteractionReviewProvider,
     ModelReflectionProvider,
     EvidencePersonaEvolutionProvider,
@@ -71,6 +76,8 @@ from humungousaur.cognition.models import (
     CommitmentStatus,
     ConsolidationStatus,
     CurationStatus,
+    EnvironmentKind,
+    EnvironmentReviewStatus,
     CognitiveEvent,
     CognitivePriority,
     CognitiveSnapshot,
@@ -106,6 +113,10 @@ from humungousaur.tools.cognition_tools import (
     CognitiveCommitmentUpdateTool,
     CognitiveConsolidationStatusTool,
     CognitiveCurationStatusTool,
+    CognitiveEnvironmentRecordTool,
+    CognitiveEnvironmentReviewTool,
+    CognitiveEnvironmentStatusTool,
+    CognitiveEnvironmentUpdateTool,
     CognitiveFocusUpdateTool,
     CognitiveGoalCreateTool,
     CognitiveInteractionReviewStatusTool,
@@ -864,6 +875,80 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertTrue(any(item.title == "Report final full-suite verification status." for item in commitments))
             self.assertEqual(CommitmentReviewStore(db).recent()[0].review_id, review.review_id)
 
+    def test_model_environment_review_provider_tracks_world_context(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            db = Path(tmp_dir) / "cognition.sqlite3"
+            goals = GoalStore(db)
+            goal = goals.create_goal("Model operating environment", ["Workspace constraints are visible."])
+            task = goals.add_task(goal.goal_id, "Record environment facts", metadata={"success_criteria": ["Environment review stores exact records."]})
+            environment_store = EnvironmentStore(db)
+            existing = environment_store.create(
+                kind=EnvironmentKind.WORKSPACE,
+                title="Humungousaur repo",
+                summary="The workspace is the assistant platform repo.",
+                source="test",
+                evidence_refs=[f"goal:{goal.goal_id}"],
+                confidence=0.7,
+            )
+            learning = LearningStore(db).append(
+                goal_id=goal.goal_id,
+                task_id=task.task_id,
+                outcome="observed",
+                lesson="The Windows checkout emits LF to CRLF warnings during Git hygiene checks.",
+                evidence_refs=[f"environment:{existing.environment_id}"],
+            )
+            snapshot = CognitiveSnapshot(active_goals=[goal], active_tasks=[task], learning=[learning], environment=[existing])
+            client = StaticModelClient(
+                json.dumps(
+                    {
+                        "status": "recorded",
+                        "summary": "Keep the workspace context and add a Git line-ending constraint.",
+                        "new_records": [
+                            {
+                                "kind": "constraint",
+                                "title": "Windows line-ending warnings",
+                                "summary": "Git may warn that LF will be replaced by CRLF during staging, but diff hygiene can still be clean.",
+                                "source": "environment_review",
+                                "evidence_refs": [f"learning:{learning.learning_id}"],
+                                "confidence": 0.78,
+                            }
+                        ],
+                        "updates": [
+                            {
+                                "environment_id": existing.environment_id,
+                                "kind": "workspace",
+                                "title": "Humungousaur assistant repo",
+                                "summary": "The current workspace is the Humungousaur assistant platform repo under Umang.",
+                                "evidence_refs": [f"goal:{goal.goal_id}", f"task:{task.task_id}"],
+                                "confidence": 0.86,
+                            }
+                        ],
+                        "archive_environment_ids": [],
+                        "retained_environment_ids": [existing.environment_id],
+                        "evidence_refs": [f"goal:{goal.goal_id}", f"task:{task.task_id}", f"learning:{learning.learning_id}"],
+                        "confidence": 0.82,
+                    }
+                )
+            )
+            engine = EnvironmentReviewEngine(
+                EnvironmentReviewStore(db),
+                environment_store,
+                provider=ModelEnvironmentReviewProvider(client, fallback=EvidenceEnvironmentReviewProvider()),
+            )
+
+            review = engine.review(snapshot=snapshot, purpose="workspace_review")
+            updated = environment_store.get(existing.environment_id)
+            records = environment_store.list(limit=10)
+
+            self.assertEqual(review.status, EnvironmentReviewStatus.RECORDED)
+            self.assertEqual(len(review.created_environment_ids), 1)
+            self.assertEqual(review.updated_environment_ids, [existing.environment_id])
+            self.assertEqual(review.retained_environment_ids, [existing.environment_id])
+            self.assertIsNotNone(updated)
+            self.assertEqual(updated.title, "Humungousaur assistant repo")
+            self.assertTrue(any(record.kind == EnvironmentKind.CONSTRAINT for record in records))
+            self.assertEqual(EnvironmentReviewStore(db).recent()[0].review_id, review.review_id)
+
     def test_model_consolidation_provider_falls_back_without_inferred_memory(self) -> None:
         class FailingClient(StaticModelClient):
             def complete_json(self, prompt, schema):
@@ -1059,6 +1144,31 @@ class CognitiveStoreTests(unittest.TestCase):
                 config,
             )
             commitment_status = CognitiveCommitmentStatusTool().execute({"include_closed": True, "limit": 5}, config)
+            environment = CognitiveEnvironmentRecordTool().execute(
+                {
+                    "kind": "workspace",
+                    "title": "Test workspace",
+                    "summary": "The temporary test workspace contains cognition artifacts.",
+                    "source": "test",
+                    "evidence_refs": [f"goal:{goal.output['goal']['goal_id']}"],
+                    "confidence": 0.75,
+                },
+                config,
+            )
+            environment_update = CognitiveEnvironmentUpdateTool().execute(
+                {
+                    "environment_id": environment.output["environment"]["environment_id"],
+                    "summary": "The temporary test workspace contains cognition artifacts and SQLite stores.",
+                    "evidence_refs": ["test:environment"],
+                    "confidence": 0.8,
+                },
+                config,
+            )
+            environment_review = CognitiveEnvironmentReviewTool().execute(
+                {"purpose": "workspace_review", "include_state": True, "limit": 5},
+                config,
+            )
+            environment_status = CognitiveEnvironmentStatusTool().execute({"include_archived": True, "limit": 5}, config)
             learning_record = LearningStore(config.cognition_db_path).append(
                 goal_id=goal.output["goal"]["goal_id"],
                 outcome="observed",
@@ -1134,6 +1244,10 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertEqual(commitment_update.status, ActionStatus.SUCCEEDED)
             self.assertEqual(commitment_review.status, ActionStatus.SUCCEEDED)
             self.assertEqual(commitment_status.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(environment.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(environment_update.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(environment_review.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(environment_status.status, ActionStatus.SUCCEEDED)
             self.assertEqual(learning.status, ActionStatus.SUCCEEDED)
             self.assertEqual(consolidation.status, ActionStatus.SUCCEEDED)
             self.assertEqual(recovery.status, ActionStatus.SUCCEEDED)
@@ -1162,6 +1276,8 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertEqual(state.output["interaction_reviews"][0]["status"], InteractionReviewStatus.SKIPPED)
             self.assertEqual(state.output["commitments"][0]["status"], CommitmentStatus.BLOCKED)
             self.assertEqual(state.output["commitment_reviews"][0]["status"], CommitmentReviewStatus.SKIPPED)
+            self.assertEqual(state.output["environment"][0]["kind"], EnvironmentKind.WORKSPACE)
+            self.assertEqual(state.output["environment_reviews"][0]["status"], EnvironmentReviewStatus.SKIPPED)
             self.assertEqual(briefing.output["briefing"]["status"], BriefingStatus.SKIPPED)
             self.assertEqual(briefing_status.output["briefings"][0]["briefing_id"], briefing.output["briefing"]["briefing_id"])
             self.assertEqual(curation.output["curation"]["status"], CurationStatus.SKIPPED)
@@ -1192,6 +1308,12 @@ class CognitiveStoreTests(unittest.TestCase):
                 commitment_review.output["commitment_review"]["review_id"],
             )
             self.assertEqual(commitment_status.output["commitments"][0]["commitment_id"], commitment.output["commitment"]["commitment_id"])
+            self.assertEqual(environment_review.output["environment_review"]["status"], EnvironmentReviewStatus.SKIPPED)
+            self.assertEqual(
+                environment_status.output["environment_reviews"][0]["review_id"],
+                environment_review.output["environment_review"]["review_id"],
+            )
+            self.assertEqual(environment_status.output["environment"][0]["environment_id"], environment.output["environment"]["environment_id"])
             self.assertEqual(wakeup_status.output["wakeups"][0]["wakeup_id"], scheduled_wakeup.output["wakeup"]["wakeup_id"])
             self.assertEqual(state.output["wakeups"], [])
             self.assertEqual(state.output["knowledge"][0]["knowledge_id"], knowledge.output["knowledge"]["knowledge_id"])

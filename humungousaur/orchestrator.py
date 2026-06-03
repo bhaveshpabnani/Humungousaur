@@ -363,6 +363,8 @@ class AgentOrchestrator:
             "interaction_reviews": [asdict(record) for record in snapshot.interaction_reviews[:5]],
             "commitments": [asdict(record) for record in snapshot.commitments[:5]],
             "commitment_reviews": [asdict(record) for record in snapshot.commitment_reviews[:5]],
+            "environment": [asdict(record) for record in snapshot.environment[:5]],
+            "environment_reviews": [asdict(record) for record in snapshot.environment_reviews[:5]],
             "skills": [asdict(skill) for skill in snapshot.skills[:5]],
             "specialists": [asdict(specialist) for specialist in snapshot.specialists[:5]],
         }

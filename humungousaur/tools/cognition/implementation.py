@@ -13,9 +13,13 @@ from humungousaur.cognition import (
     CognitiveRecorder,
     CurationEngine,
     CurationStore,
+    EnvironmentReviewEngine,
+    EnvironmentReviewStore,
+    EnvironmentStore,
     EvidenceBriefingProvider,
     EvidenceCommitmentReviewProvider,
     EvidenceCurationProvider,
+    EvidenceEnvironmentReviewProvider,
     EvidenceInteractionReviewProvider,
     EvidencePersonaEvolutionProvider,
     EvidenceSelfReviewProvider,
@@ -29,6 +33,7 @@ from humungousaur.cognition import (
     ModelBriefingProvider,
     ModelCommitmentReviewProvider,
     ModelCurationProvider,
+    ModelEnvironmentReviewProvider,
     ModelInteractionReviewProvider,
     ModelPersonaEvolutionProvider,
     ModelSelfReviewProvider,
@@ -46,7 +51,7 @@ from humungousaur.cognition import (
     SpecialistStore,
     WakeupStore,
 )
-from humungousaur.cognition.models import CognitivePriority, CommitmentStatus, FocusMode, KnowledgeKind, WakeupStatus
+from humungousaur.cognition.models import CognitivePriority, CommitmentStatus, EnvironmentKind, FocusMode, KnowledgeKind, WakeupStatus
 from humungousaur.cognition.queue import RuntimeEventQueue
 from humungousaur.cognition.wakeups import scheduled_for_from_delay, try_normalize_scheduled_for
 from humungousaur.config import AgentConfig
@@ -81,6 +86,8 @@ class CognitiveStateTool(Tool):
         interaction_reviews = InteractionReviewStore(config.cognition_db_path).recent(limit=limit)
         commitments = CommitmentStore(config.cognition_db_path).list(limit=limit)
         commitment_reviews = CommitmentReviewStore(config.cognition_db_path).recent(limit=limit)
+        environment = EnvironmentStore(config.cognition_db_path).list(limit=limit)
+        environment_reviews = EnvironmentReviewStore(config.cognition_db_path).recent(limit=limit)
         wakeups = WakeupStore(config.cognition_db_path).scheduled(limit=limit)
         payload = {
             "active_goals": [asdict(goal) for goal in snapshot.active_goals[:limit]],
@@ -100,6 +107,8 @@ class CognitiveStateTool(Tool):
             "interaction_reviews": [asdict(record) for record in snapshot.interaction_reviews[:limit]],
             "commitments": [asdict(record) for record in snapshot.commitments[:limit]],
             "commitment_reviews": [asdict(record) for record in snapshot.commitment_reviews[:limit]],
+            "environment": [asdict(record) for record in snapshot.environment[:limit]],
+            "environment_reviews": [asdict(record) for record in snapshot.environment_reviews[:limit]],
             "skills": [asdict(skill) for skill in snapshot.skills[:limit]],
             "specialists": [asdict(specialist) for specialist in snapshot.specialists[:limit]],
             "recent_reflections": [asdict(reflection) for reflection in reflections],
@@ -111,13 +120,15 @@ class CognitiveStateTool(Tool):
             "recent_interaction_reviews": [asdict(record) for record in interaction_reviews],
             "recent_commitments": [asdict(record) for record in commitments],
             "recent_commitment_reviews": [asdict(record) for record in commitment_reviews],
+            "recent_environment": [asdict(record) for record in environment],
+            "recent_environment_reviews": [asdict(record) for record in environment_reviews],
             "scheduled_wakeups": [asdict(wakeup) for wakeup in wakeups],
         }
         return ToolResult(
             self.name,
             ActionStatus.SUCCEEDED,
             self.risk_level,
-            f"Cognitive state: {len(payload['active_goals'])} active goals, {len(payload['active_tasks'])} active tasks, {len(payload['knowledge'])} knowledge records, {len(payload['skills'])} skills, {len(payload['specialists'])} specialists, {len(payload['consolidations'])} consolidations, {len(payload['wakeups'])} wakeups, {len(payload['recoveries'])} recoveries, {len(payload['briefings'])} briefings, {len(payload['curations'])} curations, {len(payload['skill_evolutions'])} skill evolutions, {len(payload['persona_evolutions'])} persona evolutions, {len(payload['self_reviews'])} self-reviews, {len(payload['interaction_reviews'])} interaction reviews, {len(payload['commitments'])} commitments, {len(payload['commitment_reviews'])} commitment reviews.",
+            f"Cognitive state: {len(payload['active_goals'])} active goals, {len(payload['active_tasks'])} active tasks, {len(payload['knowledge'])} knowledge records, {len(payload['skills'])} skills, {len(payload['specialists'])} specialists, {len(payload['consolidations'])} consolidations, {len(payload['wakeups'])} wakeups, {len(payload['recoveries'])} recoveries, {len(payload['briefings'])} briefings, {len(payload['curations'])} curations, {len(payload['skill_evolutions'])} skill evolutions, {len(payload['persona_evolutions'])} persona evolutions, {len(payload['self_reviews'])} self-reviews, {len(payload['interaction_reviews'])} interaction reviews, {len(payload['commitments'])} commitments, {len(payload['commitment_reviews'])} commitment reviews, {len(payload['environment'])} environment records, {len(payload['environment_reviews'])} environment reviews.",
             payload,
         )
 
@@ -1258,6 +1269,230 @@ class CognitiveCommitmentStatusTool(Tool):
         )
 
 
+class CognitiveEnvironmentRecordTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="cognitive_environment_record",
+            description="Record an explicit operating-environment fact, constraint, resource, risk, opportunity, or signal from structured evidence.",
+            risk_level=RiskLevel.MEDIUM,
+            input_schema=object_input_schema(
+                {
+                    "kind": {"type": "string", "enum": [kind.value for kind in EnvironmentKind]},
+                    "title": {"type": "string"},
+                    "summary": {"type": "string"},
+                    "source": {"type": "string"},
+                    "evidence_refs": {"type": "array", "items": {"type": "string"}, "maxItems": 30},
+                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                },
+                required=["kind", "title", "summary"],
+            ),
+            capability_group="cognition",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        title = str(tool_input.get("title", "")).strip()
+        summary = str(tool_input.get("summary", "")).strip()
+        if not title or not summary:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Environment title and summary are required.")
+        try:
+            kind = EnvironmentKind(str(tool_input.get("kind", "signal")).strip())
+        except ValueError:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Environment kind is invalid.")
+        evidence_refs = [str(item).strip() for item in tool_input.get("evidence_refs", []) if str(item).strip()]
+        confidence = max(0.0, min(float(tool_input.get("confidence", 0.5) or 0.5), 1.0))
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would record cognitive environment fact.",
+                {
+                    "kind": kind.value,
+                    "title": title,
+                    "summary": summary,
+                    "source": str(tool_input.get("source", "")).strip(),
+                    "evidence_refs": evidence_refs,
+                    "confidence": confidence,
+                },
+            )
+        record = EnvironmentStore(config.cognition_db_path).create(
+            kind=kind,
+            title=title,
+            summary=summary,
+            source=str(tool_input.get("source", "")).strip(),
+            evidence_refs=evidence_refs,
+            confidence=confidence,
+        )
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Recorded cognitive environment fact {record.environment_id}.",
+            {"environment": asdict(record)},
+        )
+
+
+class CognitiveEnvironmentUpdateTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="cognitive_environment_update",
+            description="Update or archive one exact cognitive environment record by ID.",
+            risk_level=RiskLevel.MEDIUM,
+            input_schema=object_input_schema(
+                {
+                    "environment_id": {"type": "string"},
+                    "kind": {"type": "string", "enum": [kind.value for kind in EnvironmentKind]},
+                    "title": {"type": "string"},
+                    "summary": {"type": "string"},
+                    "evidence_refs": {"type": "array", "items": {"type": "string"}, "maxItems": 30},
+                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                    "archive_reason": {"type": "string"},
+                },
+                required=["environment_id"],
+            ),
+            capability_group="cognition",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        environment_id = str(tool_input.get("environment_id", "")).strip()
+        if not environment_id:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Environment ID is empty.")
+        kind = None
+        if "kind" in tool_input and str(tool_input.get("kind", "")).strip():
+            try:
+                kind = EnvironmentKind(str(tool_input.get("kind")).strip())
+            except ValueError:
+                return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Environment kind is invalid.")
+        evidence_refs = [str(item).strip() for item in tool_input.get("evidence_refs", []) if str(item).strip()]
+        confidence = None
+        if "confidence" in tool_input:
+            confidence = max(0.0, min(float(tool_input.get("confidence", 0.5) or 0.5), 1.0))
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would update cognitive environment record.",
+                dict(tool_input),
+            )
+        store = EnvironmentStore(config.cognition_db_path)
+        archive_reason = str(tool_input.get("archive_reason", "")).strip()
+        if archive_reason:
+            record = store.archive(environment_id, reason=archive_reason)
+        else:
+            title = str(tool_input.get("title", "")).strip() if "title" in tool_input else None
+            summary = str(tool_input.get("summary", "")).strip() if "summary" in tool_input else None
+            record = store.update(
+                environment_id,
+                kind=kind,
+                title=title,
+                summary=summary,
+                evidence_refs=evidence_refs,
+                confidence=confidence,
+            )
+        if record is None:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, f"Environment record {environment_id} was not found.")
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Updated cognitive environment record {record.environment_id}.",
+            {"environment": asdict(record)},
+        )
+
+
+class CognitiveEnvironmentReviewTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="cognitive_environment_review",
+            description="Run a model-led review of durable evidence to create, update, archive, or retain exact operating-environment records.",
+            risk_level=RiskLevel.MEDIUM,
+            input_schema=object_input_schema(
+                {
+                    "purpose": {"type": "string", "description": "Environment review purpose such as environment_review, workspace_review, system_context, risk_review, or handoff."},
+                    "max_new_records": {"type": "integer", "minimum": 0, "maximum": 20},
+                    "max_updates": {"type": "integer", "minimum": 0, "maximum": 40},
+                    "include_state": {"type": "boolean", "description": "Attach the bounded raw cognitive state used for the review."},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                }
+            ),
+            capability_group="cognition",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        purpose = str(tool_input.get("purpose", "environment_review")).strip() or "environment_review"
+        max_new = min(max(int(tool_input.get("max_new_records") or 5), 0), 20)
+        max_updates = min(max(int(tool_input.get("max_updates") or 10), 0), 40)
+        limit = min(int(tool_input.get("limit") or 20), 50)
+        recorder = CognitiveRecorder(config)
+        snapshot = recorder.snapshot()
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would run cognitive environment review.",
+                {
+                    "purpose": purpose,
+                    "max_new_records": max_new,
+                    "max_updates": max_updates,
+                    "state": _snapshot_payload(snapshot, limit=limit),
+                },
+            )
+        store = EnvironmentStore(config.cognition_db_path)
+        engine = EnvironmentReviewEngine(
+            EnvironmentReviewStore(config.cognition_db_path),
+            store,
+            provider=_build_environment_review_provider(config),
+        )
+        review = engine.review(snapshot=snapshot, purpose=purpose, max_new_records=max_new, max_updates=max_updates)
+        payload: dict[str, Any] = {
+            "environment_review": asdict(review),
+            "environment": [asdict(record) for record in store.list(limit=limit, include_archived=True)],
+        }
+        if bool(tool_input.get("include_state", False)) or review.status.value == "skipped":
+            payload["state"] = _snapshot_payload(snapshot, limit=limit)
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Cognitive environment review {review.status.value}: {review.summary}",
+            payload,
+        )
+
+
+class CognitiveEnvironmentStatusTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="cognitive_environment_status",
+            description="Inspect current or historical operating-environment records and recent environment review history.",
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema(
+                {
+                    "include_archived": {"type": "boolean"},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                }
+            ),
+            capability_group="cognition",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        limit = min(int(tool_input.get("limit") or 10), 50)
+        include_archived = bool(tool_input.get("include_archived", False))
+        environment = EnvironmentStore(config.cognition_db_path).list(limit=limit, include_archived=include_archived)
+        reviews = EnvironmentReviewStore(config.cognition_db_path).recent(limit=limit)
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Found {len(environment)} cognitive environment record(s) and {len(reviews)} review record(s).",
+            {
+                "environment": [asdict(record) for record in environment],
+                "environment_reviews": [asdict(record) for record in reviews],
+            },
+        )
+
+
 class CognitiveReflectionStatusTool(Tool):
     def __init__(self) -> None:
         super().__init__(
@@ -1516,6 +1751,10 @@ def default_cognition_tools() -> dict[str, Tool]:
         CognitiveCommitmentUpdateTool(),
         CognitiveCommitmentReviewTool(),
         CognitiveCommitmentStatusTool(),
+        CognitiveEnvironmentRecordTool(),
+        CognitiveEnvironmentUpdateTool(),
+        CognitiveEnvironmentReviewTool(),
+        CognitiveEnvironmentStatusTool(),
         CognitiveReflectionStatusTool(),
         AutonomousEventSubmitTool(),
         AutonomousQueueStatusTool(),
@@ -1580,6 +1819,13 @@ def _build_commitment_review_provider(config: AgentConfig) -> EvidenceCommitment
     return ModelCommitmentReviewProvider(build_model_client(config), fallback=fallback)
 
 
+def _build_environment_review_provider(config: AgentConfig) -> EvidenceEnvironmentReviewProvider | ModelEnvironmentReviewProvider:
+    fallback = EvidenceEnvironmentReviewProvider()
+    if config.planner_provider != "model":
+        return fallback
+    return ModelEnvironmentReviewProvider(build_model_client(config), fallback=fallback)
+
+
 def _snapshot_payload(snapshot: Any, *, limit: int) -> dict[str, Any]:
     return {
         "active_goals": [asdict(goal) for goal in snapshot.active_goals[:limit]],
@@ -1599,6 +1845,8 @@ def _snapshot_payload(snapshot: Any, *, limit: int) -> dict[str, Any]:
         "interaction_reviews": [asdict(record) for record in snapshot.interaction_reviews[:limit]],
         "commitments": [asdict(record) for record in snapshot.commitments[:limit]],
         "commitment_reviews": [asdict(record) for record in snapshot.commitment_reviews[:limit]],
+        "environment": [asdict(record) for record in snapshot.environment[:limit]],
+        "environment_reviews": [asdict(record) for record in snapshot.environment_reviews[:limit]],
         "skills": [asdict(record) for record in snapshot.skills[:limit]],
         "specialists": [asdict(record) for record in snapshot.specialists[:limit]],
     }

@@ -179,6 +179,24 @@ class CommitmentReviewStatus(StrEnum):
     FAILED = "failed"
 
 
+class EnvironmentKind(StrEnum):
+    WORKSPACE = "workspace"
+    SYSTEM = "system"
+    BROWSER = "browser"
+    APPLICATION = "application"
+    CONSTRAINT = "constraint"
+    RESOURCE = "resource"
+    RISK = "risk"
+    OPPORTUNITY = "opportunity"
+    SIGNAL = "signal"
+
+
+class EnvironmentReviewStatus(StrEnum):
+    RECORDED = "recorded"
+    SKIPPED = "skipped"
+    FAILED = "failed"
+
+
 @dataclass(slots=True)
 class CognitiveEvent:
     event_id: str
@@ -500,6 +518,35 @@ class CommitmentReviewRecord:
 
 
 @dataclass(slots=True)
+class EnvironmentRecord:
+    environment_id: str
+    kind: EnvironmentKind
+    title: str
+    summary: str
+    source: str = ""
+    evidence_refs: list[str] = field(default_factory=list)
+    confidence: float = 0.5
+    archived_at: str = ""
+    created_at: str = field(default_factory=utc_now)
+    updated_at: str = field(default_factory=utc_now)
+
+
+@dataclass(slots=True)
+class EnvironmentReviewRecord:
+    review_id: str
+    status: EnvironmentReviewStatus = EnvironmentReviewStatus.SKIPPED
+    purpose: str = ""
+    summary: str = ""
+    created_environment_ids: list[str] = field(default_factory=list)
+    updated_environment_ids: list[str] = field(default_factory=list)
+    archived_environment_ids: list[str] = field(default_factory=list)
+    retained_environment_ids: list[str] = field(default_factory=list)
+    evidence_refs: list[str] = field(default_factory=list)
+    confidence: float = 0.0
+    created_at: str = field(default_factory=utc_now)
+
+
+@dataclass(slots=True)
 class CognitiveSnapshot:
     active_goals: list[GoalRecord] = field(default_factory=list)
     active_tasks: list[TaskRecord] = field(default_factory=list)
@@ -518,6 +565,8 @@ class CognitiveSnapshot:
     interaction_reviews: list[InteractionReviewRecord] = field(default_factory=list)
     commitments: list[CommitmentRecord] = field(default_factory=list)
     commitment_reviews: list[CommitmentReviewRecord] = field(default_factory=list)
+    environment: list[EnvironmentRecord] = field(default_factory=list)
+    environment_reviews: list[EnvironmentReviewRecord] = field(default_factory=list)
     skills: list[SkillRecord] = field(default_factory=list)
     specialists: list[SpecialistRecord] = field(default_factory=list)
 

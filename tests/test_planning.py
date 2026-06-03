@@ -480,6 +480,40 @@ class ModelPlanProviderTests(unittest.TestCase):
         self.assertEqual(plan.steps[0].tool_input["max_updates"], 5)
         self.assertEqual(plan.steps[0].source, "model:static")
 
+    def test_model_provider_can_handoff_to_cognitive_environment_review_tool(self) -> None:
+        client = StaticModelClient(
+            '{"steps":[{"tool_name":"cognitive_environment_review","tool_input":{"purpose":"workspace_review","max_new_records":3,"max_updates":5,"include_state":false},"reason":"review workspace constraints and useful environment facts"}]}'
+        )
+        provider = ModelPlanProvider(
+            client,
+            {"cognitive_environment_review"},
+            tool_catalog={
+                "cognitive_environment_review": {
+                    "description": "Run a model-led review of durable evidence to create, update, archive, or retain exact operating-environment records.",
+                    "risk_level": "medium",
+                    "requires_approval": False,
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "purpose": {"type": "string"},
+                            "max_new_records": {"type": "integer"},
+                            "max_updates": {"type": "integer"},
+                            "include_state": {"type": "boolean"},
+                        },
+                    },
+                    "capability_group": "cognition",
+                }
+            },
+            fallback=ExplicitFallbackPlanProvider(),
+        )
+
+        plan = provider.plan("review the current workspace environment and remember useful constraints")
+
+        self.assertEqual(plan.steps[0].tool_name, "cognitive_environment_review")
+        self.assertEqual(plan.steps[0].tool_input["purpose"], "workspace_review")
+        self.assertEqual(plan.steps[0].tool_input["max_updates"], 5)
+        self.assertEqual(plan.steps[0].source, "model:static")
+
     def test_model_provider_can_handoff_to_activity_tools(self) -> None:
         client = StaticModelClient(
             '{"steps":[{"tool_name":"activity_search","tool_input":{"query":"meeting notes","limit":5},"reason":"search native activity memory"}]}'
