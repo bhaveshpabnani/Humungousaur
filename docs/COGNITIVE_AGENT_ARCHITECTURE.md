@@ -9,6 +9,7 @@ The assistant should behave like a daily collaborator:
 - know the current focus and active goals
 - remember useful preferences, facts, workflows, and outcomes
 - develop a durable persona and user model from evidence
+- maintain interaction posture, user-state hypotheses, and unresolved commitments from evidence
 - forget or summarize stale noise
 - practice, improve, and retire reusable skills from evidence
 - keep future tasks and blocked work in view
@@ -27,7 +28,7 @@ The system is not a chatbot wrapped around tools. It is a durable control loop a
 ```text
 event/wakeup -> perception -> attention -> cognitive decision -> goal/task update
       -> specialist/tool execution -> observation -> reflection
-      -> recovery/learning/consolidation/curation/skill-evolution/persona-evolution/self-review -> briefing/response/schedule/sleep/continue
+      -> recovery/learning/consolidation/curation/skill-evolution/persona-evolution/self-review/interaction-review -> briefing/response/schedule/sleep/continue
 ```
 
 ## Layers
@@ -62,6 +63,7 @@ event/wakeup -> perception -> attention -> cognitive decision -> goal/task updat
    - Skill evolution memory: exact-ID skill improvement, retention, creation, and retirement decisions.
    - Persona evolution memory: assistant identity, communication style, boundaries, preferences, and stable facts updated from evidence.
    - Self-review memory: uncertainty, confidence, risks, open questions, autonomy posture, and recommended next actions.
+   - Interaction-review memory: conversation state, collaboration posture, user-state hypotheses, unresolved commitments, response recommendations, and caution flags.
 
 7. Persona and user model
    - Stores assistant identity, tone, boundaries, and user preferences.
@@ -102,13 +104,17 @@ event/wakeup -> perception -> attention -> cognitive decision -> goal/task updat
     - Reviews current cognitive state for uncertainty, risks, autonomy posture, open questions, and whether to ask the user.
     - Uses model-led review when configured and skips rather than inferring self-confidence without a model.
 
-17. Human interaction manager
+17. Interaction and relationship review
+    - Reviews recent interaction evidence for collaboration posture, user-state hypotheses, unresolved commitments, response recommendations, and caution flags.
+    - Uses model-led review when configured and skips rather than inferring user state, relationship context, or conversation posture without a model.
+
+18. Human interaction manager
     - Chooses text, voice preparation, spoken response, notification, progress update, approval request, or silence.
     - Supports interruption, pause/resume, and long-running progress.
 
 ## Implementation Principles
 
-- `docs/GLOBAL_AGENT_INSTRUCTIONS.md` is the strict global rule for intelligence: do not use pattern-based, regex-based, keyword-list-based, hardcoded-constant-based, deterministic natural-language handling, broad deterministic matching, or static routing tables for cognition, planning, routing, delegation, memory decisions, experience consolidation, skill evolution decisions, persona evolution decisions, metacognitive self-review, persona update decisions, future wakeup/timing decisions, task decomposition, response strategy, recovery strategy, or completion judgment.
+- `docs/GLOBAL_AGENT_INSTRUCTIONS.md` is the strict global rule for intelligence: do not use pattern-based, regex-based, keyword-list-based, hardcoded-constant-based, deterministic natural-language handling, broad deterministic matching, or static routing tables for cognition, planning, routing, delegation, memory decisions, experience consolidation, skill evolution decisions, persona evolution decisions, metacognitive self-review, interaction review, relationship-state decisions, user-state hypotheses, conversation-state decisions, persona update decisions, future wakeup/timing decisions, task decomposition, response strategy, recovery strategy, or completion judgment.
 - Model-led cognition chooses strategy from schemas, context, permissions, and goals.
 - Deterministic code enforces safety, persistence, validation, explicit fallback commands, and evidence boundaries only.
 - Every capability is a tool or specialist with a bounded contract.
@@ -289,3 +295,15 @@ The fifteenth implementation milestone adds metacognitive self-review:
 - model-unavailable fallback records a skipped self-review without inferred confidence, risk, or autonomy judgment
 
 Self-review is the metacognitive gate. The model decides whether the assistant should continue, observe, ask the user, delegate, recover, or pause from structured evidence. Deterministic code only validates schema output, bounds lists, persists audit records, and skips when model reasoning is unavailable.
+
+The sixteenth implementation milestone adds interaction review:
+
+- durable interaction-review records with generated, skipped, and failed states
+- schema-driven interaction-review provider using the same configured model clients as planning, attention, reflection, consolidation, recovery, briefing, curation, skill evolution, persona evolution, and self-review
+- current focus, goals, tasks, persona, memory, learning, consolidations, curations, skill evolutions, persona evolutions, self-reviews, previous interaction reviews, recoveries, briefings, wakeups, skills, and specialists are passed as structured evidence
+- interaction reviews record conversation summary, interaction posture, user-state hypotheses, collaboration notes, unresolved commitments, recommended responses, caution flags, evidence references, and confidence
+- public tools run a bounded interaction review pass and inspect interaction-review history
+- planning context includes recent interaction-review records so future planning can see collaboration posture and unresolved commitments
+- model-unavailable fallback records a skipped interaction review without inferred user state, relationship judgment, or response posture
+
+Interaction review is the relationship-context gate. The model decides what interaction posture and response recommendations are justified by evidence. Deterministic code only validates schema output, bounds lists, persists audit records, and skips when model reasoning is unavailable.

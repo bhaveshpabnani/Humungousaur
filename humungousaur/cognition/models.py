@@ -160,6 +160,12 @@ class SelfReviewStatus(StrEnum):
     FAILED = "failed"
 
 
+class InteractionReviewStatus(StrEnum):
+    GENERATED = "generated"
+    SKIPPED = "skipped"
+    FAILED = "failed"
+
+
 @dataclass(slots=True)
 class CognitiveEvent:
     event_id: str
@@ -434,6 +440,23 @@ class SelfReviewRecord:
 
 
 @dataclass(slots=True)
+class InteractionReviewRecord:
+    review_id: str
+    status: InteractionReviewStatus = InteractionReviewStatus.SKIPPED
+    purpose: str = ""
+    summary: str = ""
+    interaction_posture: str = "neutral"
+    user_state_hypotheses: list[str] = field(default_factory=list)
+    collaboration_notes: list[str] = field(default_factory=list)
+    unresolved_commitments: list[str] = field(default_factory=list)
+    recommended_responses: list[str] = field(default_factory=list)
+    caution_flags: list[str] = field(default_factory=list)
+    evidence_refs: list[str] = field(default_factory=list)
+    confidence: float = 0.0
+    created_at: str = field(default_factory=utc_now)
+
+
+@dataclass(slots=True)
 class CognitiveSnapshot:
     active_goals: list[GoalRecord] = field(default_factory=list)
     active_tasks: list[TaskRecord] = field(default_factory=list)
@@ -449,6 +472,7 @@ class CognitiveSnapshot:
     skill_evolutions: list[SkillEvolutionRecord] = field(default_factory=list)
     persona_evolutions: list[PersonaEvolutionRecord] = field(default_factory=list)
     self_reviews: list[SelfReviewRecord] = field(default_factory=list)
+    interaction_reviews: list[InteractionReviewRecord] = field(default_factory=list)
     skills: list[SkillRecord] = field(default_factory=list)
     specialists: list[SpecialistRecord] = field(default_factory=list)
 

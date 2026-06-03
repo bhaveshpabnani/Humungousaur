@@ -415,6 +415,37 @@ class ModelPlanProviderTests(unittest.TestCase):
         self.assertEqual(plan.steps[0].tool_input["purpose"], "autonomy_check")
         self.assertEqual(plan.steps[0].source, "model:static")
 
+    def test_model_provider_can_handoff_to_cognitive_interaction_review_tool(self) -> None:
+        client = StaticModelClient(
+            '{"steps":[{"tool_name":"cognitive_interaction_review","tool_input":{"purpose":"relationship_review","include_state":false},"reason":"review collaboration posture, commitments, and response recommendations"}]}'
+        )
+        provider = ModelPlanProvider(
+            client,
+            {"cognitive_interaction_review"},
+            tool_catalog={
+                "cognitive_interaction_review": {
+                    "description": "Run a model-led review of conversation state, collaboration posture, user-state hypotheses, unresolved commitments, response recommendations, and caution flags from current cognitive evidence.",
+                    "risk_level": "medium",
+                    "requires_approval": False,
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "purpose": {"type": "string"},
+                            "include_state": {"type": "boolean"},
+                        },
+                    },
+                    "capability_group": "cognition",
+                }
+            },
+            fallback=ExplicitFallbackPlanProvider(),
+        )
+
+        plan = provider.plan("review the conversation state and decide how you should respond to me")
+
+        self.assertEqual(plan.steps[0].tool_name, "cognitive_interaction_review")
+        self.assertEqual(plan.steps[0].tool_input["purpose"], "relationship_review")
+        self.assertEqual(plan.steps[0].source, "model:static")
+
     def test_model_provider_can_handoff_to_activity_tools(self) -> None:
         client = StaticModelClient(
             '{"steps":[{"tool_name":"activity_search","tool_input":{"query":"meeting notes","limit":5},"reason":"search native activity memory"}]}'

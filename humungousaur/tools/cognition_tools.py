@@ -9,6 +9,8 @@ from humungousaur.tools.cognition.implementation import (
     CognitiveCurationStatusTool,
     CognitiveFocusUpdateTool,
     CognitiveGoalCreateTool,
+    CognitiveInteractionReviewStatusTool,
+    CognitiveInteractionReviewTool,
     CognitiveKnowledgeForgetTool,
     CognitiveKnowledgeRecordTool,
     CognitiveLearningStatusTool,
@@ -33,6 +35,8 @@ from humungousaur.tools.cognition.implementation import (
 
 __all__ = [
     "CognitiveGoalCreateTool",
+    "CognitiveInteractionReviewStatusTool",
+    "CognitiveInteractionReviewTool",
     "CognitiveBriefingPrepareTool",
     "CognitiveBriefingStatusTool",
     "CognitiveConsolidationStatusTool",

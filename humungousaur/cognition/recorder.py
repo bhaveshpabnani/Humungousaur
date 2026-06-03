@@ -16,6 +16,7 @@ from .curation import CurationStore
 from .event_bus import CognitiveEventBus
 from .focus import FocusStore
 from .goals import GoalStore
+from .interaction_review import InteractionReviewStore
 from .knowledge import KnowledgeStore
 from .learning import LearningEngine, LearningStore
 from .models import (
@@ -57,6 +58,7 @@ class CognitiveRecorder:
         self.skill_evolutions = SkillEvolutionStore(self.config.cognition_db_path)
         self.persona_evolutions = PersonaEvolutionStore(self.config.cognition_db_path)
         self.self_reviews = SelfReviewStore(self.config.cognition_db_path)
+        self.interaction_reviews = InteractionReviewStore(self.config.cognition_db_path)
         self.persona = PersonaStore(self.config.persona_path)
         self.skills = SkillStore(self.config.skill_library_path)
         self.specialists = SpecialistStore(self.config.specialist_registry_path)
@@ -79,6 +81,7 @@ class CognitiveRecorder:
             skill_evolutions=self.skill_evolutions.recent(limit=8),
             persona_evolutions=self.persona_evolutions.recent(limit=8),
             self_reviews=self.self_reviews.recent(limit=8),
+            interaction_reviews=self.interaction_reviews.recent(limit=8),
             skills=self.skills.list(limit=8),
             specialists=self.specialists.list(limit=8),
         )

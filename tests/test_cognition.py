@@ -16,10 +16,13 @@ from humungousaur.cognition import (
     EvidenceBriefingProvider,
     EvidenceConsolidationProvider,
     EvidenceCurationProvider,
+    EvidenceInteractionReviewProvider,
     EvidenceReflectionProvider,
     ExplicitCognitiveDecisionProvider,
     FocusStore,
     GoalStore,
+    InteractionReviewEngine,
+    InteractionReviewStore,
     KnowledgeStore,
     LearningStore,
     AutonomousLoopRunner,
@@ -29,6 +32,7 @@ from humungousaur.cognition import (
     ModelCognitiveDecisionProvider,
     ModelConsolidationProvider,
     ModelCurationProvider,
+    ModelInteractionReviewProvider,
     ModelReflectionProvider,
     EvidencePersonaEvolutionProvider,
     ModelPersonaEvolutionProvider,
@@ -65,6 +69,7 @@ from humungousaur.cognition.models import (
     CognitiveSnapshot,
     FocusMode,
     GoalStatus,
+    InteractionReviewStatus,
     KnowledgeKind,
     MemoryAction,
     ReflectionStatus,
@@ -92,6 +97,8 @@ from humungousaur.tools.cognition_tools import (
     CognitiveCurationStatusTool,
     CognitiveFocusUpdateTool,
     CognitiveGoalCreateTool,
+    CognitiveInteractionReviewStatusTool,
+    CognitiveInteractionReviewTool,
     CognitiveKnowledgeForgetTool,
     CognitiveKnowledgeRecordTool,
     CognitiveLearningStatusTool,
@@ -721,6 +728,59 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertFalse(review.should_ask_user)
             self.assertEqual(SelfReviewStore(db).recent()[0].review_id, review.review_id)
 
+    def test_model_interaction_review_provider_records_relationship_state_from_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            db = Path(tmp_dir) / "cognition.sqlite3"
+            goals = GoalStore(db)
+            goal = goals.create_goal("Design daily assistant cognition", ["Architecture captures future tasks and interaction posture."])
+            task = goals.add_task(goal.goal_id, "Add interaction review", metadata={"success_criteria": ["Review record is durable."]})
+            knowledge = KnowledgeStore(db).append(
+                kind=KnowledgeKind.PREFERENCE,
+                text="The user wants blockers and current status called out plainly during long implementation work.",
+                source="test",
+                evidence_refs=[f"goal:{goal.goal_id}"],
+                confidence=0.84,
+            )
+            learning = LearningStore(db).append(
+                goal_id=goal.goal_id,
+                task_id=task.task_id,
+                outcome="in_progress",
+                lesson="Long-running assistant work benefits from explicit status and unresolved commitment tracking.",
+                evidence_refs=[f"task:{task.task_id}"],
+            )
+            snapshot = CognitiveSnapshot(active_goals=[goal], active_tasks=[task], knowledge=[knowledge], learning=[learning])
+            client = StaticModelClient(
+                json.dumps(
+                    {
+                        "status": "generated",
+                        "summary": "The assistant should stay collaborative, concise, and explicit about remaining commitments.",
+                        "interaction_posture": "supportive",
+                        "user_state_hypotheses": ["The user likely values implementation momentum and concrete status evidence."],
+                        "collaboration_notes": ["Report completed slices and the next missing layer without claiming total completion."],
+                        "unresolved_commitments": ["Finish the interaction review tool wiring and verification."],
+                        "recommended_responses": ["Give a compact status update and continue with tests."],
+                        "caution_flags": ["Avoid inferring emotions beyond the supplied task and preference evidence."],
+                        "evidence_refs": [f"goal:{goal.goal_id}", f"task:{task.task_id}", f"knowledge:{knowledge.knowledge_id}", f"learning:{learning.learning_id}"],
+                        "confidence": 0.74,
+                    }
+                )
+            )
+            engine = InteractionReviewEngine(
+                InteractionReviewStore(db),
+                provider=ModelInteractionReviewProvider(client, fallback=EvidenceInteractionReviewProvider()),
+            )
+
+            review = engine.review(snapshot=snapshot, purpose="relationship_review")
+
+            self.assertEqual(review.status, InteractionReviewStatus.GENERATED)
+            self.assertEqual(review.interaction_posture, "supportive")
+            self.assertAlmostEqual(review.confidence, 0.74)
+            self.assertIn("momentum", review.user_state_hypotheses[0])
+            self.assertIn("remaining commitments", review.summary)
+            self.assertIn("Finish the interaction review", review.unresolved_commitments[0])
+            self.assertIn("Avoid inferring emotions", review.caution_flags[0])
+            self.assertEqual(InteractionReviewStore(db).recent()[0].review_id, review.review_id)
+
     def test_model_consolidation_provider_falls_back_without_inferred_memory(self) -> None:
         class FailingClient(StaticModelClient):
             def complete_json(self, prompt, schema):
@@ -888,6 +948,11 @@ class CognitiveStoreTests(unittest.TestCase):
                 config,
             )
             self_review_status = CognitiveSelfReviewStatusTool().execute({"limit": 5}, config)
+            interaction_review = CognitiveInteractionReviewTool().execute(
+                {"purpose": "relationship_review", "include_state": True, "limit": 5},
+                config,
+            )
+            interaction_review_status = CognitiveInteractionReviewStatusTool().execute({"limit": 5}, config)
             learning_record = LearningStore(config.cognition_db_path).append(
                 goal_id=goal.output["goal"]["goal_id"],
                 outcome="observed",
@@ -957,6 +1022,8 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertEqual(persona_evolution_status.status, ActionStatus.SUCCEEDED)
             self.assertEqual(self_review.status, ActionStatus.SUCCEEDED)
             self.assertEqual(self_review_status.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(interaction_review.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(interaction_review_status.status, ActionStatus.SUCCEEDED)
             self.assertEqual(learning.status, ActionStatus.SUCCEEDED)
             self.assertEqual(consolidation.status, ActionStatus.SUCCEEDED)
             self.assertEqual(recovery.status, ActionStatus.SUCCEEDED)
@@ -982,6 +1049,7 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertEqual(state.output["skill_evolutions"][0]["status"], SkillEvolutionStatus.SKIPPED)
             self.assertEqual(state.output["persona_evolutions"][0]["status"], PersonaEvolutionStatus.SKIPPED)
             self.assertEqual(state.output["self_reviews"][0]["status"], SelfReviewStatus.SKIPPED)
+            self.assertEqual(state.output["interaction_reviews"][0]["status"], InteractionReviewStatus.SKIPPED)
             self.assertEqual(briefing.output["briefing"]["status"], BriefingStatus.SKIPPED)
             self.assertEqual(briefing_status.output["briefings"][0]["briefing_id"], briefing.output["briefing"]["briefing_id"])
             self.assertEqual(curation.output["curation"]["status"], CurationStatus.SKIPPED)
@@ -1000,6 +1068,11 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertEqual(
                 self_review_status.output["self_reviews"][0]["review_id"],
                 self_review.output["self_review"]["review_id"],
+            )
+            self.assertEqual(interaction_review.output["interaction_review"]["status"], InteractionReviewStatus.SKIPPED)
+            self.assertEqual(
+                interaction_review_status.output["interaction_reviews"][0]["review_id"],
+                interaction_review.output["interaction_review"]["review_id"],
             )
             self.assertEqual(wakeup_status.output["wakeups"][0]["wakeup_id"], scheduled_wakeup.output["wakeup"]["wakeup_id"])
             self.assertEqual(state.output["wakeups"], [])

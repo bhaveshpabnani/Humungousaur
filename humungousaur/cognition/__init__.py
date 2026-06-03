@@ -11,6 +11,13 @@ from .curation import CurationEngine, CurationProvider, CurationStore, EvidenceC
 from .event_bus import CognitiveEventBus
 from .focus import FocusStore
 from .goals import GoalStore
+from .interaction_review import (
+    EvidenceInteractionReviewProvider,
+    InteractionReviewEngine,
+    InteractionReviewProvider,
+    InteractionReviewStore,
+    ModelInteractionReviewProvider,
+)
 from .knowledge import KnowledgeStore
 from .learning import LearningEngine, LearningStore
 from .loop import AutonomousLoopResult, AutonomousLoopRunner, autonomous_loop_result_to_dict, autonomous_status
@@ -27,6 +34,8 @@ from .models import (
     FocusMode,
     FocusState,
     GoalRecord,
+    InteractionReviewRecord,
+    InteractionReviewStatus,
     KnowledgeKind,
     KnowledgeRecord,
     LearningRecord,
@@ -101,12 +110,18 @@ __all__ = [
     "EvidenceBriefingProvider",
     "EvidenceConsolidationProvider",
     "EvidenceCurationProvider",
+    "EvidenceInteractionReviewProvider",
     "EvidencePersonaEvolutionProvider",
     "ExplicitCognitiveDecisionProvider",
     "FocusState",
     "FocusStore",
     "GoalRecord",
     "GoalStore",
+    "InteractionReviewEngine",
+    "InteractionReviewProvider",
+    "InteractionReviewRecord",
+    "InteractionReviewStatus",
+    "InteractionReviewStore",
     "KnowledgeKind",
     "KnowledgeRecord",
     "KnowledgeStore",
@@ -119,6 +134,7 @@ __all__ = [
     "ModelBriefingProvider",
     "ModelConsolidationProvider",
     "ModelCurationProvider",
+    "ModelInteractionReviewProvider",
     "ModelPersonaEvolutionProvider",
     "PersonaEvolutionEngine",
     "PersonaEvolutionProvider",
