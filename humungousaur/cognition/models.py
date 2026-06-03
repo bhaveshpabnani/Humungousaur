@@ -148,6 +148,12 @@ class SkillEvolutionStatus(StrEnum):
     FAILED = "failed"
 
 
+class PersonaEvolutionStatus(StrEnum):
+    RECORDED = "recorded"
+    SKIPPED = "skipped"
+    FAILED = "failed"
+
+
 @dataclass(slots=True)
 class CognitiveEvent:
     event_id: str
@@ -207,6 +213,7 @@ class PersonaProfile:
     ])
     user_preferences: list[str] = field(default_factory=list)
     stable_facts: list[str] = field(default_factory=list)
+    evidence_refs: list[str] = field(default_factory=list)
     updated_at: str = field(default_factory=utc_now)
 
 
@@ -389,6 +396,21 @@ class SkillEvolutionRecord:
 
 
 @dataclass(slots=True)
+class PersonaEvolutionRecord:
+    evolution_id: str
+    status: PersonaEvolutionStatus = PersonaEvolutionStatus.SKIPPED
+    purpose: str = ""
+    summary: str = ""
+    changed_fields: list[str] = field(default_factory=list)
+    added_boundaries: list[str] = field(default_factory=list)
+    added_user_preferences: list[str] = field(default_factory=list)
+    added_stable_facts: list[str] = field(default_factory=list)
+    evidence_refs: list[str] = field(default_factory=list)
+    confidence: float = 0.0
+    created_at: str = field(default_factory=utc_now)
+
+
+@dataclass(slots=True)
 class CognitiveSnapshot:
     active_goals: list[GoalRecord] = field(default_factory=list)
     active_tasks: list[TaskRecord] = field(default_factory=list)
@@ -402,6 +424,7 @@ class CognitiveSnapshot:
     briefings: list[BriefingRecord] = field(default_factory=list)
     curations: list[CurationRecord] = field(default_factory=list)
     skill_evolutions: list[SkillEvolutionRecord] = field(default_factory=list)
+    persona_evolutions: list[PersonaEvolutionRecord] = field(default_factory=list)
     skills: list[SkillRecord] = field(default_factory=list)
     specialists: list[SpecialistRecord] = field(default_factory=list)
 

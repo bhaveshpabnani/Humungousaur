@@ -30,6 +30,10 @@ from humungousaur.cognition import (
     ModelConsolidationProvider,
     ModelCurationProvider,
     ModelReflectionProvider,
+    EvidencePersonaEvolutionProvider,
+    ModelPersonaEvolutionProvider,
+    PersonaEvolutionEngine,
+    PersonaEvolutionStore,
     PersonaStore,
     RecoveryEngine,
     RecoveryStore,
@@ -62,6 +66,7 @@ from humungousaur.cognition.models import (
     ReflectionStatus,
     RuntimeCycleStatus,
     RecoveryStatus,
+    PersonaEvolutionStatus,
     SkillEvolutionStatus,
     SkillLifecycleStatus,
     StepBoundaryAction,
@@ -86,6 +91,8 @@ from humungousaur.tools.cognition_tools import (
     CognitiveKnowledgeRecordTool,
     CognitiveLearningStatusTool,
     CognitiveMemoryCurateTool,
+    CognitivePersonaEvolveTool,
+    CognitivePersonaEvolutionStatusTool,
     CognitivePersonaUpdateTool,
     CognitiveReflectionStatusTool,
     CognitiveRecoveryStatusTool,
@@ -607,6 +614,60 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertIn("Recurring review follow-up", active_names)
             self.assertEqual(SkillEvolutionStore(db).recent()[0].evolution_id, evolution.evolution_id)
 
+    def test_model_persona_evolution_provider_updates_profile_from_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            db = root / "cognition.sqlite3"
+            persona_store = PersonaStore(root / "persona.json")
+            base_profile = persona_store.add_preference("Prefer concise implementation updates.")
+            learning = LearningStore(db).append(
+                outcome="completed",
+                lesson="The user reacted well to warm, concise progress updates with blockers called out plainly.",
+                evidence_refs=["run:persona-review"],
+            )
+            knowledge = KnowledgeStore(db).append(
+                kind=KnowledgeKind.PREFERENCE,
+                text="The user prefers blocker-first updates during long implementation work.",
+                source="test",
+                evidence_refs=["event:preference"],
+                confidence=0.9,
+            )
+            snapshot = CognitiveSnapshot(persona=base_profile, learning=[learning], knowledge=[knowledge])
+            client = StaticModelClient(
+                json.dumps(
+                    {
+                        "status": "recorded",
+                        "summary": "Updated communication style and added supported user-model facts.",
+                        "assistant_name": "",
+                        "identity": "A local-first personal assistant that works with the user through safe tools and evidence-backed collaboration.",
+                        "communication_style": "Warm, concise, blockers-first, and evidence-based.",
+                        "add_boundaries": ["Surface blockers clearly before claiming progress."],
+                        "add_user_preferences": ["Prefer blocker-first implementation updates."],
+                        "add_stable_facts": ["Long implementation work should include concise progress updates."],
+                        "evidence_refs": [f"learning:{learning.learning_id}", f"knowledge:{knowledge.knowledge_id}"],
+                        "confidence": 0.86,
+                    }
+                )
+            )
+            engine = PersonaEvolutionEngine(
+                PersonaEvolutionStore(db),
+                persona_store,
+                provider=ModelPersonaEvolutionProvider(client, fallback=EvidencePersonaEvolutionProvider()),
+            )
+
+            evolution = engine.evolve(snapshot=snapshot, purpose="test_persona_review")
+            updated = persona_store.load()
+
+            self.assertEqual(evolution.status, PersonaEvolutionStatus.RECORDED)
+            self.assertIn("identity", evolution.changed_fields)
+            self.assertIn("communication_style", evolution.changed_fields)
+            self.assertIn("Prefer blocker-first implementation updates.", evolution.added_user_preferences)
+            self.assertIn("Surface blockers clearly before claiming progress.", updated.boundaries)
+            self.assertIn("Ask for approval before high-risk actions.", updated.boundaries)
+            self.assertEqual(updated.communication_style, "Warm, concise, blockers-first, and evidence-based.")
+            self.assertIn(f"knowledge:{knowledge.knowledge_id}", updated.evidence_refs)
+            self.assertEqual(PersonaEvolutionStore(db).recent()[0].evolution_id, evolution.evolution_id)
+
     def test_model_consolidation_provider_falls_back_without_inferred_memory(self) -> None:
         class FailingClient(StaticModelClient):
             def complete_json(self, prompt, schema):
@@ -764,6 +825,11 @@ class CognitiveStoreTests(unittest.TestCase):
                 {"kind": "preference", "text": "Prefer progress updates with blockers first."},
                 config,
             )
+            persona_evolution = CognitivePersonaEvolveTool().execute(
+                {"purpose": "persona_review", "include_state": True, "limit": 5},
+                config,
+            )
+            persona_evolution_status = CognitivePersonaEvolutionStatusTool().execute({"limit": 5}, config)
             learning_record = LearningStore(config.cognition_db_path).append(
                 goal_id=goal.output["goal"]["goal_id"],
                 outcome="observed",
@@ -829,6 +895,8 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertEqual(focus.status, ActionStatus.SUCCEEDED)
             self.assertEqual(knowledge.status, ActionStatus.SUCCEEDED)
             self.assertEqual(persona.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(persona_evolution.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(persona_evolution_status.status, ActionStatus.SUCCEEDED)
             self.assertEqual(learning.status, ActionStatus.SUCCEEDED)
             self.assertEqual(consolidation.status, ActionStatus.SUCCEEDED)
             self.assertEqual(recovery.status, ActionStatus.SUCCEEDED)
@@ -852,6 +920,7 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertEqual(state.output["briefings"][0]["status"], BriefingStatus.SKIPPED)
             self.assertEqual(state.output["curations"][0]["status"], CurationStatus.SKIPPED)
             self.assertEqual(state.output["skill_evolutions"][0]["status"], SkillEvolutionStatus.SKIPPED)
+            self.assertEqual(state.output["persona_evolutions"][0]["status"], PersonaEvolutionStatus.SKIPPED)
             self.assertEqual(briefing.output["briefing"]["status"], BriefingStatus.SKIPPED)
             self.assertEqual(briefing_status.output["briefings"][0]["briefing_id"], briefing.output["briefing"]["briefing_id"])
             self.assertEqual(curation.output["curation"]["status"], CurationStatus.SKIPPED)
@@ -860,6 +929,11 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertEqual(
                 skill_evolution_status.output["skill_evolutions"][0]["evolution_id"],
                 skill_evolution.output["skill_evolution"]["evolution_id"],
+            )
+            self.assertEqual(persona_evolution.output["persona_evolution"]["status"], PersonaEvolutionStatus.SKIPPED)
+            self.assertEqual(
+                persona_evolution_status.output["persona_evolutions"][0]["evolution_id"],
+                persona_evolution.output["persona_evolution"]["evolution_id"],
             )
             self.assertEqual(wakeup_status.output["wakeups"][0]["wakeup_id"], scheduled_wakeup.output["wakeup"]["wakeup_id"])
             self.assertEqual(state.output["wakeups"], [])

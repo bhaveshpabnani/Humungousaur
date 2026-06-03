@@ -8,6 +8,7 @@ The assistant should behave like a daily collaborator:
 
 - know the current focus and active goals
 - remember useful preferences, facts, workflows, and outcomes
+- develop a durable persona and user model from evidence
 - forget or summarize stale noise
 - practice, improve, and retire reusable skills from evidence
 - keep future tasks and blocked work in view
@@ -25,7 +26,7 @@ The system is not a chatbot wrapped around tools. It is a durable control loop a
 ```text
 event/wakeup -> perception -> attention -> cognitive decision -> goal/task update
       -> specialist/tool execution -> observation -> reflection
-      -> recovery/learning/consolidation/curation/skill-evolution -> briefing/response/schedule/sleep/continue
+      -> recovery/learning/consolidation/curation/skill-evolution/persona-evolution -> briefing/response/schedule/sleep/continue
 ```
 
 ## Layers
@@ -58,45 +59,50 @@ event/wakeup -> perception -> attention -> cognitive decision -> goal/task updat
    - Skill memory: reusable capability instructions and verification steps.
    - Curation memory: exact-ID retention, summarization, and forgetting decisions with audit evidence.
    - Skill evolution memory: exact-ID skill improvement, retention, creation, and retirement decisions.
+   - Persona evolution memory: assistant identity, communication style, boundaries, preferences, and stable facts updated from evidence.
 
 7. Persona and user model
    - Stores assistant identity, tone, boundaries, and user preferences.
-   - Evolves from explicit user memories and repeated successful workflows.
+   - Evolves from explicit user memories, repeated successful workflows, and model-led persona review.
 
-8. Specialist agents
+8. Persona evolution
+   - Reviews durable evidence to tune assistant identity, communication style, boundaries, user preferences, and stable facts.
+   - Uses model-led review when configured and skips rather than inferring user model changes without a model.
+
+9. Specialist agents
    - Browser, OS, code/interpreter, memory, research, document, voice, scheduler, and critic agents.
    - Each specialist gets scoped context, tools, permissions, and success criteria.
 
-9. Tool executor and policy
+10. Tool executor and policy
    - All actions pass through schemas, risk levels, approvals, sandboxing, redaction, audit logs, and cancellation checkpoints.
 
-10. Reflection and verification
+11. Reflection and verification
     - Checks outputs against success criteria before final answers.
     - Retries, adapts, asks for clarification, or reports blockers when evidence is insufficient.
 
-11. Adaptive recovery
+12. Adaptive recovery
     - Converts failed, blocked, or inconclusive reflected work into explicit repair tasks when model evidence supports it.
     - Preserves parent/repair task links so goals can continue without pretending the failed attempt succeeded.
 
-12. Cognitive briefing
+13. Cognitive briefing
     - Synthesizes current focus, active goals, blockers, next actions, future wakeups, learning, and persona into an actionable work view.
     - Uses model-led synthesis when configured and stores skipped raw-state briefings rather than inferring priorities without a model.
 
-13. Memory curation
+14. Memory curation
     - Reviews durable knowledge for exact-ID retention, summarization, and archival.
     - Uses model-led curation when configured and skips rather than guessing what should be forgotten.
 
-14. Skill evolution
+15. Skill evolution
     - Reviews reusable skills for exact-ID improvement, retention, creation, and retirement.
     - Uses model-led evidence review when configured and skips rather than rewriting skills without a model.
 
-15. Human interaction manager
+16. Human interaction manager
     - Chooses text, voice preparation, spoken response, notification, progress update, approval request, or silence.
     - Supports interruption, pause/resume, and long-running progress.
 
 ## Implementation Principles
 
-- `docs/GLOBAL_AGENT_INSTRUCTIONS.md` is the strict global rule for intelligence: do not use pattern-based, regex-based, keyword-list-based, hardcoded-constant-based, deterministic natural-language handling, broad deterministic matching, or static routing tables for cognition, planning, routing, delegation, memory decisions, experience consolidation, skill evolution decisions, persona update decisions, future wakeup/timing decisions, task decomposition, response strategy, recovery strategy, or completion judgment.
+- `docs/GLOBAL_AGENT_INSTRUCTIONS.md` is the strict global rule for intelligence: do not use pattern-based, regex-based, keyword-list-based, hardcoded-constant-based, deterministic natural-language handling, broad deterministic matching, or static routing tables for cognition, planning, routing, delegation, memory decisions, experience consolidation, skill evolution decisions, persona evolution decisions, persona update decisions, future wakeup/timing decisions, task decomposition, response strategy, recovery strategy, or completion judgment.
 - Model-led cognition chooses strategy from schemas, context, permissions, and goals.
 - Deterministic code enforces safety, persistence, validation, explicit fallback commands, and evidence boundaries only.
 - Every capability is a tool or specialist with a bounded contract.
@@ -251,3 +257,17 @@ The thirteenth implementation milestone adds skill evolution:
 - model-unavailable fallback records a skipped skill review without semantic skill updates
 
 Skill evolution is the practice gate. The model decides when reusable workflows should improve, merge, retire, or become new skills. Deterministic code only validates exact IDs, applies bounded store updates, preserves retired skill history, persists audit records, and skips when model reasoning is unavailable.
+
+The fourteenth implementation milestone adds persona evolution:
+
+- durable persona evolution records with recorded, skipped, and failed states
+- persona profiles include evidence references for durable identity, style, boundary, preference, and stable-fact changes
+- schema-driven persona evolution provider using the same configured model clients as planning, attention, reflection, consolidation, recovery, briefing, curation, and skill evolution
+- current persona, focus, active goals, tasks, knowledge, learning, consolidations, curations, skill evolutions, previous persona evolutions, recoveries, briefings, wakeups, skills, and specialists are passed as structured evidence
+- proposals can update assistant identity and communication style only when evidence supports a stable long-term improvement
+- proposals can add boundaries, user preferences, and stable facts without removing existing safety boundaries
+- public tools run a bounded persona review pass and inspect persona evolution history
+- planning context includes recent persona evolution records so future responses can see how the assistant-user relationship model has changed
+- model-unavailable fallback records a skipped persona review without semantic user-model inference
+
+Persona evolution is the identity gate. The model decides whether evidence supports a durable change in how the assistant presents itself, communicates, preserves boundaries, or remembers user preferences. Deterministic code only validates schema output, merges bounded additions, preserves safety boundaries, persists audit records, and skips when model reasoning is unavailable.

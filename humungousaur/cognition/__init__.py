@@ -30,6 +30,8 @@ from .models import (
     KnowledgeKind,
     KnowledgeRecord,
     LearningRecord,
+    PersonaEvolutionRecord,
+    PersonaEvolutionStatus,
     PersonaProfile,
     RecoveryRecord,
     RecoveryStatus,
@@ -47,6 +49,13 @@ from .models import (
     WakeupStatus,
 )
 from .queue import RuntimeEventQueue
+from .persona_evolution import (
+    EvidencePersonaEvolutionProvider,
+    ModelPersonaEvolutionProvider,
+    PersonaEvolutionEngine,
+    PersonaEvolutionProvider,
+    PersonaEvolutionStore,
+)
 from .persona import PersonaStore
 from .recovery import EvidenceRecoveryProvider, ModelRecoveryProvider, RecoveryEngine, RecoveryProvider, RecoveryStore
 from .recorder import CognitiveRecorder
@@ -89,6 +98,7 @@ __all__ = [
     "EvidenceBriefingProvider",
     "EvidenceConsolidationProvider",
     "EvidenceCurationProvider",
+    "EvidencePersonaEvolutionProvider",
     "ExplicitCognitiveDecisionProvider",
     "FocusState",
     "FocusStore",
@@ -106,6 +116,12 @@ __all__ = [
     "ModelBriefingProvider",
     "ModelConsolidationProvider",
     "ModelCurationProvider",
+    "ModelPersonaEvolutionProvider",
+    "PersonaEvolutionEngine",
+    "PersonaEvolutionProvider",
+    "PersonaEvolutionRecord",
+    "PersonaEvolutionStatus",
+    "PersonaEvolutionStore",
     "PersonaProfile",
     "PersonaStore",
     "EvidenceRecoveryProvider",

@@ -353,6 +353,37 @@ class ModelPlanProviderTests(unittest.TestCase):
         self.assertEqual(plan.steps[0].tool_input["max_new_skills"], 2)
         self.assertEqual(plan.steps[0].source, "model:static")
 
+    def test_model_provider_can_handoff_to_cognitive_persona_evolution_tool(self) -> None:
+        client = StaticModelClient(
+            '{"steps":[{"tool_name":"cognitive_persona_evolve","tool_input":{"purpose":"persona_review","include_state":false},"reason":"review assistant persona and user model from evidence"}]}'
+        )
+        provider = ModelPlanProvider(
+            client,
+            {"cognitive_persona_evolve"},
+            tool_catalog={
+                "cognitive_persona_evolve": {
+                    "description": "Run a model-led review of assistant persona, user preferences, stable facts, boundaries, identity, and communication style from durable evidence.",
+                    "risk_level": "medium",
+                    "requires_approval": False,
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "purpose": {"type": "string"},
+                            "include_state": {"type": "boolean"},
+                        },
+                    },
+                    "capability_group": "cognition",
+                }
+            },
+            fallback=ExplicitFallbackPlanProvider(),
+        )
+
+        plan = provider.plan("review how the assistant should communicate with me over time")
+
+        self.assertEqual(plan.steps[0].tool_name, "cognitive_persona_evolve")
+        self.assertEqual(plan.steps[0].tool_input["purpose"], "persona_review")
+        self.assertEqual(plan.steps[0].source, "model:static")
+
     def test_model_provider_can_handoff_to_activity_tools(self) -> None:
         client = StaticModelClient(
             '{"steps":[{"tool_name":"activity_search","tool_input":{"query":"meeting notes","limit":5},"reason":"search native activity memory"}]}'
