@@ -114,6 +114,8 @@ python -m humungousaur memory-search "project"
 python -m humungousaur memory-summary --period today
 python -m humungousaur memory-profile
 python -m humungousaur run "cognitive_state {}" --workspace . --planner explicit
+python -m humungousaur run "cognitive_briefing_prepare {\"purpose\":\"current\",\"horizon_hours\":24}" --workspace . --planner explicit
+python -m humungousaur run "cognitive_briefing_status {}" --workspace . --planner explicit
 python -m humungousaur run "cognitive_focus_update {\"mode\":\"monitoring\",\"summary\":\"Tracking open follow-ups.\",\"pinned_context\":[\"follow-ups\"]}" --workspace . --planner explicit
 python -m humungousaur run "cognitive_knowledge_record {\"kind\":\"procedure\",\"text\":\"Use blockers-first updates for project status.\",\"source\":\"user\"}" --workspace . --planner explicit
 python -m humungousaur run "cognitive_learning_status {}" --workspace . --planner explicit
@@ -139,7 +141,7 @@ python -m unittest discover -v
 
 Engineering guidance lives in `docs/ENGINEERING_PRINCIPLES.md` and the strict global intelligence rule lives in `docs/GLOBAL_AGENT_INSTRUCTIONS.md`: broad assistant behavior should be model-led and schema-driven through OpenAI, Groq, Ollama, Grok, or another configured OpenAI-compatible client. Do not implement cognition, routing, delegation, response strategy, memory decisions, experience consolidation, persona update decisions, future wakeup/timing decisions, adaptive recovery decisions, completion judgment, proactive assistance, or task decomposition with pattern matching, regex intent maps, keyword lists, static routing tables, hardcoded constant routing, command templates, brittle handcrafted cases, or deterministic natural-language inference. Deterministic safeguards are reserved for explicit fallback commands, safety checks, schema validation, audit persistence, and evidence-boundary enforcement.
 
-The long-term human-like assistant architecture lives in `docs/COGNITIVE_AGENT_ARCHITECTURE.md`. The first cognitive runtime layers are implemented as durable event, goal/task, focus, persona, knowledge, learning, consolidation, recovery, wakeup, skill, specialist, and reflection stores; planner-visible cognitive state tools; model-led attention, reflection, consolidation, and recovery decisions with explicit fallback; and a bounded autonomous runtime loop with queued events, due wakeups, task graphs, explicit delegation, pause/interrupt boundaries, completion gates, evidence-backed learning, adaptive repair tasks, model-led experience consolidation, idle stopping, and cycle summaries.
+The long-term human-like assistant architecture lives in `docs/COGNITIVE_AGENT_ARCHITECTURE.md`. The first cognitive runtime layers are implemented as durable event, goal/task, focus, persona, knowledge, learning, consolidation, recovery, briefing, wakeup, skill, specialist, and reflection stores; planner-visible cognitive state tools; model-led attention, reflection, consolidation, recovery, and briefing decisions with explicit fallback; and a bounded autonomous runtime loop with queued events, due wakeups, task graphs, explicit delegation, pause/interrupt boundaries, completion gates, evidence-backed learning, adaptive repair tasks, current-work briefings, model-led experience consolidation, idle stopping, and cycle summaries.
 
 The voice wake-word module should call this runtime after transcription:
 

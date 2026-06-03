@@ -1,4 +1,5 @@
 from .controller import CognitiveController, CognitiveDecisionProvider, ExplicitCognitiveDecisionProvider, ModelCognitiveDecisionProvider
+from .briefing import BriefingEngine, BriefingProvider, BriefingStore, EvidenceBriefingProvider, ModelBriefingProvider
 from .consolidation import (
     ConsolidationEngine,
     ConsolidationProvider,
@@ -16,6 +17,8 @@ from .models import (
     CognitiveDecision,
     CognitiveEvent,
     CognitiveSnapshot,
+    BriefingRecord,
+    BriefingStatus,
     ConsolidationRecord,
     ConsolidationStatus,
     FocusMode,
@@ -48,6 +51,11 @@ from .wakeups import WakeupStore
 
 __all__ = [
     "CognitiveController",
+    "BriefingEngine",
+    "BriefingProvider",
+    "BriefingRecord",
+    "BriefingStatus",
+    "BriefingStore",
     "CognitiveDecisionProvider",
     "CognitiveDecision",
     "CognitiveEvent",
@@ -60,6 +68,7 @@ __all__ = [
     "ConsolidationStatus",
     "ConsolidationStore",
     "FocusMode",
+    "EvidenceBriefingProvider",
     "EvidenceConsolidationProvider",
     "ExplicitCognitiveDecisionProvider",
     "FocusState",
@@ -75,6 +84,7 @@ __all__ = [
     "AutonomousLoopResult",
     "AutonomousLoopRunner",
     "ModelCognitiveDecisionProvider",
+    "ModelBriefingProvider",
     "ModelConsolidationProvider",
     "PersonaProfile",
     "PersonaStore",

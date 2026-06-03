@@ -1,13 +1,17 @@
 from datetime import datetime, timedelta, timezone
+import json
 import tempfile
 import unittest
 from pathlib import Path
 
 from humungousaur.cognition import (
+    BriefingEngine,
+    BriefingStore,
     ConsolidationEngine,
     ConsolidationStore,
     CognitiveEventBus,
     CognitiveRecorder,
+    EvidenceBriefingProvider,
     EvidenceConsolidationProvider,
     EvidenceReflectionProvider,
     ExplicitCognitiveDecisionProvider,
@@ -18,6 +22,7 @@ from humungousaur.cognition import (
     AutonomousLoopRunner,
     autonomous_loop_result_to_dict,
     autonomous_status,
+    ModelBriefingProvider,
     ModelCognitiveDecisionProvider,
     ModelConsolidationProvider,
     ModelReflectionProvider,
@@ -36,6 +41,7 @@ from humungousaur.cognition import (
 from humungousaur.cognition.autonomous import AutonomousRuntime
 from humungousaur.cognition.models import (
     AttentionAction,
+    BriefingStatus,
     ConsolidationStatus,
     CognitiveEvent,
     CognitivePriority,
@@ -59,6 +65,8 @@ from humungousaur.planning.model_clients import ModelClientError, StaticModelCli
 from humungousaur.schemas import ActionStatus, AgentRunResult, ApprovalRequest, RiskLevel, ToolResult
 from humungousaur.tools.cognition_tools import (
     AutonomousTaskGraphCreateTool,
+    CognitiveBriefingPrepareTool,
+    CognitiveBriefingStatusTool,
     CognitiveConsolidationStatusTool,
     CognitiveFocusUpdateTool,
     CognitiveGoalCreateTool,
@@ -357,6 +365,74 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertIn("blockers", PersonaStore(root / "persona.json").load().user_preferences[0])
             self.assertEqual(ConsolidationStore(db).recent()[0].consolidation_id, record.consolidation_id)
 
+    def test_model_briefing_provider_prepares_and_stores_current_work_view(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            db = root / "cognition.sqlite3"
+            goals = GoalStore(db)
+            goal = goals.create_goal("Ship cognitive briefing", ["A current-work briefing exists."])
+            task = goals.add_task(
+                goal.goal_id,
+                "Prepare briefing engine",
+                metadata={"request": "prepare briefing", "success_criteria": ["Briefing record stored."]},
+            )
+            focus = FocusStore(db).update(
+                mode=FocusMode.DEEP_WORK,
+                active_goal_id=goal.goal_id,
+                active_task_id=task.task_id,
+                summary="Implementing a current-work briefing layer.",
+                pinned_context=["briefing", "current work"],
+            )
+            knowledge = KnowledgeStore(db).append(
+                kind=KnowledgeKind.PROCEDURE,
+                text="Use evidence refs in project briefings.",
+                source="test",
+                evidence_refs=[f"goal:{goal.goal_id}"],
+                confidence=0.8,
+            )
+            wakeup = WakeupStore(db).schedule(
+                scheduled_for=_utc_seconds_from_now(3600),
+                payload={"text": "review briefing", "metadata": {"should_run_agent": True}},
+                reason="Review briefing follow-up.",
+            )
+            snapshot = CognitiveSnapshot(
+                active_goals=[goal],
+                active_tasks=[task],
+                focus=focus,
+                knowledge=[knowledge],
+                wakeups=[wakeup],
+            )
+            client = StaticModelClient(
+                json.dumps(
+                    {
+                        "status": "generated",
+                        "summary": "Current work is centered on shipping the briefing layer.",
+                        "current_focus": "Implementing a current-work briefing layer.",
+                        "priorities": ["Finish the briefing engine and tool wiring."],
+                        "blockers": [],
+                        "next_actions": ["Run focused cognition tests.", "Commit the briefing iteration."],
+                        "watch_items": ["Review the scheduled follow-up."],
+                        "suggested_wakeups": ["Check briefing quality after tests."],
+                        "evidence_refs": [f"goal:{goal.goal_id}", f"task:{task.task_id}", f"wakeup:{wakeup.wakeup_id}"],
+                        "confidence": 0.82,
+                    }
+                )
+            )
+            engine = BriefingEngine(
+                BriefingStore(db),
+                provider=ModelBriefingProvider(client, fallback=EvidenceBriefingProvider()),
+            )
+
+            briefing = engine.prepare(snapshot=snapshot, purpose="iteration", horizon_hours=24)
+            recent = BriefingStore(db).recent(limit=3)
+
+            self.assertEqual(briefing.status, BriefingStatus.GENERATED)
+            self.assertEqual(briefing.purpose, "iteration")
+            self.assertIn("briefing layer", briefing.summary)
+            self.assertEqual(briefing.priorities[0], "Finish the briefing engine and tool wiring.")
+            self.assertEqual(briefing.evidence_refs[0], f"goal:{goal.goal_id}")
+            self.assertEqual(recent[0].briefing_id, briefing.briefing_id)
+
     def test_model_consolidation_provider_falls_back_without_inferred_memory(self) -> None:
         class FailingClient(StaticModelClient):
             def complete_json(self, prompt, schema):
@@ -485,7 +561,7 @@ class CognitiveStoreTests(unittest.TestCase):
     def test_cognition_tools_expose_and_update_runtime_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)
-            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts").normalized()
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", planner_provider="explicit").normalized()
 
             goal = CognitiveGoalCreateTool().execute(
                 {"title": "Track follow-up tasks", "success_criteria": ["A follow-up goal is visible."]},
@@ -522,6 +598,8 @@ class CognitiveStoreTests(unittest.TestCase):
             learning = CognitiveLearningStatusTool().execute({"limit": 5}, config)
             consolidation = CognitiveConsolidationStatusTool().execute({"limit": 5}, config)
             recovery = CognitiveRecoveryStatusTool().execute({"limit": 5}, config)
+            briefing = CognitiveBriefingPrepareTool().execute({"purpose": "status", "include_state": True, "limit": 5}, config)
+            briefing_status = CognitiveBriefingStatusTool().execute({"limit": 5}, config)
             scheduled_wakeup = CognitiveWakeupScheduleTool().execute(
                 {
                     "delay_seconds": 60,
@@ -573,6 +651,8 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertEqual(learning.status, ActionStatus.SUCCEEDED)
             self.assertEqual(consolidation.status, ActionStatus.SUCCEEDED)
             self.assertEqual(recovery.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(briefing.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(briefing_status.status, ActionStatus.SUCCEEDED)
             self.assertEqual(scheduled_wakeup.status, ActionStatus.SUCCEEDED)
             self.assertEqual(wakeup_status.status, ActionStatus.SUCCEEDED)
             self.assertEqual(cancelled_wakeup.status, ActionStatus.SUCCEEDED)
@@ -584,6 +664,9 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertEqual(state.output["focus"]["mode"], "monitoring")
             self.assertEqual(state.output["consolidations"], [])
             self.assertEqual(state.output["recoveries"], [])
+            self.assertEqual(state.output["briefings"][0]["status"], BriefingStatus.SKIPPED)
+            self.assertEqual(briefing.output["briefing"]["status"], BriefingStatus.SKIPPED)
+            self.assertEqual(briefing_status.output["briefings"][0]["briefing_id"], briefing.output["briefing"]["briefing_id"])
             self.assertEqual(wakeup_status.output["wakeups"][0]["wakeup_id"], scheduled_wakeup.output["wakeup"]["wakeup_id"])
             self.assertEqual(state.output["wakeups"], [])
             self.assertEqual(state.output["knowledge"][0]["knowledge_id"], knowledge.output["knowledge"]["knowledge_id"])

@@ -23,6 +23,7 @@ This prohibition covers:
 - autonomous continuation decisions
 - complex-task completion judgment
 - adaptive recovery decisions
+- briefing synthesis, prioritization, blocker selection, and next-action selection
 - user-activity stimulus interpretation
 - conversation-state interpretation
 - proactive assistance decisions

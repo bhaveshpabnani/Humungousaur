@@ -3,6 +3,8 @@ from humungousaur.tools.cognition.implementation import (
     AutonomousEventSubmitTool,
     AutonomousQueueStatusTool,
     AutonomousTaskGraphCreateTool,
+    CognitiveBriefingPrepareTool,
+    CognitiveBriefingStatusTool,
     CognitiveConsolidationStatusTool,
     CognitiveFocusUpdateTool,
     CognitiveGoalCreateTool,
@@ -23,6 +25,8 @@ from humungousaur.tools.cognition.implementation import (
 
 __all__ = [
     "CognitiveGoalCreateTool",
+    "CognitiveBriefingPrepareTool",
+    "CognitiveBriefingStatusTool",
     "CognitiveConsolidationStatusTool",
     "CognitiveFocusUpdateTool",
     "CognitiveKnowledgeForgetTool",

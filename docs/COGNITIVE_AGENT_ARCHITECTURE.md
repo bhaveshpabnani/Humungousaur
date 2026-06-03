@@ -10,6 +10,7 @@ The assistant should behave like a daily collaborator:
 - remember useful preferences, facts, workflows, and outcomes
 - forget or summarize stale noise
 - keep future tasks and blocked work in view
+- prepare concise current-work briefings for handoffs, mornings, reviews, and interruptions
 - use specialist capabilities instead of one overloaded prompt
 - act only through explicit tools and policy gates
 - observe results before claiming completion
@@ -23,7 +24,7 @@ The system is not a chatbot wrapped around tools. It is a durable control loop a
 ```text
 event/wakeup -> perception -> attention -> cognitive decision -> goal/task update
       -> specialist/tool execution -> observation -> reflection
-      -> recovery/learning/consolidation -> response/schedule/sleep/continue
+      -> recovery/learning/consolidation -> briefing/response/schedule/sleep/continue
 ```
 
 ## Layers
@@ -74,7 +75,11 @@ event/wakeup -> perception -> attention -> cognitive decision -> goal/task updat
     - Converts failed, blocked, or inconclusive reflected work into explicit repair tasks when model evidence supports it.
     - Preserves parent/repair task links so goals can continue without pretending the failed attempt succeeded.
 
-12. Human interaction manager
+12. Cognitive briefing
+    - Synthesizes current focus, active goals, blockers, next actions, future wakeups, learning, and persona into an actionable work view.
+    - Uses model-led synthesis when configured and stores skipped raw-state briefings rather than inferring priorities without a model.
+
+13. Human interaction manager
     - Chooses text, voice preparation, spoken response, notification, progress update, approval request, or silence.
     - Supports interruption, pause/resume, and long-running progress.
 
@@ -197,3 +202,14 @@ The tenth implementation milestone adds adaptive recovery:
 - public tools expose recent recovery history for inspection
 
 Recovery is the repair gate. The model decides whether there is a justified next repair task from structured goal, task, run, reflection, and learning evidence. Deterministic code only validates the recovery schema, persists records, creates explicit task nodes, and skips rather than inventing semantic repair work when the model is unavailable.
+
+The eleventh implementation milestone adds cognitive briefing:
+
+- durable briefing records with generated, skipped, and failed states
+- schema-driven briefing provider using the same configured model clients as planning, attention, reflection, consolidation, and recovery
+- current focus, goals, tasks, knowledge, learning, wakeups, recoveries, briefings, skills, specialists, and persona are passed as structured evidence
+- public tools prepare a current-work briefing and inspect briefing history
+- planning context includes recent briefings so the assistant can carry a compact work view across future turns
+- model-unavailable fallback records a skipped briefing and bounded raw state without semantic prioritization
+
+Briefing is the situational-awareness gate. The model decides priorities, blockers, next actions, and watch items from durable evidence. Deterministic code only gathers bounded state, validates the schema, persists the briefing record, and exposes raw state when no model is available.

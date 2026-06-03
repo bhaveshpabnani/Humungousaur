@@ -10,6 +10,7 @@ from humungousaur.planning.model_factory import build_model_client
 from humungousaur.schemas import ActionStatus, AgentRunResult
 
 from .consolidation import ConsolidationStore
+from .briefing import BriefingStore
 from .controller import CognitiveController, ExplicitCognitiveDecisionProvider, ModelCognitiveDecisionProvider
 from .event_bus import CognitiveEventBus
 from .focus import FocusStore
@@ -47,6 +48,7 @@ class CognitiveRecorder:
         self.consolidations = ConsolidationStore(self.config.cognition_db_path)
         self.wakeups = WakeupStore(self.config.cognition_db_path)
         self.recoveries = RecoveryStore(self.config.cognition_db_path)
+        self.briefings = BriefingStore(self.config.cognition_db_path)
         self.persona = PersonaStore(self.config.persona_path)
         self.skills = SkillStore(self.config.skill_library_path)
         self.specialists = SpecialistStore(self.config.specialist_registry_path)
@@ -64,6 +66,7 @@ class CognitiveRecorder:
             consolidations=self.consolidations.recent(limit=8),
             wakeups=self.wakeups.scheduled(limit=8),
             recoveries=self.recoveries.recent(limit=8),
+            briefings=self.briefings.recent(limit=8),
             skills=self.skills.list(limit=8),
             specialists=self.specialists.list(limit=8),
         )

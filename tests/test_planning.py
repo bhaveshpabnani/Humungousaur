@@ -255,6 +255,38 @@ class ModelPlanProviderTests(unittest.TestCase):
         self.assertEqual([step.tool_name for step in plan.steps], ["cognitive_focus_update", "cognitive_knowledge_record"])
         self.assertEqual(plan.steps[0].source, "model:static")
 
+    def test_model_provider_can_handoff_to_cognitive_briefing_tool(self) -> None:
+        client = StaticModelClient(
+            '{"steps":[{"tool_name":"cognitive_briefing_prepare","tool_input":{"purpose":"current","horizon_hours":24,"include_state":false},"reason":"prepare current-work briefing from cognitive state"}]}'
+        )
+        provider = ModelPlanProvider(
+            client,
+            {"cognitive_briefing_prepare"},
+            tool_catalog={
+                "cognitive_briefing_prepare": {
+                    "description": "Prepare and store a model-led operational briefing from current focus, goals, tasks, memory, wakeups, recovery, skills, and persona.",
+                    "risk_level": "medium",
+                    "requires_approval": False,
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "purpose": {"type": "string"},
+                            "horizon_hours": {"type": "integer"},
+                            "include_state": {"type": "boolean"},
+                        },
+                    },
+                    "capability_group": "cognition",
+                }
+            },
+            fallback=ExplicitFallbackPlanProvider(),
+        )
+
+        plan = provider.plan("give me my current work briefing")
+
+        self.assertEqual(plan.steps[0].tool_name, "cognitive_briefing_prepare")
+        self.assertEqual(plan.steps[0].tool_input["horizon_hours"], 24)
+        self.assertEqual(plan.steps[0].source, "model:static")
+
     def test_model_provider_can_handoff_to_activity_tools(self) -> None:
         client = StaticModelClient(
             '{"steps":[{"tool_name":"activity_search","tool_input":{"query":"meeting notes","limit":5},"reason":"search native activity memory"}]}'

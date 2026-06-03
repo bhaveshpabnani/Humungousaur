@@ -355,6 +355,7 @@ class AgentOrchestrator:
             "consolidations": [asdict(record) for record in snapshot.consolidations[:5]],
             "wakeups": [asdict(record) for record in snapshot.wakeups[:5]],
             "recoveries": [asdict(record) for record in snapshot.recoveries[:5]],
+            "briefings": [asdict(record) for record in snapshot.briefings[:5]],
             "skills": [asdict(skill) for skill in snapshot.skills[:5]],
             "specialists": [asdict(specialist) for specialist in snapshot.specialists[:5]],
         }
