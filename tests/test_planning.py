@@ -287,6 +287,39 @@ class ModelPlanProviderTests(unittest.TestCase):
         self.assertEqual(plan.steps[0].tool_input["horizon_hours"], 24)
         self.assertEqual(plan.steps[0].source, "model:static")
 
+    def test_model_provider_can_handoff_to_cognitive_memory_curation_tool(self) -> None:
+        client = StaticModelClient(
+            '{"steps":[{"tool_name":"cognitive_memory_curate","tool_input":{"purpose":"memory_hygiene","max_archive":5,"max_summaries":2,"include_state":false},"reason":"curate stale or duplicate cognitive knowledge"}]}'
+        )
+        provider = ModelPlanProvider(
+            client,
+            {"cognitive_memory_curate"},
+            tool_catalog={
+                "cognitive_memory_curate": {
+                    "description": "Run a model-led memory hygiene pass over durable cognitive knowledge to retain, summarize, or archive exact records.",
+                    "risk_level": "medium",
+                    "requires_approval": False,
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "purpose": {"type": "string"},
+                            "max_archive": {"type": "integer"},
+                            "max_summaries": {"type": "integer"},
+                            "include_state": {"type": "boolean"},
+                        },
+                    },
+                    "capability_group": "cognition",
+                }
+            },
+            fallback=ExplicitFallbackPlanProvider(),
+        )
+
+        plan = provider.plan("clean up stale memory but preserve useful project facts")
+
+        self.assertEqual(plan.steps[0].tool_name, "cognitive_memory_curate")
+        self.assertEqual(plan.steps[0].tool_input["max_archive"], 5)
+        self.assertEqual(plan.steps[0].source, "model:static")
+
     def test_model_provider_can_handoff_to_activity_tools(self) -> None:
         client = StaticModelClient(
             '{"steps":[{"tool_name":"activity_search","tool_input":{"query":"meeting notes","limit":5},"reason":"search native activity memory"}]}'

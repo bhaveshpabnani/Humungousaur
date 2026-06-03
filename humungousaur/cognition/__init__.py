@@ -7,6 +7,7 @@ from .consolidation import (
     EvidenceConsolidationProvider,
     ModelConsolidationProvider,
 )
+from .curation import CurationEngine, CurationProvider, CurationStore, EvidenceCurationProvider, ModelCurationProvider
 from .event_bus import CognitiveEventBus
 from .focus import FocusStore
 from .goals import GoalStore
@@ -21,6 +22,8 @@ from .models import (
     BriefingStatus,
     ConsolidationRecord,
     ConsolidationStatus,
+    CurationRecord,
+    CurationStatus,
     FocusMode,
     FocusState,
     GoalRecord,
@@ -67,9 +70,15 @@ __all__ = [
     "ConsolidationRecord",
     "ConsolidationStatus",
     "ConsolidationStore",
+    "CurationEngine",
+    "CurationProvider",
+    "CurationRecord",
+    "CurationStatus",
+    "CurationStore",
     "FocusMode",
     "EvidenceBriefingProvider",
     "EvidenceConsolidationProvider",
+    "EvidenceCurationProvider",
     "ExplicitCognitiveDecisionProvider",
     "FocusState",
     "FocusStore",
@@ -86,6 +95,7 @@ __all__ = [
     "ModelCognitiveDecisionProvider",
     "ModelBriefingProvider",
     "ModelConsolidationProvider",
+    "ModelCurationProvider",
     "PersonaProfile",
     "PersonaStore",
     "EvidenceRecoveryProvider",

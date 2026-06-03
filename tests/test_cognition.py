@@ -11,8 +11,11 @@ from humungousaur.cognition import (
     ConsolidationStore,
     CognitiveEventBus,
     CognitiveRecorder,
+    CurationEngine,
+    CurationStore,
     EvidenceBriefingProvider,
     EvidenceConsolidationProvider,
+    EvidenceCurationProvider,
     EvidenceReflectionProvider,
     ExplicitCognitiveDecisionProvider,
     FocusStore,
@@ -25,6 +28,7 @@ from humungousaur.cognition import (
     ModelBriefingProvider,
     ModelCognitiveDecisionProvider,
     ModelConsolidationProvider,
+    ModelCurationProvider,
     ModelReflectionProvider,
     PersonaStore,
     RecoveryEngine,
@@ -43,6 +47,7 @@ from humungousaur.cognition.models import (
     AttentionAction,
     BriefingStatus,
     ConsolidationStatus,
+    CurationStatus,
     CognitiveEvent,
     CognitivePriority,
     CognitiveSnapshot,
@@ -68,11 +73,13 @@ from humungousaur.tools.cognition_tools import (
     CognitiveBriefingPrepareTool,
     CognitiveBriefingStatusTool,
     CognitiveConsolidationStatusTool,
+    CognitiveCurationStatusTool,
     CognitiveFocusUpdateTool,
     CognitiveGoalCreateTool,
     CognitiveKnowledgeForgetTool,
     CognitiveKnowledgeRecordTool,
     CognitiveLearningStatusTool,
+    CognitiveMemoryCurateTool,
     CognitivePersonaUpdateTool,
     CognitiveReflectionStatusTool,
     CognitiveRecoveryStatusTool,
@@ -433,6 +440,67 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertEqual(briefing.evidence_refs[0], f"goal:{goal.goal_id}")
             self.assertEqual(recent[0].briefing_id, briefing.briefing_id)
 
+    def test_model_curation_provider_archives_and_summarizes_exact_knowledge(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            db = Path(tmp_dir) / "cognition.sqlite3"
+            store = KnowledgeStore(db)
+            stale = store.append(
+                kind=KnowledgeKind.CONTEXT,
+                text="Temporary status: old duplicate dashboard note.",
+                source="test",
+                evidence_refs=["event:old"],
+                confidence=0.3,
+            )
+            useful = store.append(
+                kind=KnowledgeKind.PROCEDURE,
+                text="Use blockers-first status updates when reviewing projects.",
+                source="test",
+                evidence_refs=["event:useful"],
+                confidence=0.9,
+            )
+            snapshot = CognitiveSnapshot(knowledge=[stale, useful])
+            client = StaticModelClient(
+                json.dumps(
+                    {
+                        "status": "recorded",
+                        "summary": "Archived a stale duplicate and kept the durable status procedure.",
+                        "archive_knowledge": [{"knowledge_id": stale.knowledge_id, "reason": "Superseded temporary project status."}],
+                        "summarize_knowledge": [
+                            {
+                                "kind": "procedure",
+                                "text": "For project reviews, use blockers-first status updates.",
+                                "confidence": 0.88,
+                                "evidence_refs": [f"knowledge:{useful.knowledge_id}"],
+                            }
+                        ],
+                        "retain_knowledge_ids": [useful.knowledge_id],
+                        "evidence_refs": [f"knowledge:{stale.knowledge_id}", f"knowledge:{useful.knowledge_id}"],
+                        "confidence": 0.84,
+                    }
+                )
+            )
+            engine = CurationEngine(
+                CurationStore(db),
+                store,
+                provider=ModelCurationProvider(client, fallback=EvidenceCurationProvider()),
+            )
+
+            curation = engine.curate(snapshot=snapshot, purpose="test_cleanup", max_archive=3, max_summaries=2)
+            remaining = KnowledgeStore(db).list(limit=10)
+            archived = KnowledgeStore(db).get(stale.knowledge_id, include_archived=True)
+            created = KnowledgeStore(db).get(curation.created_knowledge_ids[0])
+
+            self.assertEqual(curation.status, CurationStatus.RECORDED)
+            self.assertEqual(curation.archived_knowledge_ids, [stale.knowledge_id])
+            self.assertEqual(curation.retained_knowledge_ids, [useful.knowledge_id])
+            self.assertIsNotNone(archived)
+            self.assertTrue(archived.archived_at)
+            self.assertIsNotNone(created)
+            self.assertEqual(created.source, "model_curation")
+            self.assertIn(f"knowledge:{useful.knowledge_id}", created.evidence_refs)
+            self.assertNotIn(stale.knowledge_id, [record.knowledge_id for record in remaining])
+            self.assertEqual(CurationStore(db).recent()[0].curation_id, curation.curation_id)
+
     def test_model_consolidation_provider_falls_back_without_inferred_memory(self) -> None:
         class FailingClient(StaticModelClient):
             def complete_json(self, prompt, schema):
@@ -600,6 +668,8 @@ class CognitiveStoreTests(unittest.TestCase):
             recovery = CognitiveRecoveryStatusTool().execute({"limit": 5}, config)
             briefing = CognitiveBriefingPrepareTool().execute({"purpose": "status", "include_state": True, "limit": 5}, config)
             briefing_status = CognitiveBriefingStatusTool().execute({"limit": 5}, config)
+            curation = CognitiveMemoryCurateTool().execute({"purpose": "cleanup", "include_state": True, "limit": 5}, config)
+            curation_status = CognitiveCurationStatusTool().execute({"limit": 5}, config)
             scheduled_wakeup = CognitiveWakeupScheduleTool().execute(
                 {
                     "delay_seconds": 60,
@@ -653,6 +723,8 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertEqual(recovery.status, ActionStatus.SUCCEEDED)
             self.assertEqual(briefing.status, ActionStatus.SUCCEEDED)
             self.assertEqual(briefing_status.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(curation.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(curation_status.status, ActionStatus.SUCCEEDED)
             self.assertEqual(scheduled_wakeup.status, ActionStatus.SUCCEEDED)
             self.assertEqual(wakeup_status.status, ActionStatus.SUCCEEDED)
             self.assertEqual(cancelled_wakeup.status, ActionStatus.SUCCEEDED)
@@ -665,8 +737,11 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertEqual(state.output["consolidations"], [])
             self.assertEqual(state.output["recoveries"], [])
             self.assertEqual(state.output["briefings"][0]["status"], BriefingStatus.SKIPPED)
+            self.assertEqual(state.output["curations"][0]["status"], CurationStatus.SKIPPED)
             self.assertEqual(briefing.output["briefing"]["status"], BriefingStatus.SKIPPED)
             self.assertEqual(briefing_status.output["briefings"][0]["briefing_id"], briefing.output["briefing"]["briefing_id"])
+            self.assertEqual(curation.output["curation"]["status"], CurationStatus.SKIPPED)
+            self.assertEqual(curation_status.output["curations"][0]["curation_id"], curation.output["curation"]["curation_id"])
             self.assertEqual(wakeup_status.output["wakeups"][0]["wakeup_id"], scheduled_wakeup.output["wakeup"]["wakeup_id"])
             self.assertEqual(state.output["wakeups"], [])
             self.assertEqual(state.output["knowledge"][0]["knowledge_id"], knowledge.output["knowledge"]["knowledge_id"])

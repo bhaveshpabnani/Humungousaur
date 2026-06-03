@@ -16,6 +16,7 @@ This prohibition covers:
 - specialist selection
 - response strategy
 - memory decisions
+- memory curation, forgetting, summarization, and retention decisions
 - experience consolidation
 - persona update decisions
 - future wakeup and timing decisions

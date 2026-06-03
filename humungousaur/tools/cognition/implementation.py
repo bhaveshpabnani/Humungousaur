@@ -8,12 +8,16 @@ from humungousaur.cognition import (
     BriefingStore,
     ConsolidationStore,
     CognitiveRecorder,
+    CurationEngine,
+    CurationStore,
     EvidenceBriefingProvider,
+    EvidenceCurationProvider,
     FocusStore,
     GoalStore,
     KnowledgeStore,
     LearningStore,
     ModelBriefingProvider,
+    ModelCurationProvider,
     PersonaStore,
     RecoveryStore,
     ReflectionStore,
@@ -49,6 +53,7 @@ class CognitiveStateTool(Tool):
         snapshot = CognitiveRecorder(config).snapshot()
         reflections = ReflectionStore(config.cognition_db_path).recent(limit=limit)
         consolidations = ConsolidationStore(config.cognition_db_path).recent(limit=limit)
+        curations = CurationStore(config.cognition_db_path).recent(limit=limit)
         wakeups = WakeupStore(config.cognition_db_path).scheduled(limit=limit)
         payload = {
             "active_goals": [asdict(goal) for goal in snapshot.active_goals[:limit]],
@@ -61,17 +66,19 @@ class CognitiveStateTool(Tool):
             "wakeups": [asdict(record) for record in snapshot.wakeups[:limit]],
             "recoveries": [asdict(record) for record in snapshot.recoveries[:limit]],
             "briefings": [asdict(record) for record in snapshot.briefings[:limit]],
+            "curations": [asdict(record) for record in snapshot.curations[:limit]],
             "skills": [asdict(skill) for skill in snapshot.skills[:limit]],
             "specialists": [asdict(specialist) for specialist in snapshot.specialists[:limit]],
             "recent_reflections": [asdict(reflection) for reflection in reflections],
             "recent_consolidations": [asdict(consolidation) for consolidation in consolidations],
+            "recent_curations": [asdict(curation) for curation in curations],
             "scheduled_wakeups": [asdict(wakeup) for wakeup in wakeups],
         }
         return ToolResult(
             self.name,
             ActionStatus.SUCCEEDED,
             self.risk_level,
-            f"Cognitive state: {len(payload['active_goals'])} active goals, {len(payload['active_tasks'])} active tasks, {len(payload['knowledge'])} knowledge records, {len(payload['skills'])} skills, {len(payload['specialists'])} specialists, {len(payload['consolidations'])} consolidations, {len(payload['wakeups'])} wakeups, {len(payload['recoveries'])} recoveries, {len(payload['briefings'])} briefings.",
+            f"Cognitive state: {len(payload['active_goals'])} active goals, {len(payload['active_tasks'])} active tasks, {len(payload['knowledge'])} knowledge records, {len(payload['skills'])} skills, {len(payload['specialists'])} specialists, {len(payload['consolidations'])} consolidations, {len(payload['wakeups'])} wakeups, {len(payload['recoveries'])} recoveries, {len(payload['briefings'])} briefings, {len(payload['curations'])} curations.",
             payload,
         )
 
@@ -147,6 +154,88 @@ class CognitiveBriefingStatusTool(Tool):
             self.risk_level,
             f"Found {len(briefings)} cognitive briefing record(s).",
             {"briefings": [asdict(record) for record in briefings]},
+        )
+
+
+class CognitiveMemoryCurateTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="cognitive_memory_curate",
+            description="Run a model-led memory hygiene pass over durable cognitive knowledge to retain, summarize, or archive exact records.",
+            risk_level=RiskLevel.MEDIUM,
+            input_schema=object_input_schema(
+                {
+                    "purpose": {"type": "string", "description": "Curation purpose such as memory_hygiene, weekly_cleanup, duplicate_review, or privacy_review."},
+                    "max_archive": {"type": "integer", "minimum": 0, "maximum": 20},
+                    "max_summaries": {"type": "integer", "minimum": 0, "maximum": 10},
+                    "include_state": {"type": "boolean", "description": "Attach the bounded raw cognitive state used for curation."},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                }
+            ),
+            capability_group="cognition",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        purpose = str(tool_input.get("purpose", "memory_hygiene")).strip() or "memory_hygiene"
+        max_archive = min(max(int(tool_input.get("max_archive") or 5), 0), 20)
+        max_summaries = min(max(int(tool_input.get("max_summaries") or 3), 0), 10)
+        limit = min(int(tool_input.get("limit") or 20), 50)
+        recorder = CognitiveRecorder(config)
+        snapshot = recorder.snapshot()
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would run cognitive memory curation.",
+                {
+                    "purpose": purpose,
+                    "max_archive": max_archive,
+                    "max_summaries": max_summaries,
+                    "state": _snapshot_payload(snapshot, limit=limit),
+                },
+            )
+        engine = CurationEngine(
+            CurationStore(config.cognition_db_path),
+            KnowledgeStore(config.cognition_db_path),
+            provider=_build_curation_provider(config),
+        )
+        curation = engine.curate(snapshot=snapshot, purpose=purpose, max_archive=max_archive, max_summaries=max_summaries)
+        payload: dict[str, Any] = {"curation": asdict(curation)}
+        if bool(tool_input.get("include_state", False)) or curation.status.value == "skipped":
+            payload["state"] = _snapshot_payload(snapshot, limit=limit)
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Cognitive memory curation {curation.status.value}: {curation.summary}",
+            payload,
+        )
+
+
+class CognitiveCurationStatusTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="cognitive_curation_status",
+            description="Inspect recent cognitive memory curation records.",
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema(
+                {
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                }
+            ),
+            capability_group="cognition",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        limit = min(int(tool_input.get("limit") or 10), 50)
+        curations = CurationStore(config.cognition_db_path).recent(limit=limit)
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Found {len(curations)} cognitive memory curation record(s).",
+            {"curations": [asdict(record) for record in curations]},
         )
 
 
@@ -844,6 +933,8 @@ def default_cognition_tools() -> dict[str, Tool]:
         CognitiveStateTool(),
         CognitiveBriefingPrepareTool(),
         CognitiveBriefingStatusTool(),
+        CognitiveMemoryCurateTool(),
+        CognitiveCurationStatusTool(),
         CognitiveGoalCreateTool(),
         CognitiveFocusUpdateTool(),
         CognitiveKnowledgeRecordTool(),
@@ -879,6 +970,13 @@ def _build_briefing_provider(config: AgentConfig) -> EvidenceBriefingProvider | 
     return ModelBriefingProvider(build_model_client(config), fallback=fallback)
 
 
+def _build_curation_provider(config: AgentConfig) -> EvidenceCurationProvider | ModelCurationProvider:
+    fallback = EvidenceCurationProvider()
+    if config.planner_provider != "model":
+        return fallback
+    return ModelCurationProvider(build_model_client(config), fallback=fallback)
+
+
 def _snapshot_payload(snapshot: Any, *, limit: int) -> dict[str, Any]:
     return {
         "active_goals": [asdict(goal) for goal in snapshot.active_goals[:limit]],
@@ -891,6 +989,7 @@ def _snapshot_payload(snapshot: Any, *, limit: int) -> dict[str, Any]:
         "wakeups": [asdict(record) for record in snapshot.wakeups[:limit]],
         "recoveries": [asdict(record) for record in snapshot.recoveries[:limit]],
         "briefings": [asdict(record) for record in snapshot.briefings[:limit]],
+        "curations": [asdict(record) for record in snapshot.curations[:limit]],
         "skills": [asdict(record) for record in snapshot.skills[:limit]],
         "specialists": [asdict(record) for record in snapshot.specialists[:limit]],
     }

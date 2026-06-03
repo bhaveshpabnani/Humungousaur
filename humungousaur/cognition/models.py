@@ -131,6 +131,12 @@ class BriefingStatus(StrEnum):
     FAILED = "failed"
 
 
+class CurationStatus(StrEnum):
+    RECORDED = "recorded"
+    SKIPPED = "skipped"
+    FAILED = "failed"
+
+
 @dataclass(slots=True)
 class CognitiveEvent:
     event_id: str
@@ -339,6 +345,20 @@ class BriefingRecord:
 
 
 @dataclass(slots=True)
+class CurationRecord:
+    curation_id: str
+    status: CurationStatus = CurationStatus.SKIPPED
+    purpose: str = ""
+    summary: str = ""
+    archived_knowledge_ids: list[str] = field(default_factory=list)
+    created_knowledge_ids: list[str] = field(default_factory=list)
+    retained_knowledge_ids: list[str] = field(default_factory=list)
+    evidence_refs: list[str] = field(default_factory=list)
+    confidence: float = 0.0
+    created_at: str = field(default_factory=utc_now)
+
+
+@dataclass(slots=True)
 class CognitiveSnapshot:
     active_goals: list[GoalRecord] = field(default_factory=list)
     active_tasks: list[TaskRecord] = field(default_factory=list)
@@ -350,6 +370,7 @@ class CognitiveSnapshot:
     wakeups: list[WakeupRecord] = field(default_factory=list)
     recoveries: list[RecoveryRecord] = field(default_factory=list)
     briefings: list[BriefingRecord] = field(default_factory=list)
+    curations: list[CurationRecord] = field(default_factory=list)
     skills: list[SkillRecord] = field(default_factory=list)
     specialists: list[SpecialistRecord] = field(default_factory=list)
 

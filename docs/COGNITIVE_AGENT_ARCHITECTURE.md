@@ -24,7 +24,7 @@ The system is not a chatbot wrapped around tools. It is a durable control loop a
 ```text
 event/wakeup -> perception -> attention -> cognitive decision -> goal/task update
       -> specialist/tool execution -> observation -> reflection
-      -> recovery/learning/consolidation -> briefing/response/schedule/sleep/continue
+      -> recovery/learning/consolidation/curation -> briefing/response/schedule/sleep/continue
 ```
 
 ## Layers
@@ -52,9 +52,10 @@ event/wakeup -> perception -> attention -> cognitive decision -> goal/task updat
 6. Memory system
    - Working memory: current task state.
    - Episodic memory: events, actions, outcomes.
-   - Semantic memory: stable facts and preferences.
-   - Procedural memory: learned workflows.
-   - Skill memory: reusable capability instructions and verification steps.
+- Semantic memory: stable facts and preferences.
+- Procedural memory: learned workflows.
+- Skill memory: reusable capability instructions and verification steps.
+- Curation memory: exact-ID retention, summarization, and forgetting decisions with audit evidence.
 
 7. Persona and user model
    - Stores assistant identity, tone, boundaries, and user preferences.
@@ -79,7 +80,11 @@ event/wakeup -> perception -> attention -> cognitive decision -> goal/task updat
     - Synthesizes current focus, active goals, blockers, next actions, future wakeups, learning, and persona into an actionable work view.
     - Uses model-led synthesis when configured and stores skipped raw-state briefings rather than inferring priorities without a model.
 
-13. Human interaction manager
+13. Memory curation
+    - Reviews durable knowledge for exact-ID retention, summarization, and archival.
+    - Uses model-led curation when configured and skips rather than guessing what should be forgotten.
+
+14. Human interaction manager
     - Chooses text, voice preparation, spoken response, notification, progress update, approval request, or silence.
     - Supports interruption, pause/resume, and long-running progress.
 
@@ -213,3 +218,16 @@ The eleventh implementation milestone adds cognitive briefing:
 - model-unavailable fallback records a skipped briefing and bounded raw state without semantic prioritization
 
 Briefing is the situational-awareness gate. The model decides priorities, blockers, next actions, and watch items from durable evidence. Deterministic code only gathers bounded state, validates the schema, persists the briefing record, and exposes raw state when no model is available.
+
+The twelfth implementation milestone adds memory curation:
+
+- durable curation records with recorded, skipped, and failed states
+- schema-driven curation provider using the same configured model clients as planning, attention, reflection, consolidation, recovery, and briefing
+- current knowledge, focus, active goals, tasks, learning, consolidations, recoveries, briefings, wakeups, and persona are passed as structured evidence
+- curation proposals can archive only exact active knowledge IDs that are present in the input
+- curation proposals can create summarized knowledge records with evidence references
+- public tools run a bounded memory hygiene pass and inspect curation history
+- planning context includes recent curations so future memory decisions can see what was kept, summarized, or forgotten
+- model-unavailable fallback records a skipped curation without semantic forgetting or summarization
+
+Curation is the forgetting gate. The model decides what durable knowledge is stale, duplicate, superseded, low-value, or worth compressing. Deterministic code only validates IDs, archives exact records, creates evidence-backed summaries, persists the curation record, and skips when model reasoning is unavailable.
