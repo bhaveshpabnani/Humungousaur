@@ -44,14 +44,18 @@ A dedicated `codex-cli` `SKILL.md` was not found in the checked Codex skill tree
 - `codex_skill_catalog`: list local `SKILL.md` references from workspace/user/env Codex homes and bundled app resources.
 - `codex_skill_read`: read a bounded local `SKILL.md` by exact `skill_id`.
 - `codex_skill_import`: import selected exact Codex skill refs into the cognitive skill store.
-- `codex_skill_sync`: read relevant Codex skill refs and write curated agent skill records for Browser, Chrome, Computer Use, Playwright, OpenAI docs, skill/plugin creation, GitHub, office artifacts, product design, Cloudflare agents, Chrome performance, and Hugging Face workflows.
+- `codex_skill_sync`: asks the configured model provider to review bounded Codex `SKILL.md` evidence and write generalized agent skill records using exact discovered `skill_id` values and valid platform tool names.
 
 ## Sync Profiles
 
-- `core_assistant`: Browser, Chrome, Computer Use, Playwright, OpenAI docs, skill creation/installing, plugin authoring, GitHub, Documents, Spreadsheets, Presentations, and Product Design.
-- `browser_computer`: Browser, Chrome, Computer Use, Playwright, and Chrome/Web Performance guidance.
-- `knowledge_work`: OpenAI docs, GitHub, Documents, Spreadsheets, Presentations, and Product Design.
-- `all_relevant`: all currently encoded Codex-derived agent skill templates.
+`profile` is context for the model, not a deterministic selector. Current accepted values are:
+
+- `core_assistant`
+- `browser_computer`
+- `knowledge_work`
+- `all_relevant`
+
+The sync tool can also receive literal catalog filters such as `source`, `query`, `max_skills`, and `max_candidate_skills` before model review. If the configured model provider is unavailable or returns invalid output, sync records a skipped result and does not fall back to hardcoded skill-name templates.
 
 ## Example Commands
 

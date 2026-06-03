@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from humungousaur.config import AgentConfig
+from humungousaur.planning.model_clients import ModelClientError, StaticModelClient
 from humungousaur.schemas import ActionStatus
 from humungousaur.tools.codex_tools import (
     CodexCliRunTool,
@@ -1036,13 +1037,61 @@ class ToolTests(unittest.TestCase):
                 encoding="utf-8",
             )
             config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts").normalized()
+            catalog = CodexSkillCatalogTool().execute({"query": "in-app", "source": "workspace"}, config)
+            skill_id = catalog.output["skills"][0]["skill_id"]
+            model_payload = json.dumps(
+                {
+                    "status": "recorded",
+                    "summary": "Browser skill should become reusable.",
+                    "skills": [
+                        {
+                            "source_skill_id": skill_id,
+                            "name": "Model-selected Browser workflow",
+                            "purpose": "Use Codex browser guidance as evidence for browser UI verification tasks.",
+                            "when_to_use": "Use when model reasoning determines a browser workflow is needed.",
+                            "tools": ["browser_live_open", "browser_live_observe", "not_a_real_tool"],
+                            "verification_steps": ["Read the source skill and observe page state before acting."],
+                            "failure_modes": ["Using stale browser observations."],
+                            "evidence_refs": ["model:test"],
+                            "confidence": 0.83,
+                        }
+                    ],
+                    "skipped_skill_ids": [],
+                    "evidence_refs": [f"codex_skill:{skill_id}"],
+                    "confidence": 0.83,
+                }
+            )
 
-            synced = CodexSkillSyncTool().execute({"profile": "browser_computer", "reason": "Bring browser skills into agent."}, config)
+            with patch("humungousaur.tools.codex.implementation.build_model_client", return_value=StaticModelClient(model_payload)):
+                synced = CodexSkillSyncTool().execute({"profile": "browser_computer", "reason": "Bring browser skills into agent."}, config)
 
             self.assertEqual(synced.status, ActionStatus.SUCCEEDED)
-            self.assertEqual(synced.output["synced_skills"][0]["name"], "Codex Browser workflow")
+            self.assertEqual(synced.output["synced_skills"][0]["name"], "Model-selected Browser workflow")
             self.assertIn("browser_live_open", synced.output["synced_skills"][0]["tools"])
-            self.assertIsInstance(synced.output["missing"], list)
+            self.assertIn("codex_skill_read", synced.output["synced_skills"][0]["tools"])
+            self.assertNotIn("not_a_real_tool", synced.output["synced_skills"][0]["tools"])
+            self.assertEqual(synced.output["proposal"]["skills"][0]["source_skill_id"], skill_id)
+
+    def test_codex_skill_sync_skips_without_model_instead_of_template_matching(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            skill_root = workspace / ".codex" / "skills" / "control-in-app-browser"
+            skill_root.mkdir(parents=True)
+            (skill_root / "SKILL.md").write_text(
+                "---\nname: control-in-app-browser\ndescription: Control the in-app Browser.\n---\n# Browser\n",
+                encoding="utf-8",
+            )
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts").normalized()
+
+            def fail_client(_config):
+                raise ModelClientError("offline")
+
+            with patch("humungousaur.tools.codex.implementation.build_model_client", side_effect=fail_client):
+                synced = CodexSkillSyncTool().execute({"profile": "browser_computer", "reason": "test unavailable model"}, config)
+
+            self.assertEqual(synced.status, ActionStatus.SKIPPED)
+            self.assertIn("no semantic fallback", synced.summary)
+            self.assertIn("does not guess", synced.output["safety_note"])
 
 
 if __name__ == "__main__":
