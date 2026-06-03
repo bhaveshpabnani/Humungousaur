@@ -166,6 +166,19 @@ class InteractionReviewStatus(StrEnum):
     FAILED = "failed"
 
 
+class CommitmentStatus(StrEnum):
+    OPEN = "open"
+    SATISFIED = "satisfied"
+    BLOCKED = "blocked"
+    DROPPED = "dropped"
+
+
+class CommitmentReviewStatus(StrEnum):
+    RECORDED = "recorded"
+    SKIPPED = "skipped"
+    FAILED = "failed"
+
+
 @dataclass(slots=True)
 class CognitiveEvent:
     event_id: str
@@ -457,6 +470,36 @@ class InteractionReviewRecord:
 
 
 @dataclass(slots=True)
+class CommitmentRecord:
+    commitment_id: str
+    title: str
+    owner: str = "assistant"
+    status: CommitmentStatus = CommitmentStatus.OPEN
+    source: str = ""
+    due_at: str = ""
+    evidence_refs: list[str] = field(default_factory=list)
+    confidence: float = 0.5
+    created_at: str = field(default_factory=utc_now)
+    updated_at: str = field(default_factory=utc_now)
+    resolved_at: str = ""
+
+
+@dataclass(slots=True)
+class CommitmentReviewRecord:
+    review_id: str
+    status: CommitmentReviewStatus = CommitmentReviewStatus.SKIPPED
+    purpose: str = ""
+    summary: str = ""
+    opened_commitment_ids: list[str] = field(default_factory=list)
+    updated_commitment_ids: list[str] = field(default_factory=list)
+    resolved_commitment_ids: list[str] = field(default_factory=list)
+    retained_commitment_ids: list[str] = field(default_factory=list)
+    evidence_refs: list[str] = field(default_factory=list)
+    confidence: float = 0.0
+    created_at: str = field(default_factory=utc_now)
+
+
+@dataclass(slots=True)
 class CognitiveSnapshot:
     active_goals: list[GoalRecord] = field(default_factory=list)
     active_tasks: list[TaskRecord] = field(default_factory=list)
@@ -473,6 +516,8 @@ class CognitiveSnapshot:
     persona_evolutions: list[PersonaEvolutionRecord] = field(default_factory=list)
     self_reviews: list[SelfReviewRecord] = field(default_factory=list)
     interaction_reviews: list[InteractionReviewRecord] = field(default_factory=list)
+    commitments: list[CommitmentRecord] = field(default_factory=list)
+    commitment_reviews: list[CommitmentReviewRecord] = field(default_factory=list)
     skills: list[SkillRecord] = field(default_factory=list)
     specialists: list[SpecialistRecord] = field(default_factory=list)
 

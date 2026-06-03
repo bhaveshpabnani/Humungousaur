@@ -9,6 +9,7 @@ from humungousaur.memory.event_store import EventStore
 from humungousaur.planning.model_factory import build_model_client
 from humungousaur.schemas import ActionStatus, AgentRunResult
 
+from .commitments import CommitmentReviewStore, CommitmentStore
 from .consolidation import ConsolidationStore
 from .briefing import BriefingStore
 from .controller import CognitiveController, ExplicitCognitiveDecisionProvider, ModelCognitiveDecisionProvider
@@ -59,6 +60,8 @@ class CognitiveRecorder:
         self.persona_evolutions = PersonaEvolutionStore(self.config.cognition_db_path)
         self.self_reviews = SelfReviewStore(self.config.cognition_db_path)
         self.interaction_reviews = InteractionReviewStore(self.config.cognition_db_path)
+        self.commitments = CommitmentStore(self.config.cognition_db_path)
+        self.commitment_reviews = CommitmentReviewStore(self.config.cognition_db_path)
         self.persona = PersonaStore(self.config.persona_path)
         self.skills = SkillStore(self.config.skill_library_path)
         self.specialists = SpecialistStore(self.config.specialist_registry_path)
@@ -82,6 +85,8 @@ class CognitiveRecorder:
             persona_evolutions=self.persona_evolutions.recent(limit=8),
             self_reviews=self.self_reviews.recent(limit=8),
             interaction_reviews=self.interaction_reviews.recent(limit=8),
+            commitments=self.commitments.list(limit=8),
+            commitment_reviews=self.commitment_reviews.recent(limit=8),
             skills=self.skills.list(limit=8),
             specialists=self.specialists.list(limit=8),
         )

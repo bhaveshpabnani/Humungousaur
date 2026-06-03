@@ -13,6 +13,7 @@ The assistant should behave like a daily collaborator:
 - forget or summarize stale noise
 - practice, improve, and retire reusable skills from evidence
 - keep future tasks and blocked work in view
+- track explicit promises, obligations, and follow-ups as durable commitments
 - monitor its own uncertainty, risks, and autonomy posture
 - prepare concise current-work briefings for handoffs, mornings, reviews, and interruptions
 - use specialist capabilities instead of one overloaded prompt
@@ -28,7 +29,7 @@ The system is not a chatbot wrapped around tools. It is a durable control loop a
 ```text
 event/wakeup -> perception -> attention -> cognitive decision -> goal/task update
       -> specialist/tool execution -> observation -> reflection
-      -> recovery/learning/consolidation/curation/skill-evolution/persona-evolution/self-review/interaction-review -> briefing/response/schedule/sleep/continue
+      -> recovery/learning/consolidation/curation/skill-evolution/persona-evolution/self-review/interaction-review/commitment-review -> briefing/response/schedule/sleep/continue
 ```
 
 ## Layers
@@ -64,6 +65,7 @@ event/wakeup -> perception -> attention -> cognitive decision -> goal/task updat
    - Persona evolution memory: assistant identity, communication style, boundaries, preferences, and stable facts updated from evidence.
    - Self-review memory: uncertainty, confidence, risks, open questions, autonomy posture, and recommended next actions.
    - Interaction-review memory: conversation state, collaboration posture, user-state hypotheses, unresolved commitments, response recommendations, and caution flags.
+   - Commitment memory: explicit promises, follow-ups, owed actions, owner, status, due note, evidence refs, and model-led review history.
 
 7. Persona and user model
    - Stores assistant identity, tone, boundaries, and user preferences.
@@ -108,13 +110,17 @@ event/wakeup -> perception -> attention -> cognitive decision -> goal/task updat
     - Reviews recent interaction evidence for collaboration posture, user-state hypotheses, unresolved commitments, response recommendations, and caution flags.
     - Uses model-led review when configured and skips rather than inferring user state, relationship context, or conversation posture without a model.
 
-18. Human interaction manager
+18. Commitment manager
+    - Tracks explicit user-visible promises, follow-ups, owed actions, owner, status, due note, and evidence.
+    - Uses model-led review to create, update, resolve, or retain commitments from evidence; deterministic explicit tools can update exact IDs only.
+
+19. Human interaction manager
     - Chooses text, voice preparation, spoken response, notification, progress update, approval request, or silence.
     - Supports interruption, pause/resume, and long-running progress.
 
 ## Implementation Principles
 
-- `docs/GLOBAL_AGENT_INSTRUCTIONS.md` is the strict global rule for intelligence: do not use pattern-based, regex-based, keyword-list-based, hardcoded-constant-based, deterministic natural-language handling, broad deterministic matching, or static routing tables for cognition, planning, routing, delegation, memory decisions, experience consolidation, skill evolution decisions, persona evolution decisions, metacognitive self-review, interaction review, relationship-state decisions, user-state hypotheses, conversation-state decisions, persona update decisions, future wakeup/timing decisions, task decomposition, response strategy, recovery strategy, or completion judgment.
+- `docs/GLOBAL_AGENT_INSTRUCTIONS.md` is the strict global rule for intelligence: do not use pattern-based, regex-based, keyword-list-based, hardcoded-constant-based, deterministic natural-language handling, broad deterministic matching, or static routing tables for cognition, planning, routing, delegation, memory decisions, experience consolidation, skill evolution decisions, persona evolution decisions, metacognitive self-review, interaction review, commitment extraction, commitment resolution, relationship-state decisions, user-state hypotheses, conversation-state decisions, persona update decisions, future wakeup/timing decisions, task decomposition, response strategy, recovery strategy, or completion judgment.
 - Model-led cognition chooses strategy from schemas, context, permissions, and goals.
 - Deterministic code enforces safety, persistence, validation, explicit fallback commands, and evidence boundaries only.
 - Every capability is a tool or specialist with a bounded contract.
@@ -307,3 +313,17 @@ The sixteenth implementation milestone adds interaction review:
 - model-unavailable fallback records a skipped interaction review without inferred user state, relationship judgment, or response posture
 
 Interaction review is the relationship-context gate. The model decides what interaction posture and response recommendations are justified by evidence. Deterministic code only validates schema output, bounds lists, persists audit records, and skips when model reasoning is unavailable.
+
+The seventeenth implementation milestone adds commitment tracking:
+
+- durable commitment records with open, satisfied, blocked, and dropped states
+- durable commitment-review records with recorded, skipped, and failed states
+- schema-driven commitment review provider using the same configured model clients as planning, attention, reflection, consolidation, recovery, briefing, curation, skill evolution, persona evolution, self-review, and interaction review
+- current focus, goals, tasks, persona, memory, learning, consolidations, curations, skill evolutions, persona evolutions, self-reviews, interaction reviews, existing commitments, previous commitment reviews, recoveries, briefings, wakeups, skills, and specialists are passed as structured evidence
+- commitment reviews can create new commitments only when evidence supports a specific owed action, promise, follow-up, check-in, or user-visible obligation
+- commitment reviews can update or resolve only exact existing commitment IDs that are present in the input
+- explicit tools record, update, inspect, and review commitments without broad natural-language inference
+- planning context includes open commitments and recent commitment reviews so future planning can honor outstanding promises
+- model-unavailable fallback records a skipped commitment review without inferred promises or follow-ups
+
+Commitment tracking is the promise ledger. The model decides which commitments are real, still open, satisfied, blocked, or dropped from evidence. Deterministic code only validates exact IDs, persists explicit structured updates, records audit history, and skips when model reasoning is unavailable.

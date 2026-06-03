@@ -6,11 +6,15 @@ from typing import Any
 from humungousaur.cognition import (
     BriefingEngine,
     BriefingStore,
+    CommitmentReviewEngine,
+    CommitmentReviewStore,
+    CommitmentStore,
     ConsolidationStore,
     CognitiveRecorder,
     CurationEngine,
     CurationStore,
     EvidenceBriefingProvider,
+    EvidenceCommitmentReviewProvider,
     EvidenceCurationProvider,
     EvidenceInteractionReviewProvider,
     EvidencePersonaEvolutionProvider,
@@ -23,6 +27,7 @@ from humungousaur.cognition import (
     KnowledgeStore,
     LearningStore,
     ModelBriefingProvider,
+    ModelCommitmentReviewProvider,
     ModelCurationProvider,
     ModelInteractionReviewProvider,
     ModelPersonaEvolutionProvider,
@@ -41,7 +46,7 @@ from humungousaur.cognition import (
     SpecialistStore,
     WakeupStore,
 )
-from humungousaur.cognition.models import CognitivePriority, FocusMode, KnowledgeKind, WakeupStatus
+from humungousaur.cognition.models import CognitivePriority, CommitmentStatus, FocusMode, KnowledgeKind, WakeupStatus
 from humungousaur.cognition.queue import RuntimeEventQueue
 from humungousaur.cognition.wakeups import scheduled_for_from_delay, try_normalize_scheduled_for
 from humungousaur.config import AgentConfig
@@ -74,6 +79,8 @@ class CognitiveStateTool(Tool):
         persona_evolutions = PersonaEvolutionStore(config.cognition_db_path).recent(limit=limit)
         self_reviews = SelfReviewStore(config.cognition_db_path).recent(limit=limit)
         interaction_reviews = InteractionReviewStore(config.cognition_db_path).recent(limit=limit)
+        commitments = CommitmentStore(config.cognition_db_path).list(limit=limit)
+        commitment_reviews = CommitmentReviewStore(config.cognition_db_path).recent(limit=limit)
         wakeups = WakeupStore(config.cognition_db_path).scheduled(limit=limit)
         payload = {
             "active_goals": [asdict(goal) for goal in snapshot.active_goals[:limit]],
@@ -91,6 +98,8 @@ class CognitiveStateTool(Tool):
             "persona_evolutions": [asdict(record) for record in snapshot.persona_evolutions[:limit]],
             "self_reviews": [asdict(record) for record in snapshot.self_reviews[:limit]],
             "interaction_reviews": [asdict(record) for record in snapshot.interaction_reviews[:limit]],
+            "commitments": [asdict(record) for record in snapshot.commitments[:limit]],
+            "commitment_reviews": [asdict(record) for record in snapshot.commitment_reviews[:limit]],
             "skills": [asdict(skill) for skill in snapshot.skills[:limit]],
             "specialists": [asdict(specialist) for specialist in snapshot.specialists[:limit]],
             "recent_reflections": [asdict(reflection) for reflection in reflections],
@@ -100,13 +109,15 @@ class CognitiveStateTool(Tool):
             "recent_persona_evolutions": [asdict(record) for record in persona_evolutions],
             "recent_self_reviews": [asdict(record) for record in self_reviews],
             "recent_interaction_reviews": [asdict(record) for record in interaction_reviews],
+            "recent_commitments": [asdict(record) for record in commitments],
+            "recent_commitment_reviews": [asdict(record) for record in commitment_reviews],
             "scheduled_wakeups": [asdict(wakeup) for wakeup in wakeups],
         }
         return ToolResult(
             self.name,
             ActionStatus.SUCCEEDED,
             self.risk_level,
-            f"Cognitive state: {len(payload['active_goals'])} active goals, {len(payload['active_tasks'])} active tasks, {len(payload['knowledge'])} knowledge records, {len(payload['skills'])} skills, {len(payload['specialists'])} specialists, {len(payload['consolidations'])} consolidations, {len(payload['wakeups'])} wakeups, {len(payload['recoveries'])} recoveries, {len(payload['briefings'])} briefings, {len(payload['curations'])} curations, {len(payload['skill_evolutions'])} skill evolutions, {len(payload['persona_evolutions'])} persona evolutions, {len(payload['self_reviews'])} self-reviews, {len(payload['interaction_reviews'])} interaction reviews.",
+            f"Cognitive state: {len(payload['active_goals'])} active goals, {len(payload['active_tasks'])} active tasks, {len(payload['knowledge'])} knowledge records, {len(payload['skills'])} skills, {len(payload['specialists'])} specialists, {len(payload['consolidations'])} consolidations, {len(payload['wakeups'])} wakeups, {len(payload['recoveries'])} recoveries, {len(payload['briefings'])} briefings, {len(payload['curations'])} curations, {len(payload['skill_evolutions'])} skill evolutions, {len(payload['persona_evolutions'])} persona evolutions, {len(payload['self_reviews'])} self-reviews, {len(payload['interaction_reviews'])} interaction reviews, {len(payload['commitments'])} commitments, {len(payload['commitment_reviews'])} commitment reviews.",
             payload,
         )
 
@@ -1029,6 +1040,224 @@ class CognitiveInteractionReviewStatusTool(Tool):
         )
 
 
+class CognitiveCommitmentRecordTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="cognitive_commitment_record",
+            description="Record an explicit user-visible commitment or follow-up from structured evidence without inferring broad natural-language intent.",
+            risk_level=RiskLevel.MEDIUM,
+            input_schema=object_input_schema(
+                {
+                    "title": {"type": "string", "description": "Specific owed action, promise, or follow-up."},
+                    "owner": {"type": "string", "description": "Responsible owner, such as assistant, user, or a named specialist."},
+                    "source": {"type": "string", "description": "Source of this commitment record."},
+                    "due_at": {"type": "string", "description": "Optional due timestamp or user-visible timing note."},
+                    "evidence_refs": {"type": "array", "items": {"type": "string"}, "maxItems": 30},
+                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                },
+                required=["title"],
+            ),
+            capability_group="cognition",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        title = str(tool_input.get("title", "")).strip()
+        if not title:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Commitment title is empty.")
+        evidence_refs = [str(item).strip() for item in tool_input.get("evidence_refs", []) if str(item).strip()]
+        confidence = max(0.0, min(float(tool_input.get("confidence", 0.5) or 0.5), 1.0))
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would record cognitive commitment.",
+                {
+                    "title": title,
+                    "owner": str(tool_input.get("owner", "assistant")).strip() or "assistant",
+                    "source": str(tool_input.get("source", "")).strip(),
+                    "due_at": str(tool_input.get("due_at", "")).strip(),
+                    "evidence_refs": evidence_refs,
+                    "confidence": confidence,
+                },
+            )
+        commitment = CommitmentStore(config.cognition_db_path).create(
+            title=title,
+            owner=str(tool_input.get("owner", "assistant")).strip() or "assistant",
+            source=str(tool_input.get("source", "")).strip(),
+            due_at=str(tool_input.get("due_at", "")).strip(),
+            evidence_refs=evidence_refs,
+            confidence=confidence,
+        )
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Recorded cognitive commitment {commitment.commitment_id}.",
+            {"commitment": asdict(commitment)},
+        )
+
+
+class CognitiveCommitmentUpdateTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="cognitive_commitment_update",
+            description="Update one exact cognitive commitment by ID, including status, title, due note, evidence references, or confidence.",
+            risk_level=RiskLevel.MEDIUM,
+            input_schema=object_input_schema(
+                {
+                    "commitment_id": {"type": "string"},
+                    "title": {"type": "string"},
+                    "status": {"type": "string", "enum": [status.value for status in CommitmentStatus]},
+                    "due_at": {"type": "string"},
+                    "evidence_refs": {"type": "array", "items": {"type": "string"}, "maxItems": 30},
+                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                },
+                required=["commitment_id"],
+            ),
+            capability_group="cognition",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        commitment_id = str(tool_input.get("commitment_id", "")).strip()
+        if not commitment_id:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Commitment ID is empty.")
+        status = None
+        if "status" in tool_input and str(tool_input.get("status", "")).strip():
+            try:
+                status = CommitmentStatus(str(tool_input.get("status")).strip())
+            except ValueError:
+                return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Commitment status is invalid.")
+        evidence_refs = [str(item).strip() for item in tool_input.get("evidence_refs", []) if str(item).strip()]
+        confidence = None
+        if "confidence" in tool_input:
+            confidence = max(0.0, min(float(tool_input.get("confidence", 0.5) or 0.5), 1.0))
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would update cognitive commitment.",
+                dict(tool_input),
+            )
+        title = str(tool_input.get("title", "")).strip() if "title" in tool_input else None
+        due_at = str(tool_input.get("due_at", "")).strip() if "due_at" in tool_input else None
+        commitment = CommitmentStore(config.cognition_db_path).update(
+            commitment_id,
+            title=title,
+            status=status,
+            due_at=due_at,
+            evidence_refs=evidence_refs,
+            confidence=confidence,
+        )
+        if commitment is None:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, f"Commitment {commitment_id} was not found.")
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Updated cognitive commitment {commitment.commitment_id}.",
+            {"commitment": asdict(commitment)},
+        )
+
+
+class CognitiveCommitmentReviewTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="cognitive_commitment_review",
+            description="Run a model-led review of durable evidence to create, update, resolve, or retain exact user-visible commitments and follow-ups.",
+            risk_level=RiskLevel.MEDIUM,
+            input_schema=object_input_schema(
+                {
+                    "purpose": {"type": "string", "description": "Commitment review purpose such as commitment_review, handoff, follow_up_review, or before_response."},
+                    "max_new_commitments": {"type": "integer", "minimum": 0, "maximum": 20},
+                    "max_updates": {"type": "integer", "minimum": 0, "maximum": 40},
+                    "include_state": {"type": "boolean", "description": "Attach the bounded raw cognitive state used for the review."},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                }
+            ),
+            capability_group="cognition",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        purpose = str(tool_input.get("purpose", "commitment_review")).strip() or "commitment_review"
+        max_new = min(max(int(tool_input.get("max_new_commitments") or 5), 0), 20)
+        max_updates = min(max(int(tool_input.get("max_updates") or 10), 0), 40)
+        limit = min(int(tool_input.get("limit") or 20), 50)
+        recorder = CognitiveRecorder(config)
+        snapshot = recorder.snapshot()
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would run cognitive commitment review.",
+                {
+                    "purpose": purpose,
+                    "max_new_commitments": max_new,
+                    "max_updates": max_updates,
+                    "state": _snapshot_payload(snapshot, limit=limit),
+                },
+            )
+        store = CommitmentStore(config.cognition_db_path)
+        engine = CommitmentReviewEngine(
+            CommitmentReviewStore(config.cognition_db_path),
+            store,
+            provider=_build_commitment_review_provider(config),
+        )
+        review = engine.review(
+            snapshot=snapshot,
+            purpose=purpose,
+            max_new_commitments=max_new,
+            max_updates=max_updates,
+        )
+        payload: dict[str, Any] = {
+            "commitment_review": asdict(review),
+            "commitments": [asdict(record) for record in store.list(limit=limit, include_closed=True)],
+        }
+        if bool(tool_input.get("include_state", False)) or review.status.value == "skipped":
+            payload["state"] = _snapshot_payload(snapshot, limit=limit)
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Cognitive commitment review {review.status.value}: {review.summary}",
+            payload,
+        )
+
+
+class CognitiveCommitmentStatusTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="cognitive_commitment_status",
+            description="Inspect open or historical commitments and recent commitment review records.",
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema(
+                {
+                    "include_closed": {"type": "boolean"},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                }
+            ),
+            capability_group="cognition",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        limit = min(int(tool_input.get("limit") or 10), 50)
+        include_closed = bool(tool_input.get("include_closed", False))
+        commitments = CommitmentStore(config.cognition_db_path).list(limit=limit, include_closed=include_closed)
+        reviews = CommitmentReviewStore(config.cognition_db_path).recent(limit=limit)
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Found {len(commitments)} cognitive commitment record(s) and {len(reviews)} review record(s).",
+            {
+                "commitments": [asdict(record) for record in commitments],
+                "commitment_reviews": [asdict(record) for record in reviews],
+            },
+        )
+
+
 class CognitiveReflectionStatusTool(Tool):
     def __init__(self) -> None:
         super().__init__(
@@ -1283,6 +1512,10 @@ def default_cognition_tools() -> dict[str, Tool]:
         CognitiveSelfReviewStatusTool(),
         CognitiveInteractionReviewTool(),
         CognitiveInteractionReviewStatusTool(),
+        CognitiveCommitmentRecordTool(),
+        CognitiveCommitmentUpdateTool(),
+        CognitiveCommitmentReviewTool(),
+        CognitiveCommitmentStatusTool(),
         CognitiveReflectionStatusTool(),
         AutonomousEventSubmitTool(),
         AutonomousQueueStatusTool(),
@@ -1340,6 +1573,13 @@ def _build_interaction_review_provider(config: AgentConfig) -> EvidenceInteracti
     return ModelInteractionReviewProvider(build_model_client(config), fallback=fallback)
 
 
+def _build_commitment_review_provider(config: AgentConfig) -> EvidenceCommitmentReviewProvider | ModelCommitmentReviewProvider:
+    fallback = EvidenceCommitmentReviewProvider()
+    if config.planner_provider != "model":
+        return fallback
+    return ModelCommitmentReviewProvider(build_model_client(config), fallback=fallback)
+
+
 def _snapshot_payload(snapshot: Any, *, limit: int) -> dict[str, Any]:
     return {
         "active_goals": [asdict(goal) for goal in snapshot.active_goals[:limit]],
@@ -1357,6 +1597,8 @@ def _snapshot_payload(snapshot: Any, *, limit: int) -> dict[str, Any]:
         "persona_evolutions": [asdict(record) for record in snapshot.persona_evolutions[:limit]],
         "self_reviews": [asdict(record) for record in snapshot.self_reviews[:limit]],
         "interaction_reviews": [asdict(record) for record in snapshot.interaction_reviews[:limit]],
+        "commitments": [asdict(record) for record in snapshot.commitments[:limit]],
+        "commitment_reviews": [asdict(record) for record in snapshot.commitment_reviews[:limit]],
         "skills": [asdict(record) for record in snapshot.skills[:limit]],
         "specialists": [asdict(record) for record in snapshot.specialists[:limit]],
     }

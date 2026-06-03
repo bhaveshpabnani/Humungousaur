@@ -7,6 +7,9 @@ from pathlib import Path
 from humungousaur.cognition import (
     BriefingEngine,
     BriefingStore,
+    CommitmentReviewEngine,
+    CommitmentReviewStore,
+    CommitmentStore,
     ConsolidationEngine,
     ConsolidationStore,
     CognitiveEventBus,
@@ -14,6 +17,7 @@ from humungousaur.cognition import (
     CurationEngine,
     CurationStore,
     EvidenceBriefingProvider,
+    EvidenceCommitmentReviewProvider,
     EvidenceConsolidationProvider,
     EvidenceCurationProvider,
     EvidenceInteractionReviewProvider,
@@ -29,6 +33,7 @@ from humungousaur.cognition import (
     autonomous_loop_result_to_dict,
     autonomous_status,
     ModelBriefingProvider,
+    ModelCommitmentReviewProvider,
     ModelCognitiveDecisionProvider,
     ModelConsolidationProvider,
     ModelCurationProvider,
@@ -62,6 +67,8 @@ from humungousaur.cognition.autonomous import AutonomousRuntime
 from humungousaur.cognition.models import (
     AttentionAction,
     BriefingStatus,
+    CommitmentReviewStatus,
+    CommitmentStatus,
     ConsolidationStatus,
     CurationStatus,
     CognitiveEvent,
@@ -93,6 +100,10 @@ from humungousaur.tools.cognition_tools import (
     AutonomousTaskGraphCreateTool,
     CognitiveBriefingPrepareTool,
     CognitiveBriefingStatusTool,
+    CognitiveCommitmentRecordTool,
+    CognitiveCommitmentReviewTool,
+    CognitiveCommitmentStatusTool,
+    CognitiveCommitmentUpdateTool,
     CognitiveConsolidationStatusTool,
     CognitiveCurationStatusTool,
     CognitiveFocusUpdateTool,
@@ -781,6 +792,78 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertIn("Avoid inferring emotions", review.caution_flags[0])
             self.assertEqual(InteractionReviewStore(db).recent()[0].review_id, review.review_id)
 
+    def test_model_commitment_review_provider_tracks_exact_commitments(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            db = Path(tmp_dir) / "cognition.sqlite3"
+            goals = GoalStore(db)
+            goal = goals.create_goal("Ship commitment tracking", ["Commitment ledger is durable."])
+            task = goals.add_task(goal.goal_id, "Verify commitment ledger", metadata={"success_criteria": ["A commitment can be resolved by exact ID."]})
+            commitment_store = CommitmentStore(db)
+            existing = commitment_store.create(
+                title="Report status after running focused tests.",
+                source="test",
+                evidence_refs=[f"task:{task.task_id}"],
+                confidence=0.8,
+            )
+            learning = LearningStore(db).append(
+                goal_id=goal.goal_id,
+                task_id=task.task_id,
+                outcome="verified",
+                lesson="Focused tests passed, so the status-report commitment can be satisfied.",
+                evidence_refs=[f"commitment:{existing.commitment_id}"],
+            )
+            snapshot = CognitiveSnapshot(active_goals=[goal], active_tasks=[task], learning=[learning], commitments=[existing])
+            client = StaticModelClient(
+                json.dumps(
+                    {
+                        "status": "recorded",
+                        "summary": "Resolve the tested status report and add a follow-up for the full suite.",
+                        "new_commitments": [
+                            {
+                                "title": "Report final full-suite verification status.",
+                                "owner": "assistant",
+                                "source": "commitment_review",
+                                "due_at": "",
+                                "evidence_refs": [f"goal:{goal.goal_id}", f"learning:{learning.learning_id}"],
+                                "confidence": 0.72,
+                            }
+                        ],
+                        "updates": [
+                            {
+                                "commitment_id": existing.commitment_id,
+                                "title": "Report status after running focused tests.",
+                                "status": "satisfied",
+                                "due_at": "",
+                                "evidence_refs": [f"learning:{learning.learning_id}"],
+                                "confidence": 0.9,
+                            }
+                        ],
+                        "resolved_commitment_ids": [],
+                        "retained_commitment_ids": [],
+                        "evidence_refs": [f"goal:{goal.goal_id}", f"task:{task.task_id}", f"learning:{learning.learning_id}"],
+                        "confidence": 0.81,
+                    }
+                )
+            )
+            engine = CommitmentReviewEngine(
+                CommitmentReviewStore(db),
+                commitment_store,
+                provider=ModelCommitmentReviewProvider(client, fallback=EvidenceCommitmentReviewProvider()),
+            )
+
+            review = engine.review(snapshot=snapshot, purpose="follow_up_review")
+            resolved = commitment_store.get(existing.commitment_id, include_closed=True)
+            commitments = commitment_store.list(limit=10, include_closed=True)
+
+            self.assertEqual(review.status, CommitmentReviewStatus.RECORDED)
+            self.assertEqual(len(review.opened_commitment_ids), 1)
+            self.assertEqual(review.resolved_commitment_ids, [existing.commitment_id])
+            self.assertIsNotNone(resolved)
+            self.assertEqual(resolved.status, CommitmentStatus.SATISFIED)
+            self.assertTrue(resolved.resolved_at)
+            self.assertTrue(any(item.title == "Report final full-suite verification status." for item in commitments))
+            self.assertEqual(CommitmentReviewStore(db).recent()[0].review_id, review.review_id)
+
     def test_model_consolidation_provider_falls_back_without_inferred_memory(self) -> None:
         class FailingClient(StaticModelClient):
             def complete_json(self, prompt, schema):
@@ -953,6 +1036,29 @@ class CognitiveStoreTests(unittest.TestCase):
                 config,
             )
             interaction_review_status = CognitiveInteractionReviewStatusTool().execute({"limit": 5}, config)
+            commitment = CognitiveCommitmentRecordTool().execute(
+                {
+                    "title": "Follow up with status after verification.",
+                    "source": "test",
+                    "evidence_refs": [f"goal:{goal.output['goal']['goal_id']}"],
+                    "confidence": 0.8,
+                },
+                config,
+            )
+            commitment_update = CognitiveCommitmentUpdateTool().execute(
+                {
+                    "commitment_id": commitment.output["commitment"]["commitment_id"],
+                    "status": "blocked",
+                    "evidence_refs": ["test:blocker"],
+                    "confidence": 0.6,
+                },
+                config,
+            )
+            commitment_review = CognitiveCommitmentReviewTool().execute(
+                {"purpose": "follow_up_review", "include_state": True, "limit": 5},
+                config,
+            )
+            commitment_status = CognitiveCommitmentStatusTool().execute({"include_closed": True, "limit": 5}, config)
             learning_record = LearningStore(config.cognition_db_path).append(
                 goal_id=goal.output["goal"]["goal_id"],
                 outcome="observed",
@@ -1024,6 +1130,10 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertEqual(self_review_status.status, ActionStatus.SUCCEEDED)
             self.assertEqual(interaction_review.status, ActionStatus.SUCCEEDED)
             self.assertEqual(interaction_review_status.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(commitment.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(commitment_update.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(commitment_review.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(commitment_status.status, ActionStatus.SUCCEEDED)
             self.assertEqual(learning.status, ActionStatus.SUCCEEDED)
             self.assertEqual(consolidation.status, ActionStatus.SUCCEEDED)
             self.assertEqual(recovery.status, ActionStatus.SUCCEEDED)
@@ -1050,6 +1160,8 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertEqual(state.output["persona_evolutions"][0]["status"], PersonaEvolutionStatus.SKIPPED)
             self.assertEqual(state.output["self_reviews"][0]["status"], SelfReviewStatus.SKIPPED)
             self.assertEqual(state.output["interaction_reviews"][0]["status"], InteractionReviewStatus.SKIPPED)
+            self.assertEqual(state.output["commitments"][0]["status"], CommitmentStatus.BLOCKED)
+            self.assertEqual(state.output["commitment_reviews"][0]["status"], CommitmentReviewStatus.SKIPPED)
             self.assertEqual(briefing.output["briefing"]["status"], BriefingStatus.SKIPPED)
             self.assertEqual(briefing_status.output["briefings"][0]["briefing_id"], briefing.output["briefing"]["briefing_id"])
             self.assertEqual(curation.output["curation"]["status"], CurationStatus.SKIPPED)
@@ -1074,6 +1186,12 @@ class CognitiveStoreTests(unittest.TestCase):
                 interaction_review_status.output["interaction_reviews"][0]["review_id"],
                 interaction_review.output["interaction_review"]["review_id"],
             )
+            self.assertEqual(commitment_review.output["commitment_review"]["status"], CommitmentReviewStatus.SKIPPED)
+            self.assertEqual(
+                commitment_status.output["commitment_reviews"][0]["review_id"],
+                commitment_review.output["commitment_review"]["review_id"],
+            )
+            self.assertEqual(commitment_status.output["commitments"][0]["commitment_id"], commitment.output["commitment"]["commitment_id"])
             self.assertEqual(wakeup_status.output["wakeups"][0]["wakeup_id"], scheduled_wakeup.output["wakeup"]["wakeup_id"])
             self.assertEqual(state.output["wakeups"], [])
             self.assertEqual(state.output["knowledge"][0]["knowledge_id"], knowledge.output["knowledge"]["knowledge_id"])
