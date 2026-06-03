@@ -9,6 +9,7 @@ The assistant should behave like a daily collaborator:
 - know the current focus and active goals
 - remember useful preferences, facts, workflows, and outcomes
 - forget or summarize stale noise
+- practice, improve, and retire reusable skills from evidence
 - keep future tasks and blocked work in view
 - prepare concise current-work briefings for handoffs, mornings, reviews, and interruptions
 - use specialist capabilities instead of one overloaded prompt
@@ -24,7 +25,7 @@ The system is not a chatbot wrapped around tools. It is a durable control loop a
 ```text
 event/wakeup -> perception -> attention -> cognitive decision -> goal/task update
       -> specialist/tool execution -> observation -> reflection
-      -> recovery/learning/consolidation/curation -> briefing/response/schedule/sleep/continue
+      -> recovery/learning/consolidation/curation/skill-evolution -> briefing/response/schedule/sleep/continue
 ```
 
 ## Layers
@@ -53,9 +54,10 @@ event/wakeup -> perception -> attention -> cognitive decision -> goal/task updat
    - Working memory: current task state.
    - Episodic memory: events, actions, outcomes.
 - Semantic memory: stable facts and preferences.
-- Procedural memory: learned workflows.
-- Skill memory: reusable capability instructions and verification steps.
-- Curation memory: exact-ID retention, summarization, and forgetting decisions with audit evidence.
+   - Procedural memory: learned workflows.
+   - Skill memory: reusable capability instructions and verification steps.
+   - Curation memory: exact-ID retention, summarization, and forgetting decisions with audit evidence.
+   - Skill evolution memory: exact-ID skill improvement, retention, creation, and retirement decisions.
 
 7. Persona and user model
    - Stores assistant identity, tone, boundaries, and user preferences.
@@ -84,13 +86,17 @@ event/wakeup -> perception -> attention -> cognitive decision -> goal/task updat
     - Reviews durable knowledge for exact-ID retention, summarization, and archival.
     - Uses model-led curation when configured and skips rather than guessing what should be forgotten.
 
-14. Human interaction manager
+14. Skill evolution
+    - Reviews reusable skills for exact-ID improvement, retention, creation, and retirement.
+    - Uses model-led evidence review when configured and skips rather than rewriting skills without a model.
+
+15. Human interaction manager
     - Chooses text, voice preparation, spoken response, notification, progress update, approval request, or silence.
     - Supports interruption, pause/resume, and long-running progress.
 
 ## Implementation Principles
 
-- `docs/GLOBAL_AGENT_INSTRUCTIONS.md` is the strict global rule for intelligence: do not use pattern-based, regex-based, keyword-list-based, hardcoded-constant-based, deterministic natural-language handling, broad deterministic matching, or static routing tables for cognition, planning, routing, delegation, memory decisions, experience consolidation, persona update decisions, future wakeup/timing decisions, task decomposition, response strategy, recovery strategy, or completion judgment.
+- `docs/GLOBAL_AGENT_INSTRUCTIONS.md` is the strict global rule for intelligence: do not use pattern-based, regex-based, keyword-list-based, hardcoded-constant-based, deterministic natural-language handling, broad deterministic matching, or static routing tables for cognition, planning, routing, delegation, memory decisions, experience consolidation, skill evolution decisions, persona update decisions, future wakeup/timing decisions, task decomposition, response strategy, recovery strategy, or completion judgment.
 - Model-led cognition chooses strategy from schemas, context, permissions, and goals.
 - Deterministic code enforces safety, persistence, validation, explicit fallback commands, and evidence boundaries only.
 - Every capability is a tool or specialist with a bounded contract.
@@ -231,3 +237,17 @@ The twelfth implementation milestone adds memory curation:
 - model-unavailable fallback records a skipped curation without semantic forgetting or summarization
 
 Curation is the forgetting gate. The model decides what durable knowledge is stale, duplicate, superseded, low-value, or worth compressing. Deterministic code only validates IDs, archives exact records, creates evidence-backed summaries, persists the curation record, and skips when model reasoning is unavailable.
+
+The thirteenth implementation milestone adds skill evolution:
+
+- durable skill evolution records with recorded, skipped, and failed states
+- reusable skills have active/retired lifecycle state, evidence references, retirement reasons, and exact-ID update operations
+- schema-driven skill evolution provider using the same configured model clients as planning, attention, reflection, consolidation, recovery, briefing, and curation
+- current skills, focus, active goals, tasks, learning, consolidations, curations, recoveries, briefings, knowledge, specialists, and persona are passed as structured evidence
+- evolution proposals can update or retire only exact active skill IDs that are present in the input
+- evolution proposals can create new skills only when evidence shows a reusable workflow gap
+- public tools run a bounded skill review pass and inspect skill evolution history
+- planning context includes recent skill evolution records so future tool and skill choices can see what was improved, retained, created, or retired
+- model-unavailable fallback records a skipped skill review without semantic skill updates
+
+Skill evolution is the practice gate. The model decides when reusable workflows should improve, merge, retire, or become new skills. Deterministic code only validates exact IDs, applies bounded store updates, preserves retired skill history, persists audit records, and skips when model reasoning is unavailable.

@@ -6,7 +6,7 @@ These instructions apply to Humungousaur's cognitive, planning, routing, delegat
 
 Do not implement assistant intelligence anywhere through pattern-based, regex-based, keyword-list-based, hardcoded-constant-based, broad deterministic matching, deterministic natural-language handling, or static routing tables.
 
-This is a strict global constraint for every cognitive and agentic layer. No code path may decide user meaning, tool intent, task type, response mode, specialist delegation, completion status, memory importance, wakeup timing, skill choice, or recovery strategy by matching strings, regexes, fixed constants, command templates, keyword buckets, or brittle handcrafted cases.
+This is a strict global constraint for every cognitive and agentic layer. No code path may decide user meaning, tool intent, task type, response mode, specialist delegation, completion status, memory importance, wakeup timing, skill choice, skill evolution, or recovery strategy by matching strings, regexes, fixed constants, command templates, keyword buckets, or brittle handcrafted cases.
 
 This prohibition covers:
 
@@ -21,6 +21,7 @@ This prohibition covers:
 - persona update decisions
 - future wakeup and timing decisions
 - skill selection
+- skill evolution, improvement, retention, creation, and retirement decisions
 - autonomous continuation decisions
 - complex-task completion judgment
 - adaptive recovery decisions

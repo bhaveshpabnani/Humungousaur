@@ -137,6 +137,17 @@ class CurationStatus(StrEnum):
     FAILED = "failed"
 
 
+class SkillLifecycleStatus(StrEnum):
+    ACTIVE = "active"
+    RETIRED = "retired"
+
+
+class SkillEvolutionStatus(StrEnum):
+    RECORDED = "recorded"
+    SKIPPED = "skipped"
+    FAILED = "failed"
+
+
 @dataclass(slots=True)
 class CognitiveEvent:
     event_id: str
@@ -208,8 +219,12 @@ class SkillRecord:
     tools: list[str] = field(default_factory=list)
     verification_steps: list[str] = field(default_factory=list)
     failure_modes: list[str] = field(default_factory=list)
+    evidence_refs: list[str] = field(default_factory=list)
     usage_count: int = 0
     confidence: float = 0.5
+    status: SkillLifecycleStatus = SkillLifecycleStatus.ACTIVE
+    retired_at: str = ""
+    retirement_reason: str = ""
     last_used_at: str = ""
     updated_at: str = field(default_factory=utc_now)
 
@@ -359,6 +374,21 @@ class CurationRecord:
 
 
 @dataclass(slots=True)
+class SkillEvolutionRecord:
+    evolution_id: str
+    status: SkillEvolutionStatus = SkillEvolutionStatus.SKIPPED
+    purpose: str = ""
+    summary: str = ""
+    updated_skill_ids: list[str] = field(default_factory=list)
+    retired_skill_ids: list[str] = field(default_factory=list)
+    created_skill_ids: list[str] = field(default_factory=list)
+    retained_skill_ids: list[str] = field(default_factory=list)
+    evidence_refs: list[str] = field(default_factory=list)
+    confidence: float = 0.0
+    created_at: str = field(default_factory=utc_now)
+
+
+@dataclass(slots=True)
 class CognitiveSnapshot:
     active_goals: list[GoalRecord] = field(default_factory=list)
     active_tasks: list[TaskRecord] = field(default_factory=list)
@@ -371,6 +401,7 @@ class CognitiveSnapshot:
     recoveries: list[RecoveryRecord] = field(default_factory=list)
     briefings: list[BriefingRecord] = field(default_factory=list)
     curations: list[CurationRecord] = field(default_factory=list)
+    skill_evolutions: list[SkillEvolutionRecord] = field(default_factory=list)
     skills: list[SkillRecord] = field(default_factory=list)
     specialists: list[SpecialistRecord] = field(default_factory=list)
 

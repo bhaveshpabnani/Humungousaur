@@ -29,6 +29,7 @@ from .models import (
 )
 from .persona import PersonaStore
 from .recovery import RecoveryStore
+from .skill_evolution import SkillEvolutionStore
 from .skills import SkillStore
 from .specialists import SpecialistStore
 from .wakeups import WakeupStore
@@ -51,6 +52,7 @@ class CognitiveRecorder:
         self.recoveries = RecoveryStore(self.config.cognition_db_path)
         self.briefings = BriefingStore(self.config.cognition_db_path)
         self.curations = CurationStore(self.config.cognition_db_path)
+        self.skill_evolutions = SkillEvolutionStore(self.config.cognition_db_path)
         self.persona = PersonaStore(self.config.persona_path)
         self.skills = SkillStore(self.config.skill_library_path)
         self.specialists = SpecialistStore(self.config.specialist_registry_path)
@@ -70,6 +72,7 @@ class CognitiveRecorder:
             recoveries=self.recoveries.recent(limit=8),
             briefings=self.briefings.recent(limit=8),
             curations=self.curations.recent(limit=8),
+            skill_evolutions=self.skill_evolutions.recent(limit=8),
             skills=self.skills.list(limit=8),
             specialists=self.specialists.list(limit=8),
         )

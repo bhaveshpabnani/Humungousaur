@@ -4,7 +4,7 @@ from dataclasses import asdict
 import json
 from pathlib import Path
 
-from .models import SkillRecord, new_id, utc_now
+from .models import SkillLifecycleStatus, SkillRecord, new_id, utc_now
 
 
 class SkillStore:
@@ -12,10 +12,18 @@ class SkillStore:
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
-    def list(self, limit: int = 20) -> list[SkillRecord]:
+    def list(self, limit: int = 20, *, include_retired: bool = False) -> list[SkillRecord]:
         skills = self._load_all()
+        if not include_retired:
+            skills = [skill for skill in skills if skill.status == SkillLifecycleStatus.ACTIVE]
         skills.sort(key=lambda item: (item.confidence, item.usage_count, item.updated_at), reverse=True)
         return skills[: max(1, min(limit, 200))]
+
+    def get(self, skill_id: str) -> SkillRecord | None:
+        cleaned_id = str(skill_id or "").strip()
+        if not cleaned_id:
+            return None
+        return next((skill for skill in self._load_all() if skill.skill_id == cleaned_id), None)
 
     def upsert(
         self,
@@ -25,6 +33,7 @@ class SkillStore:
         tools: list[str] | None = None,
         verification_steps: list[str] | None = None,
         failure_modes: list[str] | None = None,
+        evidence_refs: list[str] | None = None,
         confidence: float = 0.5,
     ) -> SkillRecord:
         skills = self._load_all()
@@ -43,16 +52,77 @@ class SkillStore:
         existing.tools = _string_list(tools) if tools is not None else existing.tools
         existing.verification_steps = _string_list(verification_steps) if verification_steps is not None else existing.verification_steps
         existing.failure_modes = _string_list(failure_modes) if failure_modes is not None else existing.failure_modes
+        existing.evidence_refs = _merge_strings(existing.evidence_refs, _string_list(evidence_refs)) if evidence_refs is not None else existing.evidence_refs
         existing.confidence = max(0.0, min(float(confidence), 1.0))
+        existing.status = SkillLifecycleStatus.ACTIVE
+        existing.retired_at = ""
+        existing.retirement_reason = ""
         existing.updated_at = utc_now()
         self._save_all(skills)
         return existing
+
+    def update_exact(
+        self,
+        skill_id: str,
+        *,
+        name: str | None = None,
+        purpose: str | None = None,
+        when_to_use: str | None = None,
+        tools: list[str] | None = None,
+        verification_steps: list[str] | None = None,
+        failure_modes: list[str] | None = None,
+        evidence_refs: list[str] | None = None,
+        confidence: float | None = None,
+    ) -> SkillRecord | None:
+        cleaned_id = str(skill_id or "").strip()
+        if not cleaned_id:
+            return None
+        skills = self._load_all()
+        updated: SkillRecord | None = None
+        for skill in skills:
+            if skill.skill_id != cleaned_id or skill.status != SkillLifecycleStatus.ACTIVE:
+                continue
+            skill.name = _clean(name) or skill.name if name is not None else skill.name
+            skill.purpose = _clean(purpose) or skill.purpose if purpose is not None else skill.purpose
+            skill.when_to_use = _clean(when_to_use) or skill.when_to_use if when_to_use is not None else skill.when_to_use
+            skill.tools = _string_list(tools) if tools is not None else skill.tools
+            skill.verification_steps = _string_list(verification_steps) if verification_steps is not None else skill.verification_steps
+            skill.failure_modes = _string_list(failure_modes) if failure_modes is not None else skill.failure_modes
+            skill.evidence_refs = _merge_strings(skill.evidence_refs, _string_list(evidence_refs)) if evidence_refs is not None else skill.evidence_refs
+            if confidence is not None:
+                skill.confidence = max(0.0, min(float(confidence), 1.0))
+            skill.updated_at = utc_now()
+            updated = skill
+            break
+        if updated is not None:
+            self._save_all(skills)
+        return updated
+
+    def retire(self, skill_id: str, reason: str = "", evidence_refs: list[str] | None = None) -> SkillRecord | None:
+        cleaned_id = str(skill_id or "").strip()
+        if not cleaned_id:
+            return None
+        skills = self._load_all()
+        retired: SkillRecord | None = None
+        for skill in skills:
+            if skill.skill_id != cleaned_id or skill.status != SkillLifecycleStatus.ACTIVE:
+                continue
+            skill.status = SkillLifecycleStatus.RETIRED
+            skill.retired_at = utc_now()
+            skill.retirement_reason = _clean(reason)
+            skill.evidence_refs = _merge_strings(skill.evidence_refs, _string_list(evidence_refs))
+            skill.updated_at = skill.retired_at
+            retired = skill
+            break
+        if retired is not None:
+            self._save_all(skills)
+        return retired
 
     def mark_used(self, skill_id: str) -> bool:
         skills = self._load_all()
         matched = False
         for skill in skills:
-            if skill.skill_id == skill_id:
+            if skill.skill_id == skill_id and skill.status == SkillLifecycleStatus.ACTIVE:
                 skill.usage_count += 1
                 skill.last_used_at = utc_now()
                 skill.updated_at = skill.last_used_at
@@ -84,8 +154,12 @@ class SkillStore:
                     tools=_string_list(item.get("tools")),
                     verification_steps=_string_list(item.get("verification_steps")),
                     failure_modes=_string_list(item.get("failure_modes")),
+                    evidence_refs=_string_list(item.get("evidence_refs")),
                     usage_count=max(0, int(item.get("usage_count") or 0)),
                     confidence=max(0.0, min(float(item.get("confidence") or 0.5), 1.0)),
+                    status=_skill_status(item.get("status")),
+                    retired_at=str(item.get("retired_at") or ""),
+                    retirement_reason=str(item.get("retirement_reason") or ""),
                     last_used_at=str(item.get("last_used_at") or ""),
                     updated_at=str(item.get("updated_at") or utc_now()),
                 )
@@ -109,3 +183,21 @@ def _string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
     return [_clean(item) for item in value if _clean(item)]
+
+
+def _merge_strings(existing: list[str], incoming: list[str]) -> list[str]:
+    seen: set[str] = set()
+    merged: list[str] = []
+    for item in [*existing, *incoming]:
+        cleaned = _clean(item)
+        if cleaned and cleaned not in seen:
+            seen.add(cleaned)
+            merged.append(cleaned)
+    return merged[:50]
+
+
+def _skill_status(value: object) -> SkillLifecycleStatus:
+    try:
+        return SkillLifecycleStatus(str(value or SkillLifecycleStatus.ACTIVE.value))
+    except ValueError:
+        return SkillLifecycleStatus.ACTIVE

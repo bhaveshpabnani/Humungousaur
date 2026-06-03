@@ -320,6 +320,39 @@ class ModelPlanProviderTests(unittest.TestCase):
         self.assertEqual(plan.steps[0].tool_input["max_archive"], 5)
         self.assertEqual(plan.steps[0].source, "model:static")
 
+    def test_model_provider_can_handoff_to_cognitive_skill_evolution_tool(self) -> None:
+        client = StaticModelClient(
+            '{"steps":[{"tool_name":"cognitive_skill_evolve","tool_input":{"purpose":"skill_review","max_updates":4,"max_new_skills":2,"include_state":false},"reason":"review reusable skills from cognitive evidence"}]}'
+        )
+        provider = ModelPlanProvider(
+            client,
+            {"cognitive_skill_evolve"},
+            tool_catalog={
+                "cognitive_skill_evolve": {
+                    "description": "Run a model-led review of reusable cognitive skills to improve, retire, create, or retain exact skill records from evidence.",
+                    "risk_level": "medium",
+                    "requires_approval": False,
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "purpose": {"type": "string"},
+                            "max_updates": {"type": "integer"},
+                            "max_new_skills": {"type": "integer"},
+                            "include_state": {"type": "boolean"},
+                        },
+                    },
+                    "capability_group": "cognition",
+                }
+            },
+            fallback=ExplicitFallbackPlanProvider(),
+        )
+
+        plan = provider.plan("review the assistant skills and improve outdated workflows")
+
+        self.assertEqual(plan.steps[0].tool_name, "cognitive_skill_evolve")
+        self.assertEqual(plan.steps[0].tool_input["max_new_skills"], 2)
+        self.assertEqual(plan.steps[0].source, "model:static")
+
     def test_model_provider_can_handoff_to_activity_tools(self) -> None:
         client = StaticModelClient(
             '{"steps":[{"tool_name":"activity_search","tool_input":{"query":"meeting notes","limit":5},"reason":"search native activity memory"}]}'

@@ -38,6 +38,10 @@ from humungousaur.cognition import (
     ReflectionRecord,
     ReflectionEngine,
     ReflectionStore,
+    EvidenceSkillEvolutionProvider,
+    ModelSkillEvolutionProvider,
+    SkillEvolutionEngine,
+    SkillEvolutionStore,
     SkillStore,
     SpecialistStore,
     WakeupStore,
@@ -58,6 +62,8 @@ from humungousaur.cognition.models import (
     ReflectionStatus,
     RuntimeCycleStatus,
     RecoveryStatus,
+    SkillEvolutionStatus,
+    SkillLifecycleStatus,
     StepBoundaryAction,
     TaskStatus,
     WakeupStatus,
@@ -83,6 +89,8 @@ from humungousaur.tools.cognition_tools import (
     CognitivePersonaUpdateTool,
     CognitiveReflectionStatusTool,
     CognitiveRecoveryStatusTool,
+    CognitiveSkillEvolveTool,
+    CognitiveSkillEvolutionStatusTool,
     CognitiveSkillRecordTool,
     CognitiveSpecialistRecordTool,
     CognitiveStateTool,
@@ -501,6 +509,104 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertNotIn(stale.knowledge_id, [record.knowledge_id for record in remaining])
             self.assertEqual(CurationStore(db).recent()[0].curation_id, curation.curation_id)
 
+    def test_model_skill_evolution_provider_updates_retires_and_creates_exact_skills(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            db = root / "cognition.sqlite3"
+            skills = SkillStore(root / "skills.json")
+            status_skill = skills.upsert(
+                name="Status updates",
+                purpose="Summarize project progress.",
+                when_to_use="Use during project reviews.",
+                tools=["cognitive_state"],
+                verification_steps=["Mention completed work."],
+                failure_modes=["Missing blockers."],
+                confidence=0.55,
+            )
+            duplicate_skill = skills.upsert(
+                name="Old review notes",
+                purpose="Prepare project review notes.",
+                when_to_use="Use during project reviews.",
+                tools=["memory_summary"],
+                verification_steps=["List project notes."],
+                failure_modes=["Duplicating the status update skill."],
+                confidence=0.4,
+            )
+            learning = LearningStore(db).append(
+                outcome="completed",
+                lesson="Blockers-first status updates worked better than generic review notes.",
+                evidence_refs=["run:status-review"],
+            )
+            snapshot = CognitiveSnapshot(skills=skills.list(limit=10), learning=[learning])
+            client = StaticModelClient(
+                json.dumps(
+                    {
+                        "status": "recorded",
+                        "summary": "Improved the status skill, retired a duplicate, and created a recurring review skill.",
+                        "update_skills": [
+                            {
+                                "skill_id": status_skill.skill_id,
+                                "name": "Blockers-first status updates",
+                                "purpose": "Summarize project progress with blockers and risks before completed work.",
+                                "when_to_use": "Use during project reviews and implementation handoffs.",
+                                "tools": ["cognitive_state", "cognitive_briefing_prepare"],
+                                "verification_steps": ["Mention unresolved blockers.", "Include evidence-backed next actions."],
+                                "failure_modes": ["Hiding uncertainty.", "Claiming completion without evidence."],
+                                "confidence": 0.87,
+                                "evidence_refs": [f"skill:{status_skill.skill_id}", f"learning:{learning.learning_id}"],
+                            }
+                        ],
+                        "retire_skills": [
+                            {
+                                "skill_id": duplicate_skill.skill_id,
+                                "reason": "Duplicated by the improved blockers-first status skill.",
+                                "evidence_refs": [f"skill:{duplicate_skill.skill_id}", f"learning:{learning.learning_id}"],
+                            }
+                        ],
+                        "create_skills": [
+                            {
+                                "name": "Recurring review follow-up",
+                                "purpose": "Schedule and verify future follow-ups for long-running project reviews.",
+                                "when_to_use": "Use when a review produces future work or watch items.",
+                                "tools": ["cognitive_wakeup_schedule", "cognitive_briefing_prepare"],
+                                "verification_steps": ["Confirm a wakeup or next action is visible."],
+                                "failure_modes": ["Letting future work disappear."],
+                                "confidence": 0.78,
+                                "evidence_refs": [f"learning:{learning.learning_id}"],
+                            }
+                        ],
+                        "retain_skill_ids": [],
+                        "evidence_refs": [f"skill:{status_skill.skill_id}", f"skill:{duplicate_skill.skill_id}", f"learning:{learning.learning_id}"],
+                        "confidence": 0.84,
+                    }
+                )
+            )
+            engine = SkillEvolutionEngine(
+                SkillEvolutionStore(db),
+                skills,
+                provider=ModelSkillEvolutionProvider(client, fallback=EvidenceSkillEvolutionProvider()),
+            )
+
+            evolution = engine.evolve(snapshot=snapshot, purpose="test_skill_review", max_updates=3, max_new_skills=2)
+            updated = skills.get(status_skill.skill_id)
+            retired = skills.get(duplicate_skill.skill_id)
+            active_names = [skill.name for skill in skills.list(limit=10)]
+
+            self.assertEqual(evolution.status, SkillEvolutionStatus.RECORDED)
+            self.assertEqual(evolution.updated_skill_ids, [status_skill.skill_id])
+            self.assertEqual(evolution.retired_skill_ids, [duplicate_skill.skill_id])
+            self.assertEqual(len(evolution.created_skill_ids), 1)
+            self.assertIsNotNone(updated)
+            self.assertEqual(updated.name, "Blockers-first status updates")
+            self.assertIn("cognitive_briefing_prepare", updated.tools)
+            self.assertIn(f"learning:{learning.learning_id}", updated.evidence_refs)
+            self.assertIsNotNone(retired)
+            self.assertEqual(retired.status, SkillLifecycleStatus.RETIRED)
+            self.assertIn("Duplicated", retired.retirement_reason)
+            self.assertNotIn("Old review notes", active_names)
+            self.assertIn("Recurring review follow-up", active_names)
+            self.assertEqual(SkillEvolutionStore(db).recent()[0].evolution_id, evolution.evolution_id)
+
     def test_model_consolidation_provider_falls_back_without_inferred_memory(self) -> None:
         class FailingClient(StaticModelClient):
             def complete_json(self, prompt, schema):
@@ -696,6 +802,11 @@ class CognitiveStoreTests(unittest.TestCase):
                 },
                 config,
             )
+            skill_evolution = CognitiveSkillEvolveTool().execute(
+                {"purpose": "skill_review", "include_state": True, "limit": 5},
+                config,
+            )
+            skill_evolution_status = CognitiveSkillEvolutionStatusTool().execute({"limit": 5}, config)
             specialist = CognitiveSpecialistRecordTool().execute(
                 {
                     "name": "Reviewer",
@@ -729,6 +840,8 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertEqual(wakeup_status.status, ActionStatus.SUCCEEDED)
             self.assertEqual(cancelled_wakeup.status, ActionStatus.SUCCEEDED)
             self.assertEqual(skill.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(skill_evolution.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(skill_evolution_status.status, ActionStatus.SUCCEEDED)
             self.assertEqual(specialist.status, ActionStatus.SUCCEEDED)
             self.assertEqual(state.status, ActionStatus.SUCCEEDED)
             self.assertEqual(forgotten.status, ActionStatus.SUCCEEDED)
@@ -738,10 +851,16 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertEqual(state.output["recoveries"], [])
             self.assertEqual(state.output["briefings"][0]["status"], BriefingStatus.SKIPPED)
             self.assertEqual(state.output["curations"][0]["status"], CurationStatus.SKIPPED)
+            self.assertEqual(state.output["skill_evolutions"][0]["status"], SkillEvolutionStatus.SKIPPED)
             self.assertEqual(briefing.output["briefing"]["status"], BriefingStatus.SKIPPED)
             self.assertEqual(briefing_status.output["briefings"][0]["briefing_id"], briefing.output["briefing"]["briefing_id"])
             self.assertEqual(curation.output["curation"]["status"], CurationStatus.SKIPPED)
             self.assertEqual(curation_status.output["curations"][0]["curation_id"], curation.output["curation"]["curation_id"])
+            self.assertEqual(skill_evolution.output["skill_evolution"]["status"], SkillEvolutionStatus.SKIPPED)
+            self.assertEqual(
+                skill_evolution_status.output["skill_evolutions"][0]["evolution_id"],
+                skill_evolution.output["skill_evolution"]["evolution_id"],
+            )
             self.assertEqual(wakeup_status.output["wakeups"][0]["wakeup_id"], scheduled_wakeup.output["wakeup"]["wakeup_id"])
             self.assertEqual(state.output["wakeups"], [])
             self.assertEqual(state.output["knowledge"][0]["knowledge_id"], knowledge.output["knowledge"]["knowledge_id"])

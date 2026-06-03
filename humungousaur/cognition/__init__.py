@@ -37,6 +37,9 @@ from .models import (
     ReflectionStatus,
     RuntimeEvent,
     RuntimeCycleStatus,
+    SkillEvolutionRecord,
+    SkillEvolutionStatus,
+    SkillLifecycleStatus,
     SkillRecord,
     SpecialistRecord,
     TaskRecord,
@@ -48,6 +51,13 @@ from .persona import PersonaStore
 from .recovery import EvidenceRecoveryProvider, ModelRecoveryProvider, RecoveryEngine, RecoveryProvider, RecoveryStore
 from .recorder import CognitiveRecorder
 from .reflection import EvidenceReflectionProvider, ModelReflectionProvider, ReflectionEngine, ReflectionProvider, ReflectionStore
+from .skill_evolution import (
+    EvidenceSkillEvolutionProvider,
+    ModelSkillEvolutionProvider,
+    SkillEvolutionEngine,
+    SkillEvolutionProvider,
+    SkillEvolutionStore,
+)
 from .skills import SkillStore
 from .specialists import SpecialistStore
 from .wakeups import WakeupStore
@@ -106,7 +116,9 @@ __all__ = [
     "RecoveryStatus",
     "RecoveryStore",
     "EvidenceReflectionProvider",
+    "EvidenceSkillEvolutionProvider",
     "ModelReflectionProvider",
+    "ModelSkillEvolutionProvider",
     "ReflectionEngine",
     "ReflectionProvider",
     "ReflectionRecord",
@@ -115,6 +127,12 @@ __all__ = [
     "RuntimeCycleStatus",
     "RuntimeEvent",
     "RuntimeEventQueue",
+    "SkillEvolutionEngine",
+    "SkillEvolutionProvider",
+    "SkillEvolutionRecord",
+    "SkillEvolutionStatus",
+    "SkillEvolutionStore",
+    "SkillLifecycleStatus",
     "SkillRecord",
     "SkillStore",
     "SpecialistRecord",

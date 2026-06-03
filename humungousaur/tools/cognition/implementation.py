@@ -12,15 +12,19 @@ from humungousaur.cognition import (
     CurationStore,
     EvidenceBriefingProvider,
     EvidenceCurationProvider,
+    EvidenceSkillEvolutionProvider,
     FocusStore,
     GoalStore,
     KnowledgeStore,
     LearningStore,
     ModelBriefingProvider,
     ModelCurationProvider,
+    ModelSkillEvolutionProvider,
     PersonaStore,
     RecoveryStore,
     ReflectionStore,
+    SkillEvolutionEngine,
+    SkillEvolutionStore,
     SkillStore,
     SpecialistStore,
     WakeupStore,
@@ -54,6 +58,7 @@ class CognitiveStateTool(Tool):
         reflections = ReflectionStore(config.cognition_db_path).recent(limit=limit)
         consolidations = ConsolidationStore(config.cognition_db_path).recent(limit=limit)
         curations = CurationStore(config.cognition_db_path).recent(limit=limit)
+        skill_evolutions = SkillEvolutionStore(config.cognition_db_path).recent(limit=limit)
         wakeups = WakeupStore(config.cognition_db_path).scheduled(limit=limit)
         payload = {
             "active_goals": [asdict(goal) for goal in snapshot.active_goals[:limit]],
@@ -67,18 +72,20 @@ class CognitiveStateTool(Tool):
             "recoveries": [asdict(record) for record in snapshot.recoveries[:limit]],
             "briefings": [asdict(record) for record in snapshot.briefings[:limit]],
             "curations": [asdict(record) for record in snapshot.curations[:limit]],
+            "skill_evolutions": [asdict(record) for record in snapshot.skill_evolutions[:limit]],
             "skills": [asdict(skill) for skill in snapshot.skills[:limit]],
             "specialists": [asdict(specialist) for specialist in snapshot.specialists[:limit]],
             "recent_reflections": [asdict(reflection) for reflection in reflections],
             "recent_consolidations": [asdict(consolidation) for consolidation in consolidations],
             "recent_curations": [asdict(curation) for curation in curations],
+            "recent_skill_evolutions": [asdict(record) for record in skill_evolutions],
             "scheduled_wakeups": [asdict(wakeup) for wakeup in wakeups],
         }
         return ToolResult(
             self.name,
             ActionStatus.SUCCEEDED,
             self.risk_level,
-            f"Cognitive state: {len(payload['active_goals'])} active goals, {len(payload['active_tasks'])} active tasks, {len(payload['knowledge'])} knowledge records, {len(payload['skills'])} skills, {len(payload['specialists'])} specialists, {len(payload['consolidations'])} consolidations, {len(payload['wakeups'])} wakeups, {len(payload['recoveries'])} recoveries, {len(payload['briefings'])} briefings, {len(payload['curations'])} curations.",
+            f"Cognitive state: {len(payload['active_goals'])} active goals, {len(payload['active_tasks'])} active tasks, {len(payload['knowledge'])} knowledge records, {len(payload['skills'])} skills, {len(payload['specialists'])} specialists, {len(payload['consolidations'])} consolidations, {len(payload['wakeups'])} wakeups, {len(payload['recoveries'])} recoveries, {len(payload['briefings'])} briefings, {len(payload['curations'])} curations, {len(payload['skill_evolutions'])} skill evolutions.",
             payload,
         )
 
@@ -236,6 +243,88 @@ class CognitiveCurationStatusTool(Tool):
             self.risk_level,
             f"Found {len(curations)} cognitive memory curation record(s).",
             {"curations": [asdict(record) for record in curations]},
+        )
+
+
+class CognitiveSkillEvolveTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="cognitive_skill_evolve",
+            description="Run a model-led review of reusable cognitive skills to improve, retire, create, or retain exact skill records from evidence.",
+            risk_level=RiskLevel.MEDIUM,
+            input_schema=object_input_schema(
+                {
+                    "purpose": {"type": "string", "description": "Skill review purpose such as skill_review, weekly_learning, duplicate_skill_review, or workflow_upgrade."},
+                    "max_updates": {"type": "integer", "minimum": 0, "maximum": 20},
+                    "max_new_skills": {"type": "integer", "minimum": 0, "maximum": 10},
+                    "include_state": {"type": "boolean", "description": "Attach the bounded raw cognitive state used for the review."},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                }
+            ),
+            capability_group="cognition",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        purpose = str(tool_input.get("purpose", "skill_review")).strip() or "skill_review"
+        max_updates = min(max(int(tool_input.get("max_updates") or 5), 0), 20)
+        max_new_skills = min(max(int(tool_input.get("max_new_skills") or 3), 0), 10)
+        limit = min(int(tool_input.get("limit") or 20), 50)
+        recorder = CognitiveRecorder(config)
+        snapshot = recorder.snapshot()
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would run cognitive skill evolution.",
+                {
+                    "purpose": purpose,
+                    "max_updates": max_updates,
+                    "max_new_skills": max_new_skills,
+                    "state": _snapshot_payload(snapshot, limit=limit),
+                },
+            )
+        engine = SkillEvolutionEngine(
+            SkillEvolutionStore(config.cognition_db_path),
+            SkillStore(config.skill_library_path),
+            provider=_build_skill_evolution_provider(config),
+        )
+        evolution = engine.evolve(snapshot=snapshot, purpose=purpose, max_updates=max_updates, max_new_skills=max_new_skills)
+        payload: dict[str, Any] = {"skill_evolution": asdict(evolution)}
+        if bool(tool_input.get("include_state", False)) or evolution.status.value == "skipped":
+            payload["state"] = _snapshot_payload(snapshot, limit=limit)
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Cognitive skill evolution {evolution.status.value}: {evolution.summary}",
+            payload,
+        )
+
+
+class CognitiveSkillEvolutionStatusTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="cognitive_skill_evolution_status",
+            description="Inspect recent cognitive skill evolution records.",
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema(
+                {
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                }
+            ),
+            capability_group="cognition",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        limit = min(int(tool_input.get("limit") or 10), 50)
+        evolutions = SkillEvolutionStore(config.cognition_db_path).recent(limit=limit)
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Found {len(evolutions)} cognitive skill evolution record(s).",
+            {"skill_evolutions": [asdict(record) for record in evolutions]},
         )
 
 
@@ -935,6 +1024,8 @@ def default_cognition_tools() -> dict[str, Tool]:
         CognitiveBriefingStatusTool(),
         CognitiveMemoryCurateTool(),
         CognitiveCurationStatusTool(),
+        CognitiveSkillEvolveTool(),
+        CognitiveSkillEvolutionStatusTool(),
         CognitiveGoalCreateTool(),
         CognitiveFocusUpdateTool(),
         CognitiveKnowledgeRecordTool(),
@@ -977,6 +1068,13 @@ def _build_curation_provider(config: AgentConfig) -> EvidenceCurationProvider | 
     return ModelCurationProvider(build_model_client(config), fallback=fallback)
 
 
+def _build_skill_evolution_provider(config: AgentConfig) -> EvidenceSkillEvolutionProvider | ModelSkillEvolutionProvider:
+    fallback = EvidenceSkillEvolutionProvider()
+    if config.planner_provider != "model":
+        return fallback
+    return ModelSkillEvolutionProvider(build_model_client(config), fallback=fallback)
+
+
 def _snapshot_payload(snapshot: Any, *, limit: int) -> dict[str, Any]:
     return {
         "active_goals": [asdict(goal) for goal in snapshot.active_goals[:limit]],
@@ -990,6 +1088,7 @@ def _snapshot_payload(snapshot: Any, *, limit: int) -> dict[str, Any]:
         "recoveries": [asdict(record) for record in snapshot.recoveries[:limit]],
         "briefings": [asdict(record) for record in snapshot.briefings[:limit]],
         "curations": [asdict(record) for record in snapshot.curations[:limit]],
+        "skill_evolutions": [asdict(record) for record in snapshot.skill_evolutions[:limit]],
         "skills": [asdict(record) for record in snapshot.skills[:limit]],
         "specialists": [asdict(record) for record in snapshot.specialists[:limit]],
     }
