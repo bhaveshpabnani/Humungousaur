@@ -2,7 +2,7 @@
 
 Reference project feature analysis lives in `docs/REFERENCE_FEATURE_MATRIX.md`. Use that matrix to keep future work aligned with Open Interpreter, Browser Use, Screenpipe, and Windows-Use without importing incompatible code blindly.
 
-Engineering principles live in `docs/ENGINEERING_PRINCIPLES.md`. New broad assistant behaviors should be model-led capability handoffs, with rule-based safeguards kept to explicit fallback commands, safety validation, and offline recovery.
+Engineering principles live in `docs/ENGINEERING_PRINCIPLES.md`. New broad assistant behaviors should be model-led capability handoffs, with deterministic safeguards kept to explicit fallback commands, safety validation, schema validation, audit persistence, and evidence-boundary enforcement.
 
 ## Milestone 1: Safe Local Runtime
 

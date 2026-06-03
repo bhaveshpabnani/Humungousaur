@@ -2,6 +2,7 @@ from .base import Tool
 from .activity import default_activity_tools
 from .browser import default_browser_tools
 from .code import default_code_tools
+from .cognition import default_cognition_tools
 from .external import default_external_tools
 from .files import default_tools as default_file_tools
 from .memory import default_memory_tools
@@ -18,6 +19,7 @@ def default_tools(config=None) -> dict[str, Tool]:
     tools.update(default_activity_tools())
     tools.update(default_browser_tools())
     tools.update(default_code_tools())
+    tools.update(default_cognition_tools())
     tools.update(default_external_tools())
     tools.update(default_system_tools())
     tools.update(default_os_tools())

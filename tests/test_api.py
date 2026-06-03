@@ -8,6 +8,7 @@ from pathlib import Path
 
 from humungousaur.api import create_api_server
 from humungousaur.config import AgentConfig
+from humungousaur.cognition import WakeupStore, WakeupStatus
 from humungousaur.orchestrator import AgentOrchestrator
 from humungousaur.safety.audit import AuditLog
 from humungousaur.tools.browser_tools import BrowserSessionStore
@@ -221,6 +222,39 @@ class APITests(unittest.TestCase):
                 self.assertTrue(trace["fallback_used"])
                 self.assertIn("local-openai", trace["error"])
                 self.assertNotIn("LOCAL_LLM_API_KEY=", json.dumps(trace))
+
+    def test_api_runs_bounded_autonomous_cycles_for_due_wakeup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            (workspace / "README.md").write_text("# Autonomous API\n\nCycle endpoint works.", encoding="utf-8")
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", planner_provider="explicit").normalized()
+            WakeupStore(config.cognition_db_path).schedule(
+                scheduled_for=_utc_seconds_from_now(-1),
+                event_type="STIMULUS",
+                payload={
+                    "text": 'read_file {"path":"README.md"}',
+                    "source": "wakeup",
+                    "metadata": {"should_run_agent": True, "intent": "task"},
+                    "response_mode": "silent",
+                },
+                reason="API due wakeup.",
+            )
+
+            with running_api(config) as base_url:
+                before = api_get(base_url, "/autonomous/status?limit=5")
+                loop = api_post(
+                    base_url,
+                    "/autonomous/cycles",
+                    {"max_cycles": 3, "stop_after_idle_cycles": 1, "planner": "explicit"},
+                )
+                after = api_get(base_url, "/autonomous/status?limit=5")
+
+            self.assertEqual(len(before["scheduled_wakeups"]), 1)
+            self.assertEqual(loop["stopped_reason"], "idle")
+            self.assertEqual(loop["cycles"][0]["status"], "run_finished")
+            self.assertEqual(loop["cycles"][1]["status"], "no_op")
+            self.assertEqual(after["scheduled_wakeups"], [])
+            self.assertEqual(after["recent_wakeups"][0]["status"], WakeupStatus.FIRED)
 
     def test_api_approval_lifecycle(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -486,6 +520,12 @@ def wait_for_finished_run(base_url: str, run_id: str, timeout_seconds: float = 5
             return run
         time.sleep(0.05)
     raise AssertionError(f"Run did not finish: {run_id}")
+
+
+def _utc_seconds_from_now(seconds: int) -> str:
+    from datetime import datetime, timedelta, timezone
+
+    return (datetime.now(timezone.utc) + timedelta(seconds=seconds)).isoformat()
 
 
 if __name__ == "__main__":

@@ -130,6 +130,9 @@ class ModelPlanProviderTests(unittest.TestCase):
         prompt = provider._build_prompt("open example.com", {"memory": "none"})
 
         self.assertIn("Choose tools by their descriptions", prompt)
+        self.assertIn("Global intelligence rule", prompt)
+        self.assertIn("OpenAI, Groq, Ollama", prompt)
+        self.assertIn("do not use pattern-based", prompt)
         self.assertIn("hand off through the most relevant capability tool", prompt)
         self.assertIn("browser_open", prompt)
         self.assertIn("Open a safe HTTP(S) page", prompt)
@@ -147,6 +150,12 @@ class ModelPlanProviderTests(unittest.TestCase):
 
         self.assertEqual(plan.steps[0].tool_name, "voice_response_prepare")
         self.assertEqual(plan.steps[0].tool_input["text"], "hello there")
+
+    def test_explicit_provider_accepts_unescaped_windows_path_argument(self) -> None:
+        plan = ExplicitFallbackPlanProvider({"summarize_pdfs"}).plan('summarize_pdfs {"path":"C:\\Users\\bhave\\Downloads"}')
+
+        self.assertEqual(plan.steps[0].tool_name, "summarize_pdfs")
+        self.assertEqual(plan.steps[0].tool_input["path"], "C:\\Users\\bhave\\Downloads")
 
     def test_model_provider_can_handoff_to_shell_command_profiles(self) -> None:
         client = StaticModelClient(
@@ -206,6 +215,44 @@ class ModelPlanProviderTests(unittest.TestCase):
         plan = provider.plan("what was I working on today?")
 
         self.assertEqual(plan.steps[0].tool_name, "memory_summary")
+        self.assertEqual(plan.steps[0].source, "model:static")
+
+    def test_model_provider_can_handoff_to_cognitive_focus_and_knowledge_tools(self) -> None:
+        client = StaticModelClient(
+            '{"steps":[{"tool_name":"cognitive_focus_update","tool_input":{"mode":"monitoring","summary":"Track the active review.","pinned_context":["review"]},"reason":"set durable focus"},{"tool_name":"cognitive_knowledge_record","tool_input":{"kind":"procedure","text":"Use blockers-first updates for status.","source":"user","confidence":0.8},"reason":"store reusable procedure"}]}'
+        )
+        provider = ModelPlanProvider(
+            client,
+            {"cognitive_focus_update", "cognitive_knowledge_record"},
+            tool_catalog={
+                "cognitive_focus_update": {
+                    "description": "Update the assistant's durable current focus with explicit goal/task IDs, mode, summary, and pinned context.",
+                    "risk_level": "medium",
+                    "requires_approval": False,
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {"mode": {"type": "string"}, "summary": {"type": "string"}},
+                    },
+                    "capability_group": "cognition",
+                },
+                "cognitive_knowledge_record": {
+                    "description": "Record a durable fact, preference, procedure, project context, or lesson with evidence references.",
+                    "risk_level": "medium",
+                    "requires_approval": False,
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {"kind": {"type": "string"}, "text": {"type": "string"}},
+                        "required": ["kind", "text"],
+                    },
+                    "capability_group": "cognition",
+                },
+            },
+            fallback=ExplicitFallbackPlanProvider(),
+        )
+
+        plan = provider.plan("remember how I like status updates and keep watching the review")
+
+        self.assertEqual([step.tool_name for step in plan.steps], ["cognitive_focus_update", "cognitive_knowledge_record"])
         self.assertEqual(plan.steps[0].source, "model:static")
 
     def test_model_provider_can_handoff_to_activity_tools(self) -> None:

@@ -8,6 +8,7 @@ from pathlib import Path
 
 from humungousaur.api import run_api_server
 from humungousaur.config import AgentConfig
+from humungousaur.cognition.loop import AutonomousLoopRunner, autonomous_loop_result_to_dict, autonomous_status
 from humungousaur.indexing import FileIndex
 from humungousaur.integrations.voice_wakeup import handle_activation, run_activation
 from humungousaur.interaction import InteractionHarness, harness_result_to_dict
@@ -124,6 +125,22 @@ def build_parser() -> argparse.ArgumentParser:
     index.add_argument("--data-dir", type=Path, default=Path("artifacts"))
     index.add_argument("--rebuild", action="store_true", help="Rebuild the file index")
     index.add_argument("--json", action="store_true")
+
+    autonomous_status_parser = subparsers.add_parser("autonomous-status", help="Inspect autonomous queued events, ready tasks, wakeups, and recent cycles")
+    autonomous_status_parser.add_argument("--workspace", type=Path, default=Path.cwd())
+    autonomous_status_parser.add_argument("--data-dir", type=Path, default=Path("artifacts"))
+    autonomous_status_parser.add_argument("--limit", type=int, default=10)
+    autonomous_status_parser.add_argument("--json", action="store_true")
+
+    autonomous_loop = subparsers.add_parser("autonomous-loop", help="Run a bounded autonomous loop over queued events, due wakeups, and ready tasks")
+    autonomous_loop.add_argument("--workspace", type=Path, default=Path.cwd())
+    autonomous_loop.add_argument("--data-dir", type=Path, default=Path("artifacts"))
+    autonomous_loop.add_argument("--max-cycles", type=int, default=10)
+    autonomous_loop.add_argument("--idle-sleep-seconds", type=float, default=0.0)
+    autonomous_loop.add_argument("--stop-after-idle-cycles", type=int, default=1)
+    autonomous_loop.add_argument("--approve-high-risk", action="store_true")
+    autonomous_loop.add_argument("--json", action="store_true")
+    _add_planner_args(autonomous_loop)
 
     approvals = subparsers.add_parser("approvals", help="List approval queue items")
     approvals.add_argument("--workspace", type=Path, default=Path.cwd())
@@ -311,6 +328,37 @@ def main() -> None:
                 f"Index {'usable' if result['usable'] else 'not usable'}: "
                 f"{result['indexed_files']} files, {result['indexed_lines']} lines"
             )
+        return
+
+    if args.command == "autonomous-status":
+        payload = autonomous_status(config, limit=args.limit)
+        if args.json:
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            print(
+                f"Autonomous status: {len(payload['queued_events'])} queued event(s), "
+                f"{len(payload['ready_tasks'])} ready task(s), "
+                f"{len(payload['scheduled_wakeups'])} scheduled wakeup(s)."
+            )
+        return
+
+    if args.command == "autonomous-loop":
+        result = AutonomousLoopRunner(config).run(
+            max_cycles=args.max_cycles,
+            idle_sleep_seconds=args.idle_sleep_seconds,
+            stop_after_idle_cycles=args.stop_after_idle_cycles,
+            approve_high_risk=args.approve_high_risk,
+        )
+        payload = autonomous_loop_result_to_dict(result)
+        if args.json:
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            print(
+                f"Autonomous loop: {payload['cycle_count']} cycle(s), "
+                f"stopped={payload['stopped_reason']}, idle_cycles={payload['idle_cycles']}."
+            )
+            for cycle in payload["cycles"]:
+                print(f"- {cycle['status']}: {cycle['reason']}")
         return
 
     if args.command == "approvals":

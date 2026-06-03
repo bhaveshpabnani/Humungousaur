@@ -68,3 +68,19 @@ class AgentConfig:
     @property
     def browser_sessions_db_path(self) -> Path:
         return self.data_dir / "browser_sessions.sqlite3"
+
+    @property
+    def cognition_db_path(self) -> Path:
+        return self.data_dir / "cognition.sqlite3"
+
+    @property
+    def persona_path(self) -> Path:
+        return self.data_dir / "persona.json"
+
+    @property
+    def skill_library_path(self) -> Path:
+        return self.data_dir / "skills.json"
+
+    @property
+    def specialist_registry_path(self) -> Path:
+        return self.data_dir / "specialists.json"

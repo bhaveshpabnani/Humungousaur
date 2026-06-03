@@ -7,6 +7,7 @@ Humungousaur is the local-first agent core for Umang: a safe, extensible desktop
 This first slice focuses on trust and extensibility:
 
 - model-led structured planner with explicit command fallback
+- durable cognitive state for events, goals, persona, and reusable skills
 - file/workspace tools
 - policy checks before every action
 - SQLite audit log
@@ -112,6 +113,22 @@ python -m humungousaur memory --limit 5
 python -m humungousaur memory-search "project"
 python -m humungousaur memory-summary --period today
 python -m humungousaur memory-profile
+python -m humungousaur run "cognitive_state {}" --workspace . --planner explicit
+python -m humungousaur run "cognitive_focus_update {\"mode\":\"monitoring\",\"summary\":\"Tracking open follow-ups.\",\"pinned_context\":[\"follow-ups\"]}" --workspace . --planner explicit
+python -m humungousaur run "cognitive_knowledge_record {\"kind\":\"procedure\",\"text\":\"Use blockers-first updates for project status.\",\"source\":\"user\"}" --workspace . --planner explicit
+python -m humungousaur run "cognitive_learning_status {}" --workspace . --planner explicit
+python -m humungousaur run "cognitive_specialist_record {\"name\":\"File reviewer\",\"purpose\":\"Read files and return verified evidence.\",\"contract\":\"Use read-only tools and do not infer file contents without reading.\",\"tools\":[\"read_file\"],\"success_criteria\":[\"Requested file evidence is returned.\"]}" --workspace . --planner explicit
+python -m humungousaur run "cognitive_reflection_status {}" --workspace . --planner explicit
+python -m humungousaur run "cognitive_consolidation_status {}" --workspace . --planner explicit
+python -m humungousaur run "cognitive_recovery_status {}" --workspace . --planner explicit
+python -m humungousaur run "cognitive_wakeup_schedule {\"delay_seconds\":300,\"text\":\"check the queued follow-up\",\"response_mode\":\"silent\",\"reason\":\"keep future work visible\"}" --workspace . --planner explicit
+python -m humungousaur run "cognitive_wakeup_status {\"status\":\"scheduled\"}" --workspace . --planner explicit
+python -m humungousaur run "cognitive_wakeup_cancel {\"wakeup_id\":\"WAKEUP_ID\",\"reason\":\"no longer needed\"}" --workspace . --planner explicit
+python -m humungousaur run "create a durable goal for tomorrow's project review" --workspace . --planner model
+python -m humungousaur run "autonomous_queue_status {}" --workspace . --planner explicit
+python -m humungousaur run "autonomous_cycle_run {\"max_cycles\":1}" --workspace . --planner explicit --approve-high-risk
+python -m humungousaur autonomous-status --workspace .
+python -m humungousaur autonomous-loop --workspace . --max-cycles 10 --stop-after-idle-cycles 2
 python -m humungousaur benchmark --iterations 3
 python -m humungousaur index --rebuild --json
 python -m humungousaur serve --workspace . --port 8765
@@ -120,7 +137,9 @@ python -m unittest discover -v
 
 ## Product Direction
 
-Engineering guidance lives in `docs/ENGINEERING_PRINCIPLES.md`: broad assistant behavior should be model-led and schema-driven, with rule-based safeguards reserved for explicit fallback commands, safety checks, validation, and offline recovery.
+Engineering guidance lives in `docs/ENGINEERING_PRINCIPLES.md` and the strict global intelligence rule lives in `docs/GLOBAL_AGENT_INSTRUCTIONS.md`: broad assistant behavior should be model-led and schema-driven through OpenAI, Groq, Ollama, Grok, or another configured OpenAI-compatible client. Do not implement cognition, routing, delegation, response strategy, memory decisions, experience consolidation, persona update decisions, future wakeup/timing decisions, adaptive recovery decisions, completion judgment, proactive assistance, or task decomposition with pattern matching, regex intent maps, keyword lists, static routing tables, hardcoded constant routing, command templates, brittle handcrafted cases, or deterministic natural-language inference. Deterministic safeguards are reserved for explicit fallback commands, safety checks, schema validation, audit persistence, and evidence-boundary enforcement.
+
+The long-term human-like assistant architecture lives in `docs/COGNITIVE_AGENT_ARCHITECTURE.md`. The first cognitive runtime layers are implemented as durable event, goal/task, focus, persona, knowledge, learning, consolidation, recovery, wakeup, skill, specialist, and reflection stores; planner-visible cognitive state tools; model-led attention, reflection, consolidation, and recovery decisions with explicit fallback; and a bounded autonomous runtime loop with queued events, due wakeups, task graphs, explicit delegation, pause/interrupt boundaries, completion gates, evidence-backed learning, adaptive repair tasks, model-led experience consolidation, idle stopping, and cycle summaries.
 
 The voice wake-word module should call this runtime after transcription:
 
@@ -204,6 +223,7 @@ Core endpoints:
 - `GET /screen/captures`
 - `GET /permissions`
 - `GET /benchmarks?iterations=3&q=project`
+- `GET /autonomous/status`
 - `GET /index/status`
 - `GET /browser/sessions`
 - `GET /browser/sessions/{session_id}`
@@ -212,6 +232,7 @@ Core endpoints:
 - `POST /permissions/read-roots/remove`
 - `POST /runs`
 - `POST /runs/async`
+- `POST /autonomous/cycles`
 - `GET /runs`
 - `GET /runs/{run_id}`
 - `GET /runs/{run_id}/timeline`

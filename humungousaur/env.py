@@ -39,11 +39,7 @@ def load_workspace_environment(workspace: Path) -> dict[str, str]:
 
 def _env_candidates(workspace: Path) -> list[Path]:
     workspace = workspace.expanduser().resolve()
-    candidates = [workspace / ".env"]
-    cwd_env = Path.cwd().expanduser().resolve() / ".env"
-    if cwd_env not in candidates:
-        candidates.append(cwd_env)
-    return candidates
+    return [workspace / ".env"]
 
 
 def _clean_value(value: str) -> str:

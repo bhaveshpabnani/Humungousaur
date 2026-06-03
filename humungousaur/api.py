@@ -10,6 +10,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from humungousaur.config import AgentConfig
+from humungousaur.cognition.loop import AutonomousLoopRunner, autonomous_loop_result_to_dict, autonomous_status
 from humungousaur.indexing import FileIndex
 from humungousaur.interaction import InteractionHarness, harness_result_to_dict
 from humungousaur.memory.event_store import EventStore
@@ -96,6 +97,9 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                             query=_str_arg(query, "q", "project"),
                         )
                     )
+                    return
+                if path == "/autonomous/status":
+                    self._send_json(autonomous_status(effective_config(), limit=_int_arg(query, "limit", 10)))
                     return
                 if path == "/index/status":
                     self._send_json(FileIndex(effective_config().file_index_db_path).status(effective_config()))
@@ -231,6 +235,16 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                     )
                     worker.start()
                     self._send_json({"run_id": run_id, "status": ActionStatus.PLANNED.value}, HTTPStatus.ACCEPTED)
+                    return
+                if path == "/autonomous/cycles":
+                    run_config = request_config(effective_config(), payload)
+                    result = AutonomousLoopRunner(run_config).run(
+                        max_cycles=_payload_int(payload, "max_cycles", 1),
+                        idle_sleep_seconds=_payload_float(payload, "idle_sleep_seconds", 0.0),
+                        stop_after_idle_cycles=_payload_int(payload, "stop_after_idle_cycles", 1),
+                        approve_high_risk=bool(payload.get("approve_high_risk", False)),
+                    )
+                    self._send_json(autonomous_loop_result_to_dict(result), HTTPStatus.CREATED)
                     return
                 if path == "/index/rebuild":
                     self._send_json(FileIndex(effective_config().file_index_db_path).rebuild(effective_config()))
@@ -382,6 +396,20 @@ def _bool_arg(query: dict[str, list[str]], name: str, default: bool = False) -> 
     if raw in {"0", "false", "no", "off"}:
         return False
     return default
+
+
+def _payload_int(payload: dict[str, Any], name: str, default: int) -> int:
+    try:
+        return int(payload.get(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _payload_float(payload: dict[str, Any], name: str, default: float) -> float:
+    try:
+        return float(payload.get(name, default))
+    except (TypeError, ValueError):
+        return default
 
 
 def _approval_action(path: str) -> tuple[str, str] | None:

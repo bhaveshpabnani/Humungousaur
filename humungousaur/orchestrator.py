@@ -1,16 +1,18 @@
 ﻿from __future__ import annotations
 
+from dataclasses import asdict
 from datetime import datetime
 import json
-import os
 from typing import Callable
 
+from humungousaur.cognition import CognitiveRecorder
 from humungousaur.config import AgentConfig
 from humungousaur.env import load_workspace_environment
 from humungousaur.executor import Executor
 from humungousaur.memory.event_store import EventStore
 from humungousaur.memory.profile import build_user_profile, compact_user_profile
-from humungousaur.planning.model_clients import ModelClient, ModelClientError, OpenAICompatibleChatClient, OpenAIResponsesClient, redact_secrets
+from humungousaur.planning.model_clients import ModelClient, ModelClientError, redact_secrets
+from humungousaur.planning.model_factory import build_model_client
 from humungousaur.planning.providers import ExplicitFallbackPlanProvider, ModelPlanProvider, PlanProvider
 from humungousaur.planner import Planner
 from humungousaur.safety.approvals import ApprovalStore
@@ -60,71 +62,7 @@ class AgentOrchestrator:
         )
 
     def _build_model_client(self) -> ModelClient:
-        provider = self.config.model_provider
-        if provider == "auto":
-            provider = self._auto_model_provider()
-        if provider == "openai-responses":
-            return OpenAIResponsesClient(
-                model=self._model_name("OPENAI_MODEL", "gpt-5-mini"),
-                api_key_env=self.config.model_api_key_env or "OPENAI_API_KEY",
-                base_url=self.config.model_base_url or os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
-                timeout_seconds=self.config.model_timeout_seconds,
-            )
-        if provider == "openai-chat":
-            return OpenAICompatibleChatClient(
-                model=self._model_name("OPENAI_MODEL", "gpt-5-mini"),
-                api_key_env=self.config.model_api_key_env or "OPENAI_API_KEY",
-                base_url=self.config.model_base_url or os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
-                timeout_seconds=self.config.model_timeout_seconds,
-                name="openai-chat",
-            )
-        if provider == "groq":
-            return OpenAICompatibleChatClient(
-                model=self._model_name("GROQ_MODEL", "llama-3.3-70b-versatile"),
-                api_key_env=self.config.model_api_key_env or "GROQ_API_KEY",
-                base_url=self.config.model_base_url or os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai/v1"),
-                timeout_seconds=self.config.model_timeout_seconds,
-                name="groq-chat",
-            )
-        if provider == "grok":
-            return OpenAICompatibleChatClient(
-                model=self._model_name("XAI_MODEL", "grok-4.3"),
-                api_key_env=self.config.model_api_key_env or "XAI_API_KEY",
-                base_url=self.config.model_base_url or os.environ.get("XAI_BASE_URL", "https://api.x.ai/v1"),
-                timeout_seconds=self.config.model_timeout_seconds,
-                name="grok-chat",
-            )
-        if provider == "ollama":
-            return OpenAICompatibleChatClient(
-                model=self._model_name("OLLAMA_MODEL", "llama3.1"),
-                api_key_env=self.config.model_api_key_env or "OLLAMA_API_KEY",
-                base_url=self.config.model_base_url or os.environ.get("OLLAMA_BASE_URL") or os.environ.get("LOCAL_LLM_BASE_URL", "http://127.0.0.1:11434/v1"),
-                timeout_seconds=self.config.model_timeout_seconds,
-                name="ollama-chat",
-            )
-        if provider == "local-openai":
-            return OpenAICompatibleChatClient(
-                model=self._model_name("LOCAL_LLM_MODEL", "llama3.1"),
-                api_key_env=self.config.model_api_key_env or "LOCAL_LLM_API_KEY",
-                base_url=self.config.model_base_url or os.environ.get("LOCAL_LLM_BASE_URL", "http://127.0.0.1:11434/v1"),
-                timeout_seconds=self.config.model_timeout_seconds,
-                name="local-openai-chat",
-            )
-        raise ValueError(f"Unknown model provider: {provider}")
-
-    def _auto_model_provider(self) -> str:
-        if os.environ.get("OPENAI_API_KEY"):
-            return "openai-responses"
-        if os.environ.get("GROQ_API_KEY"):
-            return "groq"
-        return "ollama"
-
-    def _model_name(self, env_name: str, default: str) -> str:
-        if os.environ.get(env_name):
-            return os.environ[env_name]
-        if self.config.model_name and self.config.model_name != "gpt-5-mini":
-            return self.config.model_name
-        return default
+        return build_model_client(self.config)
 
     def run(
         self,
@@ -324,6 +262,7 @@ class AgentOrchestrator:
             "recent_memory": self._recent_memory_context(),
             "activity_policy": self._activity_policy_context(),
             "user_profile": compact_user_profile(build_user_profile(self.memory, limit=100), per_section=3),
+            "cognition": self._cognitive_context(),
             "browser_sessions": self._browser_context(),
             "safety": {
                 "retrieved_context_is_untrusted": True,
@@ -402,6 +341,22 @@ class AgentOrchestrator:
                 }
                 for capture in captures
             ],
+        }
+
+    def _cognitive_context(self) -> dict[str, object]:
+        snapshot = CognitiveRecorder(self.config).snapshot()
+        return {
+            "active_goals": [asdict(goal) for goal in snapshot.active_goals[:5]],
+            "active_tasks": [asdict(task) for task in snapshot.active_tasks[:8]],
+            "focus": asdict(snapshot.focus),
+            "persona": asdict(snapshot.persona),
+            "knowledge": [asdict(record) for record in snapshot.knowledge[:5]],
+            "learning": [asdict(record) for record in snapshot.learning[:5]],
+            "consolidations": [asdict(record) for record in snapshot.consolidations[:5]],
+            "wakeups": [asdict(record) for record in snapshot.wakeups[:5]],
+            "recoveries": [asdict(record) for record in snapshot.recoveries[:5]],
+            "skills": [asdict(skill) for skill in snapshot.skills[:5]],
+            "specialists": [asdict(specialist) for specialist in snapshot.specialists[:5]],
         }
 
     def _compose_response(self, request: str, results: list[ToolResult]) -> str:
@@ -511,7 +466,10 @@ class AgentOrchestrator:
         for collection_key in ("files", "matches", "summaries", "captures", "sessions", "responses", "integrations", "runs"):
             value = output.get(collection_key)
             if isinstance(value, list):
-                highlights.append(f"{collection_key}: {len(value)}")
+                if result.tool_name == "summarize_pdfs" and collection_key == "summaries":
+                    highlights.append(f"PDF summaries: {len(value)} files")
+                else:
+                    highlights.append(f"{collection_key}: {len(value)}")
                 for item in value[:8]:
                     highlights.append(redact_secrets(self._compact_output_item(item)))
         return highlights[:16]

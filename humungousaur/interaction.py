@@ -6,6 +6,7 @@ from typing import Any
 import uuid
 
 from humungousaur.config import AgentConfig
+from humungousaur.cognition import CognitiveRecorder
 from humungousaur.memory.event_store import EventStore
 from humungousaur.orchestrator import AgentOrchestrator
 from humungousaur.schemas import AgentRunResult
@@ -71,6 +72,14 @@ class InteractionHarness:
     ) -> HarnessResult:
         normalized = normalize_stimulus(stimulus)
         decision = decide_interaction(normalized, response_mode=response_mode)
+        cognitive = CognitiveRecorder(self.config)
+        cognitive_event, cognitive_decision, cognitive_goal_id, cognitive_task_id = cognitive.begin_stimulus(
+            source=normalized.source,
+            text=normalized.text,
+            metadata=normalized.metadata,
+            response_mode=response_mode,
+            event_id=normalized.stimulus_id,
+        )
         recorded_event_id = self._record_stimulus(normalized, decision) if decision.should_record_activity else None
         run: AgentRunResult | None = None
         voice_result: dict[str, Any] | None = None
@@ -83,6 +92,14 @@ class InteractionHarness:
                     run_id=run.run_id,
                     speak=decision.should_speak,
                 )
+        cognitive.finish_stimulus(
+            event_id=cognitive_event.event_id,
+            decision=cognitive_decision,
+            goal_id=cognitive_goal_id,
+            task_id=cognitive_task_id,
+            run=run,
+            voice_result=voice_result,
+        )
         result = HarnessResult(
             stimulus=normalized,
             decision=decision,
