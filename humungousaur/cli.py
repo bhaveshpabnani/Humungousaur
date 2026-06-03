@@ -339,7 +339,8 @@ def main() -> None:
             print(
                 f"Autonomous status: {len(payload['queued_events'])} queued event(s), "
                 f"{len(payload['ready_tasks'])} ready task(s), "
-                f"{len(payload['scheduled_wakeups'])} scheduled wakeup(s)."
+                f"{len(payload['scheduled_wakeups'])} scheduled wakeup(s), "
+                f"{len(payload.get('active_triggers', []))} active trigger(s)."
             )
         return
 

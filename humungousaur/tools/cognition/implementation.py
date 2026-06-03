@@ -53,9 +53,11 @@ from humungousaur.cognition import (
     SkillEvolutionStore,
     SkillStore,
     SpecialistStore,
+    TriggerStore,
     WakeupStore,
+    stimulus_from_input,
 )
-from humungousaur.cognition.models import CognitivePriority, CommitmentStatus, EnvironmentKind, FocusMode, KnowledgeKind, WakeupStatus
+from humungousaur.cognition.models import CognitivePriority, CommitmentStatus, EnvironmentKind, FocusMode, KnowledgeKind, TriggerStatus, WakeupStatus
 from humungousaur.cognition.queue import RuntimeEventQueue
 from humungousaur.cognition.wakeups import scheduled_for_from_delay, try_normalize_scheduled_for
 from humungousaur.config import AgentConfig
@@ -94,6 +96,7 @@ class CognitiveStateTool(Tool):
         environment_reviews = EnvironmentReviewStore(config.cognition_db_path).recent(limit=limit)
         priority_reviews = PriorityReviewStore(config.cognition_db_path).recent(limit=limit)
         wakeups = WakeupStore(config.cognition_db_path).scheduled(limit=limit)
+        triggers = TriggerStore(config.cognition_db_path).active(limit=limit)
         payload = {
             "active_goals": [asdict(goal) for goal in snapshot.active_goals[:limit]],
             "active_tasks": [asdict(task) for task in snapshot.active_tasks[:limit]],
@@ -103,6 +106,7 @@ class CognitiveStateTool(Tool):
             "learning": [asdict(record) for record in snapshot.learning[:limit]],
             "consolidations": [asdict(record) for record in snapshot.consolidations[:limit]],
             "wakeups": [asdict(record) for record in snapshot.wakeups[:limit]],
+            "triggers": [asdict(record) for record in snapshot.triggers[:limit]],
             "recoveries": [asdict(record) for record in snapshot.recoveries[:limit]],
             "briefings": [asdict(record) for record in snapshot.briefings[:limit]],
             "curations": [asdict(record) for record in snapshot.curations[:limit]],
@@ -130,12 +134,13 @@ class CognitiveStateTool(Tool):
             "recent_environment_reviews": [asdict(record) for record in environment_reviews],
             "recent_priority_reviews": [asdict(record) for record in priority_reviews],
             "scheduled_wakeups": [asdict(wakeup) for wakeup in wakeups],
+            "active_triggers": [asdict(trigger) for trigger in triggers],
         }
         return ToolResult(
             self.name,
             ActionStatus.SUCCEEDED,
             self.risk_level,
-            f"Cognitive state: {len(payload['active_goals'])} active goals, {len(payload['active_tasks'])} active tasks, {len(payload['knowledge'])} knowledge records, {len(payload['skills'])} skills, {len(payload['specialists'])} specialists, {len(payload['consolidations'])} consolidations, {len(payload['wakeups'])} wakeups, {len(payload['recoveries'])} recoveries, {len(payload['briefings'])} briefings, {len(payload['curations'])} curations, {len(payload['skill_evolutions'])} skill evolutions, {len(payload['persona_evolutions'])} persona evolutions, {len(payload['self_reviews'])} self-reviews, {len(payload['interaction_reviews'])} interaction reviews, {len(payload['commitments'])} commitments, {len(payload['commitment_reviews'])} commitment reviews, {len(payload['environment'])} environment records, {len(payload['environment_reviews'])} environment reviews, {len(payload['priority_reviews'])} priority reviews.",
+            f"Cognitive state: {len(payload['active_goals'])} active goals, {len(payload['active_tasks'])} active tasks, {len(payload['knowledge'])} knowledge records, {len(payload['skills'])} skills, {len(payload['specialists'])} specialists, {len(payload['consolidations'])} consolidations, {len(payload['wakeups'])} wakeups, {len(payload['triggers'])} triggers, {len(payload['recoveries'])} recoveries, {len(payload['briefings'])} briefings, {len(payload['curations'])} curations, {len(payload['skill_evolutions'])} skill evolutions, {len(payload['persona_evolutions'])} persona evolutions, {len(payload['self_reviews'])} self-reviews, {len(payload['interaction_reviews'])} interaction reviews, {len(payload['commitments'])} commitments, {len(payload['commitment_reviews'])} commitment reviews, {len(payload['environment'])} environment records, {len(payload['environment_reviews'])} environment reviews, {len(payload['priority_reviews'])} priority reviews.",
             payload,
         )
 
@@ -734,6 +739,205 @@ class CognitiveWakeupCancelTool(Tool):
         if record.status != WakeupStatus.CANCELLED:
             return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, f"Wakeup is not cancellable because it is {record.status.value}.", {"wakeup": asdict(record)})
         return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Cancelled wakeup {wakeup_id}.", {"wakeup": asdict(record)})
+
+
+class CognitiveTriggerRecordTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="cognitive_trigger_record",
+            description=(
+                "Create a durable structured trigger that queues autonomous work when exact source/type/metadata conditions match a future stimulus."
+            ),
+            risk_level=RiskLevel.MEDIUM,
+            input_schema=object_input_schema(
+                {
+                    "name": {"type": "string"},
+                    "match_source": {"type": "string", "description": "Optional exact stimulus source to match, such as activity, file_event, browser, or meeting."},
+                    "match_stimulus_type": {"type": "string", "description": "Optional exact structured stimulus type to match."},
+                    "conditions": {
+                        "type": "object",
+                        "description": "Exact structured conditions: metadata_equals, payload_equals, required_metadata_keys, required_payload_keys, or text_equals.",
+                    },
+                    "event_type": {"type": "string", "enum": ["STIMULUS", "PASSIVE_STIMULUS", "USER_REQUEST", "VOICE_REQUEST"]},
+                    "text": {"type": "string", "description": "Autonomous event text to queue when the trigger fires."},
+                    "event_source": {"type": "string", "description": "Source label for the queued autonomous event."},
+                    "priority": {"type": "string", "enum": [priority.value for priority in CognitivePriority]},
+                    "metadata": {"type": "object"},
+                    "response_mode": {"type": "string", "enum": ["text", "voice_prepare", "voice_speak", "silent"]},
+                    "goal_id": {"type": "string"},
+                    "task_id": {"type": "string"},
+                    "reason": {"type": "string"},
+                    "max_fires": {"type": "integer", "minimum": 0, "maximum": 1000000},
+                    "should_run_agent": {"type": "boolean"},
+                },
+                required=["name", "text"],
+            ),
+            capability_group="cognition",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        name = str(tool_input.get("name", "")).strip()
+        text = str(tool_input.get("text", "")).strip()
+        if not name:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Trigger name is empty.")
+        if not text:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Trigger queued text is empty.")
+        metadata = tool_input.get("metadata", {})
+        if not isinstance(metadata, dict):
+            metadata = {}
+        metadata = dict(metadata)
+        if "should_run_agent" in tool_input:
+            metadata["should_run_agent"] = bool(tool_input.get("should_run_agent"))
+        else:
+            metadata.setdefault("should_run_agent", True)
+        metadata.setdefault("intent", "task")
+        payload: dict[str, Any] = {
+            "text": text,
+            "source": str(tool_input.get("event_source", "trigger")).strip() or "trigger",
+            "metadata": metadata,
+        }
+        response_mode = str(tool_input.get("response_mode", "")).strip()
+        if response_mode:
+            payload["response_mode"] = response_mode
+        priority = CognitivePriority(str(tool_input.get("priority", CognitivePriority.NORMAL.value)).strip().lower() or CognitivePriority.NORMAL.value)
+        event_type = str(tool_input.get("event_type", "STIMULUS")).strip().upper() or "STIMULUS"
+        conditions = tool_input.get("conditions", {})
+        if not isinstance(conditions, dict):
+            conditions = {}
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would create cognitive trigger.",
+                {
+                    "name": name,
+                    "match_source": str(tool_input.get("match_source", "")).strip(),
+                    "match_stimulus_type": str(tool_input.get("match_stimulus_type", "")).strip(),
+                    "conditions": conditions,
+                    "event_type": event_type,
+                    "payload": payload,
+                },
+            )
+        trigger = TriggerStore(config.cognition_db_path).create(
+            name=name,
+            match_source=str(tool_input.get("match_source", "")).strip(),
+            match_stimulus_type=str(tool_input.get("match_stimulus_type", "")).strip(),
+            conditions=conditions,
+            event_type=event_type,
+            payload=payload,
+            priority=priority,
+            event_source=payload["source"],
+            goal_id=str(tool_input.get("goal_id", "")).strip(),
+            task_id=str(tool_input.get("task_id", "")).strip(),
+            reason=str(tool_input.get("reason", "")).strip(),
+            max_fires=int(tool_input.get("max_fires") or 0),
+        )
+        return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Recorded trigger {trigger.trigger_id}.", {"trigger": asdict(trigger)})
+
+
+class CognitiveTriggerStatusTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="cognitive_trigger_status",
+            description="Inspect active or recent structured triggers for autonomous background activation.",
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema(
+                {
+                    "status": {"type": "string", "enum": [status.value for status in TriggerStatus]},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                }
+            ),
+            capability_group="cognition",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        limit = min(int(tool_input.get("limit") or 10), 50)
+        status = str(tool_input.get("status", "")).strip().lower()
+        store = TriggerStore(config.cognition_db_path)
+        records = store.active(limit=limit) if status == TriggerStatus.ACTIVE.value else store.recent(limit=limit)
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Found {len(records)} trigger record(s).",
+            {"triggers": [asdict(record) for record in records]},
+        )
+
+
+class CognitiveTriggerEvaluateTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="cognitive_trigger_evaluate",
+            description="Evaluate exact structured triggers against one external stimulus and queue matching autonomous events.",
+            risk_level=RiskLevel.MEDIUM,
+            input_schema=object_input_schema(
+                {
+                    "source": {"type": "string"},
+                    "stimulus_type": {"type": "string"},
+                    "text": {"type": "string"},
+                    "metadata": {"type": "object"},
+                    "payload": {"type": "object"},
+                    "stimulus_id": {"type": "string"},
+                    "occurred_at": {"type": "string"},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                },
+                required=["source"],
+            ),
+            capability_group="cognition",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        limit = min(int(tool_input.get("limit") or 20), 50)
+        stimulus = stimulus_from_input(tool_input)
+        store = TriggerStore(config.cognition_db_path)
+        if config.dry_run:
+            matches = store.matching_triggers(stimulus, limit=limit)
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                f"Dry run: {len(matches)} trigger(s) would fire.",
+                {"stimulus": stimulus, "matching_triggers": [asdict(record) for record in matches]},
+            )
+        fired = store.evaluate(stimulus, RuntimeEventQueue(config.cognition_db_path), limit=limit)
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Evaluated triggers and queued {len(fired)} autonomous event(s).",
+            {"stimulus": stimulus, "fired": fired},
+        )
+
+
+class CognitiveTriggerCancelTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="cognitive_trigger_cancel",
+            description="Cancel one exact structured cognitive trigger by ID.",
+            risk_level=RiskLevel.MEDIUM,
+            input_schema=object_input_schema(
+                {
+                    "trigger_id": {"type": "string"},
+                    "reason": {"type": "string"},
+                },
+                required=["trigger_id"],
+            ),
+            capability_group="cognition",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        trigger_id = str(tool_input.get("trigger_id", "")).strip()
+        if not trigger_id:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Trigger ID is empty.")
+        if config.dry_run:
+            return ToolResult(self.name, ActionStatus.SKIPPED, self.risk_level, "Dry run: would cancel cognitive trigger.", {"trigger_id": trigger_id})
+        record = TriggerStore(config.cognition_db_path).cancel(trigger_id, reason=str(tool_input.get("reason", "")))
+        if record is None:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, f"Trigger was not found: {trigger_id}")
+        if record.status != TriggerStatus.CANCELLED:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, f"Trigger is not cancellable because it is {record.status.value}.", {"trigger": asdict(record)})
+        return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Cancelled trigger {trigger_id}.", {"trigger": asdict(record)})
 
 
 class CognitiveSkillRecordTool(Tool):
@@ -1828,6 +2032,10 @@ def default_cognition_tools() -> dict[str, Tool]:
         CognitiveWakeupScheduleTool(),
         CognitiveWakeupStatusTool(),
         CognitiveWakeupCancelTool(),
+        CognitiveTriggerRecordTool(),
+        CognitiveTriggerStatusTool(),
+        CognitiveTriggerEvaluateTool(),
+        CognitiveTriggerCancelTool(),
         CognitiveSkillRecordTool(),
         CognitiveSpecialistRecordTool(),
         CognitivePersonaUpdateTool(),
@@ -1935,6 +2143,7 @@ def _snapshot_payload(snapshot: Any, *, limit: int) -> dict[str, Any]:
         "learning": [asdict(record) for record in snapshot.learning[:limit]],
         "consolidations": [asdict(record) for record in snapshot.consolidations[:limit]],
         "wakeups": [asdict(record) for record in snapshot.wakeups[:limit]],
+        "triggers": [asdict(record) for record in snapshot.triggers[:limit]],
         "recoveries": [asdict(record) for record in snapshot.recoveries[:limit]],
         "briefings": [asdict(record) for record in snapshot.briefings[:limit]],
         "curations": [asdict(record) for record in snapshot.curations[:limit]],

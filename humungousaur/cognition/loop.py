@@ -11,6 +11,7 @@ from .autonomous import AutonomousRuntime
 from .goals import GoalStore
 from .models import AutonomousCycleResult, RuntimeCycleStatus, utc_now
 from .queue import RuntimeEventQueue
+from .triggers import TriggerStore
 from .wakeups import WakeupStore
 
 
@@ -87,12 +88,15 @@ def autonomous_status(config: AgentConfig, *, limit: int = 10) -> dict[str, Any]
     queue = RuntimeEventQueue(normalized.cognition_db_path)
     goals = GoalStore(normalized.cognition_db_path)
     wakeups = WakeupStore(normalized.cognition_db_path)
+    triggers = TriggerStore(normalized.cognition_db_path)
     memory = EventStore(normalized.memory_db_path)
     return {
         "queued_events": [asdict(event) for event in queue.queued(limit=limit)],
         "ready_tasks": [asdict(task) for task in goals.ready_tasks(limit=limit)],
         "active_goals": [asdict(goal) for goal in goals.active_goals(limit=limit)],
         "scheduled_wakeups": [asdict(wakeup) for wakeup in wakeups.scheduled(limit=limit)],
+        "active_triggers": [asdict(trigger) for trigger in triggers.active(limit=limit)],
+        "recent_triggers": [asdict(trigger) for trigger in triggers.recent(limit=limit)],
         "recent_wakeups": [asdict(wakeup) for wakeup in wakeups.recent(limit=limit)],
         "recent_cycles": memory.search("autonomous_cycle", limit=limit),
         "recent_loops": memory.search("autonomous_loop", limit=limit),

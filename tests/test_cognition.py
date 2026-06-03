@@ -71,6 +71,7 @@ from humungousaur.cognition import (
     SkillEvolutionStore,
     SkillStore,
     SpecialistStore,
+    TriggerStore,
     WakeupStore,
 )
 from humungousaur.cognition.autonomous import AutonomousRuntime
@@ -101,6 +102,7 @@ from humungousaur.cognition.models import (
     SkillLifecycleStatus,
     StepBoundaryAction,
     TaskStatus,
+    TriggerStatus,
     WakeupStatus,
 )
 from humungousaur.cognition.queue import RuntimeEventQueue
@@ -146,6 +148,10 @@ from humungousaur.tools.cognition_tools import (
     CognitiveSkillRecordTool,
     CognitiveSpecialistRecordTool,
     CognitiveStateTool,
+    CognitiveTriggerCancelTool,
+    CognitiveTriggerEvaluateTool,
+    CognitiveTriggerRecordTool,
+    CognitiveTriggerStatusTool,
     CognitiveWakeupCancelTool,
     CognitiveWakeupScheduleTool,
     CognitiveWakeupStatusTool,
@@ -206,6 +212,14 @@ class CognitiveStoreTests(unittest.TestCase):
                 payload={"text": "review tomorrow", "metadata": {"should_run_agent": True}},
                 reason="Check future work.",
             )
+            trigger = TriggerStore(db).create(
+                name="Project file changed",
+                match_source="file_event",
+                match_stimulus_type="changed",
+                conditions={"metadata_equals": {"workspace": "demo"}},
+                payload={"text": "review changed project file", "metadata": {"should_run_agent": True}},
+                reason="React to structured file change events.",
+            )
 
             self.assertEqual(CognitiveEventBus(db).recent(limit=1)[0].event_id, event.event_id)
             self.assertEqual(goal_store.recent_goals()[0].status, GoalStatus.COMPLETED)
@@ -220,6 +234,7 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertIn("short morning", persona.user_preferences[0])
             self.assertEqual(skill.confidence, 0.8)
             self.assertEqual(WakeupStore(db).scheduled()[0].wakeup_id, wakeup.wakeup_id)
+            self.assertEqual(TriggerStore(db).active()[0].trigger_id, trigger.trigger_id)
 
     def test_wakeup_store_tracks_due_fire_and_cancel(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -249,6 +264,69 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertIsNotNone(cancelled)
             self.assertEqual(cancelled.status, WakeupStatus.CANCELLED)
             self.assertEqual(store.due(), [])
+
+    def test_trigger_store_exact_structured_match_queues_autonomous_event(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            db = Path(tmp_dir) / "cognition.sqlite3"
+            store = TriggerStore(db)
+            queue = RuntimeEventQueue(db)
+            trigger = store.create(
+                name="Meeting ended follow-up",
+                match_source="meeting",
+                match_stimulus_type="ended",
+                conditions={
+                    "metadata_equals": {"workspace": "finance"},
+                    "payload_equals": {"has_transcript": True},
+                    "required_payload_keys": ["meeting_id"],
+                },
+                payload={
+                    "text": "summarize the meeting transcript and extract follow-ups",
+                    "metadata": {"should_run_agent": True, "intent": "task"},
+                    "response_mode": "silent",
+                },
+                max_fires=1,
+                reason="Structured meeting close trigger.",
+            )
+
+            skipped = store.evaluate(
+                {
+                    "source": "meeting",
+                    "stimulus_type": "ended",
+                    "metadata": {"workspace": "sales"},
+                    "payload": {"has_transcript": True, "meeting_id": "m-1"},
+                },
+                queue,
+            )
+            fired = store.evaluate(
+                {
+                    "stimulus_id": "stim-1",
+                    "source": "meeting",
+                    "stimulus_type": "ended",
+                    "metadata": {"workspace": "finance"},
+                    "payload": {"has_transcript": True, "meeting_id": "m-1"},
+                    "occurred_at": _utc_seconds_from_now(0),
+                },
+                queue,
+            )
+            fired_again = store.evaluate(
+                {
+                    "source": "meeting",
+                    "stimulus_type": "ended",
+                    "metadata": {"workspace": "finance"},
+                    "payload": {"has_transcript": True, "meeting_id": "m-1"},
+                },
+                queue,
+            )
+            updated = store.get(trigger.trigger_id)
+            queued = queue.queued()
+
+            self.assertEqual(skipped, [])
+            self.assertEqual(len(fired), 1)
+            self.assertEqual(fired_again, [])
+            self.assertIsNotNone(updated)
+            self.assertEqual(updated.fire_count, 1)
+            self.assertEqual(queued[0].payload["metadata"]["trigger_id"], trigger.trigger_id)
+            self.assertEqual(queued[0].payload["metadata"]["triggered_by"]["stimulus_id"], "stim-1")
 
     def test_model_cognitive_decision_provider_uses_structured_model_decision(self) -> None:
         client = StaticModelClient(
@@ -1262,6 +1340,30 @@ class CognitiveStoreTests(unittest.TestCase):
                 {"wakeup_id": scheduled_wakeup.output["wakeup"]["wakeup_id"], "reason": "covered in test"},
                 config,
             )
+            trigger = CognitiveTriggerRecordTool().execute(
+                {
+                    "name": "Meeting ended trigger",
+                    "match_source": "meeting",
+                    "match_stimulus_type": "ended",
+                    "conditions": {"metadata_equals": {"workspace": "test"}},
+                    "text": "summarize meeting transcript",
+                    "response_mode": "silent",
+                    "reason": "React to structured meeting-end stimuli.",
+                    "max_fires": 2,
+                },
+                config,
+            )
+            trigger_status = CognitiveTriggerStatusTool().execute({"status": "active", "limit": 5}, config)
+            trigger_evaluate = CognitiveTriggerEvaluateTool().execute(
+                {
+                    "source": "meeting",
+                    "stimulus_type": "ended",
+                    "metadata": {"workspace": "test"},
+                    "payload": {"meeting_id": "meeting-1"},
+                    "stimulus_id": "stimulus-1",
+                },
+                config,
+            )
             skill = CognitiveSkillRecordTool().execute(
                 {
                     "name": "Blocker-first update",
@@ -1292,6 +1394,10 @@ class CognitiveStoreTests(unittest.TestCase):
                 config,
             )
             state = CognitiveStateTool().execute({"limit": 5}, config)
+            trigger_cancel = CognitiveTriggerCancelTool().execute(
+                {"trigger_id": trigger.output["trigger"]["trigger_id"], "reason": "covered in test"},
+                config,
+            )
             forgotten = CognitiveKnowledgeForgetTool().execute(
                 {"knowledge_id": knowledge.output["knowledge"]["knowledge_id"], "reason": "covered by durable preference"},
                 config,
@@ -1327,6 +1433,10 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertEqual(scheduled_wakeup.status, ActionStatus.SUCCEEDED)
             self.assertEqual(wakeup_status.status, ActionStatus.SUCCEEDED)
             self.assertEqual(cancelled_wakeup.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(trigger.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(trigger_status.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(trigger_evaluate.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(trigger_cancel.status, ActionStatus.SUCCEEDED)
             self.assertEqual(skill.status, ActionStatus.SUCCEEDED)
             self.assertEqual(skill_evolution.status, ActionStatus.SUCCEEDED)
             self.assertEqual(skill_evolution_status.status, ActionStatus.SUCCEEDED)
@@ -1390,7 +1500,11 @@ class CognitiveStoreTests(unittest.TestCase):
                 priority_review.output["priority_review"]["review_id"],
             )
             self.assertEqual(wakeup_status.output["wakeups"][0]["wakeup_id"], scheduled_wakeup.output["wakeup"]["wakeup_id"])
+            self.assertEqual(trigger_status.output["triggers"][0]["trigger_id"], trigger.output["trigger"]["trigger_id"])
+            self.assertEqual(trigger_evaluate.output["fired"][0]["trigger"]["trigger_id"], trigger.output["trigger"]["trigger_id"])
+            self.assertEqual(trigger_cancel.output["trigger"]["status"], TriggerStatus.CANCELLED)
             self.assertEqual(state.output["wakeups"], [])
+            self.assertEqual(state.output["triggers"][0]["trigger_id"], trigger.output["trigger"]["trigger_id"])
             self.assertEqual(state.output["knowledge"][0]["knowledge_id"], knowledge.output["knowledge"]["knowledge_id"])
             self.assertEqual(learning.output["learning"][0]["learning_id"], learning_record.learning_id)
             self.assertEqual(state.output["persona"]["user_preferences"][0], "Prefer progress updates with blockers first.")

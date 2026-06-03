@@ -11,6 +11,8 @@ from urllib.parse import parse_qs, urlparse
 
 from humungousaur.config import AgentConfig
 from humungousaur.cognition.loop import AutonomousLoopRunner, autonomous_loop_result_to_dict, autonomous_status
+from humungousaur.cognition.queue import RuntimeEventQueue
+from humungousaur.cognition.triggers import TriggerStore, stimulus_from_input
 from humungousaur.indexing import FileIndex
 from humungousaur.interaction import InteractionHarness, harness_result_to_dict
 from humungousaur.memory.event_store import EventStore
@@ -246,6 +248,19 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                         allow_initiative=_payload_bool(payload, "allow_initiative", False),
                     )
                     self._send_json(autonomous_loop_result_to_dict(result), HTTPStatus.CREATED)
+                    return
+                if path == "/triggers/evaluate":
+                    run_config = request_config(effective_config(), payload)
+                    if not str(payload.get("source", "")).strip():
+                        self._send_error(HTTPStatus.BAD_REQUEST, "Field 'source' is required.")
+                        return
+                    stimulus = stimulus_from_input(payload)
+                    fired = TriggerStore(run_config.cognition_db_path).evaluate(
+                        stimulus,
+                        RuntimeEventQueue(run_config.cognition_db_path),
+                        limit=_payload_int(payload, "limit", 20),
+                    )
+                    self._send_json({"stimulus": stimulus, "fired": fired}, HTTPStatus.CREATED)
                     return
                 if path == "/index/rebuild":
                     self._send_json(FileIndex(effective_config().file_index_db_path).rebuild(effective_config()))

@@ -82,6 +82,8 @@ from .models import (
     SkillRecord,
     SpecialistRecord,
     TaskRecord,
+    TriggerRecord,
+    TriggerStatus,
     WakeupRecord,
     WakeupStatus,
 )
@@ -114,6 +116,7 @@ from .skill_evolution import (
 )
 from .skills import SkillStore
 from .specialists import SpecialistStore
+from .triggers import TriggerStore, stimulus_from_input, trigger_matches
 from .wakeups import WakeupStore
 
 __all__ = [
@@ -240,9 +243,14 @@ __all__ = [
     "SpecialistRecord",
     "SpecialistStore",
     "TaskRecord",
+    "TriggerRecord",
+    "TriggerStatus",
+    "TriggerStore",
     "WakeupRecord",
     "WakeupStatus",
     "WakeupStore",
     "autonomous_loop_result_to_dict",
     "autonomous_status",
+    "stimulus_from_input",
+    "trigger_matches",
 ]

@@ -155,6 +155,10 @@ def update_pending_approval_input(
 
 
 def request_config(base: AgentConfig, payload: dict[str, Any]) -> AgentConfig:
+    try:
+        model_timeout_seconds = float(payload.get("model_timeout_seconds", base.model_timeout_seconds))
+    except (TypeError, ValueError):
+        model_timeout_seconds = base.model_timeout_seconds
     return replace(
         base,
         dry_run=bool(payload.get("dry_run", base.dry_run)),
@@ -163,4 +167,5 @@ def request_config(base: AgentConfig, payload: dict[str, Any]) -> AgentConfig:
         model_name=str(payload.get("model", base.model_name)),
         model_base_url=payload.get("model_base_url", base.model_base_url),
         model_api_key_env=payload.get("model_api_key_env", base.model_api_key_env),
+        model_timeout_seconds=max(0.1, min(model_timeout_seconds, 300.0)),
     ).normalized()

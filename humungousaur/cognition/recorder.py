@@ -38,6 +38,7 @@ from .self_review import SelfReviewStore
 from .skill_evolution import SkillEvolutionStore
 from .skills import SkillStore
 from .specialists import SpecialistStore
+from .triggers import TriggerStore
 from .wakeups import WakeupStore
 
 
@@ -55,6 +56,7 @@ class CognitiveRecorder:
         self.learning = LearningEngine(self.learning_store)
         self.consolidations = ConsolidationStore(self.config.cognition_db_path)
         self.wakeups = WakeupStore(self.config.cognition_db_path)
+        self.triggers = TriggerStore(self.config.cognition_db_path)
         self.recoveries = RecoveryStore(self.config.cognition_db_path)
         self.briefings = BriefingStore(self.config.cognition_db_path)
         self.curations = CurationStore(self.config.cognition_db_path)
@@ -83,6 +85,7 @@ class CognitiveRecorder:
             learning=self.learning_store.recent(limit=8),
             consolidations=self.consolidations.recent(limit=8),
             wakeups=self.wakeups.scheduled(limit=8),
+            triggers=self.triggers.active(limit=8),
             recoveries=self.recoveries.recent(limit=8),
             briefings=self.briefings.recent(limit=8),
             curations=self.curations.recent(limit=8),

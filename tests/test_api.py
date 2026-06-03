@@ -8,7 +8,7 @@ from pathlib import Path
 
 from humungousaur.api import create_api_server
 from humungousaur.config import AgentConfig
-from humungousaur.cognition import WakeupStore, WakeupStatus
+from humungousaur.cognition import TriggerStore, WakeupStore, WakeupStatus
 from humungousaur.orchestrator import AgentOrchestrator
 from humungousaur.safety.audit import AuditLog
 from humungousaur.tools.browser_tools import BrowserSessionStore
@@ -211,6 +211,7 @@ class APITests(unittest.TestCase):
                         "model": "gpt-oss:20b",
                         "model_base_url": "http://127.0.0.1:9/v1",
                         "model_api_key_env": "LOCAL_LLM_API_KEY",
+                        "model_timeout_seconds": 0.2,
                         "dry_run": True,
                     },
                 )
@@ -255,6 +256,42 @@ class APITests(unittest.TestCase):
             self.assertEqual(loop["cycles"][1]["status"], "no_op")
             self.assertEqual(after["scheduled_wakeups"], [])
             self.assertEqual(after["recent_wakeups"][0]["status"], WakeupStatus.FIRED)
+
+    def test_api_evaluates_structured_triggers_into_autonomous_queue(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts").normalized()
+            trigger = TriggerStore(config.cognition_db_path).create(
+                name="File changed trigger",
+                match_source="file_event",
+                match_stimulus_type="changed",
+                conditions={"metadata_equals": {"workspace": "api-test"}},
+                payload={
+                    "text": "review the changed file",
+                    "metadata": {"should_run_agent": True, "intent": "task"},
+                    "response_mode": "silent",
+                },
+                reason="API trigger evaluation test.",
+            )
+
+            with running_api(config) as base_url:
+                result = api_post(
+                    base_url,
+                    "/triggers/evaluate",
+                    {
+                        "source": "file_event",
+                        "stimulus_type": "changed",
+                        "metadata": {"workspace": "api-test"},
+                        "payload": {"path": "README.md"},
+                        "stimulus_id": "stim-api",
+                    },
+                )
+                status = api_get(base_url, "/autonomous/status?limit=5")
+
+            self.assertEqual(result["fired"][0]["trigger"]["trigger_id"], trigger.trigger_id)
+            self.assertEqual(result["fired"][0]["event"]["payload"]["metadata"]["triggered_by"]["stimulus_id"], "stim-api")
+            self.assertEqual(status["queued_events"][0]["payload"]["text"], "review the changed file")
+            self.assertEqual(status["recent_triggers"][0]["fire_count"], 1)
 
     def test_api_approval_lifecycle(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

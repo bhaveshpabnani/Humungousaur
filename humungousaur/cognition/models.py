@@ -120,6 +120,12 @@ class WakeupStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class TriggerStatus(StrEnum):
+    ACTIVE = "active"
+    PAUSED = "paused"
+    CANCELLED = "cancelled"
+
+
 class RecoveryStatus(StrEnum):
     PLANNED = "planned"
     SKIPPED = "skipped"
@@ -386,6 +392,29 @@ class WakeupRecord:
 
 
 @dataclass(slots=True)
+class TriggerRecord:
+    trigger_id: str
+    name: str
+    match_source: str = ""
+    match_stimulus_type: str = ""
+    conditions: dict[str, Any] = field(default_factory=dict)
+    event_type: str = "STIMULUS"
+    payload: dict[str, Any] = field(default_factory=dict)
+    priority: CognitivePriority = CognitivePriority.NORMAL
+    event_source: str = "trigger"
+    goal_id: str = ""
+    task_id: str = ""
+    reason: str = ""
+    status: TriggerStatus = TriggerStatus.ACTIVE
+    max_fires: int = 0
+    fire_count: int = 0
+    last_fired_at: str = ""
+    last_event_id: str = ""
+    created_at: str = field(default_factory=utc_now)
+    updated_at: str = field(default_factory=utc_now)
+
+
+@dataclass(slots=True)
 class RecoveryRecord:
     recovery_id: str
     goal_id: str = ""
@@ -581,6 +610,7 @@ class CognitiveSnapshot:
     learning: list[LearningRecord] = field(default_factory=list)
     consolidations: list[ConsolidationRecord] = field(default_factory=list)
     wakeups: list[WakeupRecord] = field(default_factory=list)
+    triggers: list[TriggerRecord] = field(default_factory=list)
     recoveries: list[RecoveryRecord] = field(default_factory=list)
     briefings: list[BriefingRecord] = field(default_factory=list)
     curations: list[CurationRecord] = field(default_factory=list)

@@ -135,7 +135,11 @@ This bridge reads OpenAI/Codex `SKILL.md`, plugin metadata, and documented Codex
     - Ranks active goals, tasks, and commitments; recommends focus, next actions, deferrals, and escalations.
     - Uses model-led review over durable evidence and exact IDs rather than deterministic urgency heuristics.
 
-21. Human interaction manager
+21. Structured trigger manager
+    - Stores exact source/type/metadata/payload conditions for file events, meeting-ended hooks, browser/app signals, and other external stimuli.
+    - Queues normal autonomous runtime events when structured conditions match; it does not infer intent from natural language.
+
+22. Human interaction manager
     - Chooses text, voice preparation, spoken response, notification, progress update, approval request, or silence.
     - Supports interruption, pause/resume, and long-running progress.
 
@@ -246,6 +250,16 @@ The ninth implementation milestone adds a bounded autonomous loop:
 - cycle summaries recorded into memory for inspection
 - CLI commands for autonomous status and loop execution
 - API endpoints for autonomous status and cycle ticking
+
+The structured trigger implementation milestone adds:
+
+- durable trigger records with active, paused, and cancelled states
+- exact source, stimulus type, metadata, payload, required-key, and optional exact-text conditions
+- trigger record, status, evaluate, and exact-ID cancellation tools
+- API trigger evaluation endpoint for external file, meeting, browser, app, or activity adapters
+- matching trigger state is visible through cognitive state and autonomous status
+
+Triggers are the external-activation gate. External adapters submit structured evidence, and triggers queue ordinary runtime events only when exact declared fields match. They do not parse free text, perform regex matching, or choose intent; the queued event still flows through attention, planning, policy, approvals, execution, and reflection.
 
 The loop is the runtime heartbeat. It does not bypass attention, planning, tool policy, approvals, reflection, learning, consolidation, or wakeup gates. It only repeats the already-audited one-cycle runtime with explicit bounds and visible stop reasons.
 
