@@ -8,6 +8,7 @@ from humungousaur.config import AgentConfig
 from humungousaur.planning.model_clients import ModelClientError, StaticModelClient
 from humungousaur.schemas import ActionStatus
 from humungousaur.tools.codex_tools import (
+    CodexCliPlanTool,
     CodexCliRunTool,
     CodexCliStatusTool,
     CodexPluginCatalogTool,
@@ -99,6 +100,8 @@ class ToolTests(unittest.TestCase):
         self.assertEqual(tools["plugin_manifest"].input_schema["required"], ["name"])
         self.assertEqual(tools["codex_capability_status"].capability_group, "codex")
         self.assertEqual(tools["codex_cli_status"].capability_group, "codex")
+        self.assertEqual(tools["codex_cli_plan"].capability_group, "codex")
+        self.assertEqual(tools["codex_cli_plan"].input_schema["required"], ["objective"])
         self.assertEqual(tools["codex_cli_run"].capability_group, "codex")
         self.assertTrue(tools["codex_cli_run"].requires_approval)
         self.assertEqual(tools["codex_cli_run"].input_schema["required"], ["task"])
@@ -993,6 +996,55 @@ class ToolTests(unittest.TestCase):
             self.assertEqual(skills.status, ActionStatus.SUCCEEDED)
             self.assertEqual(skills.output["skills"][0]["name"], "computer-use")
             self.assertEqual(skills.output["skills"][0]["source"], "app")
+
+    def test_codex_cli_plan_uses_model_to_prepare_run_input(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            fake_codex = workspace / "codex.exe"
+            fake_codex.write_text("", encoding="utf-8")
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts").normalized()
+            model_payload = json.dumps(
+                {
+                    "status": "planned",
+                    "summary": "Codex should inspect the repo with a dry run first.",
+                    "should_delegate": True,
+                    "task": "Inspect this repository and summarize the next implementation step.",
+                    "working_directory": "",
+                    "sandbox": "read-only",
+                    "approval_policy": "on-request",
+                    "json_output": True,
+                    "timeout_seconds": 120,
+                    "dry_run_first": True,
+                    "resume": "",
+                    "extra_args": ["--search", "--sandbox", "danger-full-access"],
+                    "verification_steps": ["Review the final Codex output before acting."],
+                    "expected_outputs": ["Repository summary"],
+                    "risk_notes": ["Read-only delegation only."],
+                    "evidence_refs": ["model:test"],
+                    "confidence": 0.82,
+                }
+            )
+
+            with (
+                patch("humungousaur.tools.codex.implementation._codex_cli_candidates", return_value=[fake_codex]),
+                patch("humungousaur.tools.codex.implementation.build_model_client", return_value=StaticModelClient(model_payload)),
+            ):
+                planned = CodexCliPlanTool().execute(
+                    {
+                        "objective": "Use Codex CLI to inspect this repository.",
+                        "context": "Need a bounded read-only handoff.",
+                        "preferred_sandbox": "workspace-write",
+                    },
+                    config,
+                )
+
+            self.assertEqual(planned.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(planned.output["next_tool"], "codex_cli_run")
+            self.assertEqual(planned.output["codex_cli_run_input"]["task"], "Inspect this repository and summarize the next implementation step.")
+            self.assertEqual(planned.output["codex_cli_run_input"]["sandbox"], "read-only")
+            self.assertTrue(planned.output["codex_cli_run_input"]["dry_run"])
+            self.assertIn("--search", planned.output["codex_cli_run_input"]["extra_args"])
+            self.assertNotIn("danger-full-access", planned.output["codex_cli_run_input"]["extra_args"])
 
     def test_codex_cli_status_and_run_dry_run_build_exec_argv(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

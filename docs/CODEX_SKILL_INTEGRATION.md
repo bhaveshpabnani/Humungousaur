@@ -32,6 +32,7 @@ A dedicated `codex-cli` `SKILL.md` was not found in the checked Codex skill tree
 
 - `codex_capability_status` checks Codex CLI command availability.
 - `codex_cli_status` reports discovered CLI candidates and the documented delegation pattern.
+- `codex_cli_plan` asks the configured model whether Codex CLI should handle a task and returns a validated `codex_cli_run` input contract.
 - `codex_cli_run` delegates an approved task to `codex exec` with structured argv, cwd validation, sandbox/approval inputs, optional JSONL output, resume, output-file/schema flags, timeout handling, and dry-run support.
 - Native computer-use behavior is exposed through the existing OS/UI tools such as `os_windows`, `os_observe_ui`, `os_click_element`, `os_type_text`, `os_send_keys`, window tools, virtual-desktop tools, clipboard tools, and screenshots.
 
@@ -39,6 +40,7 @@ A dedicated `codex-cli` `SKILL.md` was not found in the checked Codex skill tree
 
 - `codex_capability_status`: inspect Codex home roots, plugin/skill counts, Codex CLI, Playwright, Browser Use, Chrome/Edge, computer-use Python packages, and native tool coverage.
 - `codex_cli_status`: inspect Codex CLI readiness and the documented `codex exec` delegation contract.
+- `codex_cli_plan`: model-led Codex CLI delegation planning that emits the next `codex_cli_run` payload without executing it.
 - `codex_cli_run`: approval-gated task delegation through Codex CLI non-interactive mode.
 - `codex_plugin_catalog`: list `.codex-plugin/plugin.json` manifests with skill counts, app manifests, keywords, licenses, and notable scripts such as `browser-client.mjs`.
 - `codex_skill_catalog`: list local `SKILL.md` references from workspace/user/env Codex homes and bundled app resources.
@@ -62,6 +64,7 @@ The sync tool can also receive literal catalog filters such as `source`, `query`
 ```powershell
 python -m humungousaur run "codex_capability_status {\"codex_home\":\"C:\\Users\\bhave\\.codex\"}" --workspace . --planner explicit
 python -m humungousaur run "codex_cli_status {\"probe_help\":false}" --workspace . --planner explicit
+python -m humungousaur run "codex_cli_plan {\"objective\":\"Use Codex CLI to inspect the repo and propose the next implementation step\",\"preferred_sandbox\":\"read-only\"}" --workspace . --planner explicit
 python -m humungousaur run "codex_cli_run {\"task\":\"summarize this repository structure\",\"sandbox\":\"read-only\",\"dry_run\":true}" --workspace . --planner explicit
 python -m humungousaur run "codex_plugin_catalog {\"query\":\"browser\",\"codex_home\":\"C:\\Users\\bhave\\.codex\"}" --workspace . --planner explicit
 python -m humungousaur run "codex_skill_catalog {\"query\":\"computer-use\",\"source\":\"app\"}" --workspace . --planner explicit

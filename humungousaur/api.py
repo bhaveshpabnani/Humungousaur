@@ -243,6 +243,7 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                         idle_sleep_seconds=_payload_float(payload, "idle_sleep_seconds", 0.0),
                         stop_after_idle_cycles=_payload_int(payload, "stop_after_idle_cycles", 1),
                         approve_high_risk=bool(payload.get("approve_high_risk", False)),
+                        allow_initiative=_payload_bool(payload, "allow_initiative", False),
                     )
                     self._send_json(autonomous_loop_result_to_dict(result), HTTPStatus.CREATED)
                     return
@@ -410,6 +411,15 @@ def _payload_float(payload: dict[str, Any], name: str, default: float) -> float:
         return float(payload.get(name, default))
     except (TypeError, ValueError):
         return default
+
+
+def _payload_bool(payload: dict[str, Any], name: str, default: bool) -> bool:
+    value = payload.get(name, default)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().casefold() in {"1", "true", "yes", "on"}
+    return bool(value)
 
 
 def _approval_action(path: str) -> tuple[str, str] | None:

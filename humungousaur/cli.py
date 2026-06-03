@@ -139,6 +139,7 @@ def build_parser() -> argparse.ArgumentParser:
     autonomous_loop.add_argument("--idle-sleep-seconds", type=float, default=0.0)
     autonomous_loop.add_argument("--stop-after-idle-cycles", type=int, default=1)
     autonomous_loop.add_argument("--approve-high-risk", action="store_true")
+    autonomous_loop.add_argument("--allow-initiative", action="store_true", help="Allow an idle model-led priority review to queue one next action")
     autonomous_loop.add_argument("--json", action="store_true")
     _add_planner_args(autonomous_loop)
 
@@ -348,6 +349,7 @@ def main() -> None:
             idle_sleep_seconds=args.idle_sleep_seconds,
             stop_after_idle_cycles=args.stop_after_idle_cycles,
             approve_high_risk=args.approve_high_risk,
+            allow_initiative=args.allow_initiative,
         )
         payload = autonomous_loop_result_to_dict(result)
         if args.json:

@@ -91,6 +91,7 @@ class RuntimeEventStatus(StrEnum):
 class RuntimeCycleStatus(StrEnum):
     NO_OP = "no_op"
     OBSERVED = "observed"
+    INITIATIVE_QUEUED = "initiative_queued"
     RUN_STARTED = "run_started"
     RUN_FINISHED = "run_finished"
     TASK_FINISHED = "task_finished"

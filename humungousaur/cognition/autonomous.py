@@ -31,6 +31,13 @@ from .models import (
 from .queue import RuntimeEventQueue
 from .recorder import CognitiveRecorder
 from .persona import PersonaStore
+from .priority import (
+    EvidencePriorityReviewProvider,
+    ModelPriorityReviewProvider,
+    PriorityReviewEngine,
+    PriorityReviewStatus,
+    PriorityReviewStore,
+)
 from .recovery import EvidenceRecoveryProvider, ModelRecoveryProvider, RecoveryEngine, RecoveryStatus, RecoveryStore
 from .reflection import EvidenceReflectionProvider, ModelReflectionProvider, ReflectionEngine, ReflectionStatus, ReflectionStore
 from .skills import SkillStore
@@ -98,7 +105,7 @@ class AutonomousRuntime:
         event_type = "VOICE_REQUEST" if source == "voice_transcript" else "USER_REQUEST"
         return self.queue.push(event_type, payload=payload, priority=priority, source=source)
 
-    def run_once(self, *, approve_high_risk: bool = False) -> AutonomousCycleResult:
+    def run_once(self, *, approve_high_risk: bool = False, allow_initiative: bool = False) -> AutonomousCycleResult:
         self._enqueue_due_wakeups()
         boundary_action = self.boundary.check()
         if boundary_action == StepBoundaryAction.PAUSE:
@@ -117,6 +124,10 @@ class AutonomousRuntime:
         ready = self.goals.ready_tasks(limit=1)
         if ready:
             return self._execute_task(ready[0], approve_high_risk=approve_high_risk)
+        if allow_initiative:
+            initiative = self._queue_model_initiative()
+            if initiative is not None:
+                return initiative
         return self._no_op()
 
     def _handle_event(
@@ -292,6 +303,49 @@ class AutonomousRuntime:
     def _no_op(self) -> AutonomousCycleResult:
         return self._record_cycle(AutonomousCycleResult(RuntimeCycleStatus.NO_OP, "No queued events or ready tasks."))
 
+    def _queue_model_initiative(self) -> AutonomousCycleResult | None:
+        if self.config.planner_provider != "model":
+            return None
+        review = PriorityReviewEngine(
+            PriorityReviewStore(self.config.cognition_db_path),
+            provider=_build_priority_review_provider(self.config),
+        ).review(snapshot=self.recorder.snapshot(), purpose="autonomous_idle_initiative")
+        if review.status != PriorityReviewStatus.GENERATED or not review.next_actions:
+            return self._record_cycle(
+                AutonomousCycleResult(
+                    RuntimeCycleStatus.NO_OP,
+                    review.summary or "No model-led initiative was queued.",
+                )
+            )
+        text = review.next_actions[0].strip()
+        if not text:
+            return self._record_cycle(
+                AutonomousCycleResult(RuntimeCycleStatus.NO_OP, "Priority review produced an empty initiative action.")
+            )
+        event = self.queue.push(
+            "STIMULUS",
+            payload={
+                "text": text,
+                "source": "initiative",
+                "metadata": {
+                    "should_run_agent": True,
+                    "intent": "task",
+                    "priority_review_id": review.review_id,
+                    "evidence_refs": review.evidence_refs,
+                },
+                "response_mode": "silent",
+            },
+            priority=CognitivePriority.NORMAL,
+            source="initiative",
+        )
+        return self._record_cycle(
+            AutonomousCycleResult(
+                RuntimeCycleStatus.INITIATIVE_QUEUED,
+                f"Queued model-led initiative from priority review {review.review_id}.",
+                event=event,
+            )
+        )
+
     def _enqueue_due_wakeups(self) -> list[RuntimeEvent]:
         events: list[RuntimeEvent] = []
         for wakeup in self.wakeups.due(limit=10):
@@ -420,3 +474,10 @@ def _build_recovery_provider(config: AgentConfig) -> EvidenceRecoveryProvider | 
     if config.planner_provider != "model":
         return fallback
     return ModelRecoveryProvider(build_model_client(config), fallback=fallback)
+
+
+def _build_priority_review_provider(config: AgentConfig) -> EvidencePriorityReviewProvider | ModelPriorityReviewProvider:
+    fallback = EvidencePriorityReviewProvider()
+    if config.planner_provider != "model":
+        return fallback
+    return ModelPriorityReviewProvider(build_model_client(config), fallback=fallback)

@@ -3,6 +3,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from humungousaur.cognition import (
     BriefingEngine,
@@ -109,6 +110,7 @@ from humungousaur.interaction import InteractionHarness
 from humungousaur.planning.model_clients import ModelClientError, StaticModelClient
 from humungousaur.schemas import ActionStatus, AgentRunResult, ApprovalRequest, RiskLevel, ToolResult
 from humungousaur.tools.cognition_tools import (
+    AutonomousQueueStatusTool,
     AutonomousTaskGraphCreateTool,
     CognitiveBriefingPrepareTool,
     CognitiveBriefingStatusTool,
@@ -1523,6 +1525,67 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertEqual(result.stopped_reason, "idle")
             self.assertEqual(result.cycle_count, 2)
             self.assertTrue(all(cycle.status == RuntimeCycleStatus.NO_OP for cycle in result.cycles))
+
+    def test_autonomous_runtime_can_queue_model_led_idle_initiative(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", planner_provider="model").normalized()
+            model_payload = json.dumps(
+                {
+                    "status": "generated",
+                    "summary": "Queue the next useful action.",
+                    "focus_recommendation": "Continue project implementation.",
+                    "ranked_goal_ids": [],
+                    "ranked_task_ids": [],
+                    "ranked_commitment_ids": [],
+                    "next_actions": ['read_file {"path":"README.md"}'],
+                    "deferred_items": [],
+                    "escalation_items": [],
+                    "evidence_refs": ["model:test"],
+                    "confidence": 0.8,
+                }
+            )
+
+            with patch("humungousaur.cognition.autonomous.build_model_client", return_value=StaticModelClient(model_payload)):
+                result = AutonomousRuntime(config).run_once(allow_initiative=True)
+
+            queue_status = AutonomousQueueStatusTool().execute({}, config)
+            priority_status = CognitivePriorityStatusTool().execute({}, config)
+
+            self.assertEqual(result.status, RuntimeCycleStatus.INITIATIVE_QUEUED)
+            self.assertIsNotNone(result.event)
+            self.assertEqual(result.event.payload["text"], 'read_file {"path":"README.md"}')
+            self.assertEqual(result.event.payload["source"], "initiative")
+            self.assertTrue(result.event.payload["metadata"]["should_run_agent"])
+            self.assertEqual(queue_status.output["queued_events"][0]["payload"]["metadata"]["priority_review_id"], priority_status.output["priority_reviews"][0]["review_id"])
+            self.assertEqual(priority_status.output["priority_reviews"][0]["status"], PriorityReviewStatus.GENERATED)
+
+    def test_autonomous_loop_runner_records_initiative_flag(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", planner_provider="model").normalized()
+            model_payload = json.dumps(
+                {
+                    "status": "generated",
+                    "summary": "Queue one action.",
+                    "focus_recommendation": "Continue.",
+                    "ranked_goal_ids": [],
+                    "ranked_task_ids": [],
+                    "ranked_commitment_ids": [],
+                    "next_actions": ['read_file {"path":"README.md"}'],
+                    "deferred_items": [],
+                    "escalation_items": [],
+                    "evidence_refs": ["model:test"],
+                    "confidence": 0.8,
+                }
+            )
+
+            with patch("humungousaur.cognition.autonomous.build_model_client", return_value=StaticModelClient(model_payload)):
+                result = AutonomousLoopRunner(config).run(max_cycles=1, allow_initiative=True)
+            status = autonomous_status(config, limit=3)
+
+            self.assertEqual(result.cycles[0].status, RuntimeCycleStatus.INITIATIVE_QUEUED)
+            self.assertTrue(status["recent_loops"][0]["payload"]["allow_initiative"])
 
     def test_autonomous_runtime_plans_recovery_and_completes_repair_task(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

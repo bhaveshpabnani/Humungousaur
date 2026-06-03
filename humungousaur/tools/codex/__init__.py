@@ -1,5 +1,6 @@
 from .implementation import (
     CodexCapabilityStatusTool,
+    CodexCliPlanTool,
     CodexCliRunTool,
     CodexCliStatusTool,
     CodexPluginCatalogTool,
@@ -12,6 +13,7 @@ from .implementation import (
 
 __all__ = [
     "CodexCapabilityStatusTool",
+    "CodexCliPlanTool",
     "CodexCliRunTool",
     "CodexCliStatusTool",
     "CodexPluginCatalogTool",

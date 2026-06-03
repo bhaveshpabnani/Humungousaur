@@ -41,6 +41,7 @@ class AutonomousLoopRunner:
         idle_sleep_seconds: float = 0.0,
         stop_after_idle_cycles: int = 1,
         approve_high_risk: bool = False,
+        allow_initiative: bool = False,
     ) -> AutonomousLoopResult:
         max_cycles = max(1, min(int(max_cycles), 1_000))
         stop_after_idle_cycles = max(1, min(int(stop_after_idle_cycles), max_cycles))
@@ -50,7 +51,7 @@ class AutonomousLoopRunner:
         start = monotonic()
         idle_cycles = 0
         for _index in range(max_cycles):
-            cycle = runtime.run_once(approve_high_risk=approve_high_risk)
+            cycle = runtime.run_once(approve_high_risk=approve_high_risk, allow_initiative=allow_initiative)
             result.cycles.append(cycle)
             if cycle.status == RuntimeCycleStatus.NO_OP:
                 idle_cycles += 1
@@ -73,6 +74,7 @@ class AutonomousLoopRunner:
                 "stopped_reason": result.stopped_reason,
                 "idle_cycles": result.idle_cycles,
                 "duration_ms": result.duration_ms,
+                "allow_initiative": allow_initiative,
                 "cycle_statuses": [cycle.status.value for cycle in result.cycles],
             },
         )

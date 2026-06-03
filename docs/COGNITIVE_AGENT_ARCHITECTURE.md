@@ -38,10 +38,10 @@ Codex skill integration adds a reference-to-memory bridge:
 
 ```text
 local .codex and Codex app plugins/skills -> codex catalog/read tools -> codex skill sync -> reusable cognitive skill records -> planner-visible skill context
-Codex manual / CLI surface -> codex_cli_status / codex_cli_run -> approval-gated codex exec delegation -> verified task output
+Codex manual / CLI surface -> codex_cli_status / codex_cli_plan -> codex_cli_run -> approval-gated codex exec delegation -> verified task output
 ```
 
-This bridge reads OpenAI/Codex `SKILL.md`, plugin metadata, and documented Codex CLI behavior as evidence, then writes relevant reusable Humungousaur skill records or delegates an approved task through `codex exec`. It does not create deterministic natural-language routes.
+This bridge reads OpenAI/Codex `SKILL.md`, plugin metadata, and documented Codex CLI behavior as evidence, then writes relevant reusable Humungousaur skill records or prepares a model-led Codex CLI handoff that can be executed through approved `codex exec`. It does not create deterministic natural-language routes.
 
 ## Layers
 

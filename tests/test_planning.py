@@ -1408,9 +1408,9 @@ class ModelPlanProviderTests(unittest.TestCase):
 
     def test_model_provider_can_handoff_to_codex_skill_tools(self) -> None:
         client = StaticModelClient(
-            '{"steps":[{"tool_name":"codex_plugin_catalog","tool_input":{"query":"browser","limit":10},"reason":"inspect Codex plugins"},{"tool_name":"codex_skill_catalog","tool_input":{"query":"playwright","limit":10},"reason":"find relevant Codex skills"},{"tool_name":"codex_skill_read","tool_input":{"skill_id":"user:playwright:12345678","max_chars":4000},"reason":"read selected skill"},{"tool_name":"codex_cli_run","tool_input":{"task":"summarize the repo","sandbox":"read-only","dry_run":true},"reason":"delegate through Codex exec"},{"tool_name":"codex_skill_sync","tool_input":{"profile":"core_assistant","reason":"sync useful Codex skills"},"reason":"write reusable agent skill records"}]}'
+            '{"steps":[{"tool_name":"codex_plugin_catalog","tool_input":{"query":"browser","limit":10},"reason":"inspect Codex plugins"},{"tool_name":"codex_skill_catalog","tool_input":{"query":"playwright","limit":10},"reason":"find relevant Codex skills"},{"tool_name":"codex_skill_read","tool_input":{"skill_id":"user:playwright:12345678","max_chars":4000},"reason":"read selected skill"},{"tool_name":"codex_cli_plan","tool_input":{"objective":"summarize the repo","preferred_sandbox":"read-only"},"reason":"decide Codex CLI handoff"},{"tool_name":"codex_cli_run","tool_input":{"task":"summarize the repo","sandbox":"read-only","dry_run":true},"reason":"delegate through Codex exec"},{"tool_name":"codex_skill_sync","tool_input":{"profile":"core_assistant","reason":"sync useful Codex skills"},"reason":"write reusable agent skill records"}]}'
         )
-        allowed = {"codex_plugin_catalog", "codex_skill_catalog", "codex_skill_read", "codex_cli_run", "codex_skill_sync"}
+        allowed = {"codex_plugin_catalog", "codex_skill_catalog", "codex_skill_read", "codex_cli_plan", "codex_cli_run", "codex_skill_sync"}
         provider = ModelPlanProvider(
             client,
             allowed,
@@ -1456,6 +1456,17 @@ class ModelPlanProviderTests(unittest.TestCase):
                     },
                     "capability_group": "codex",
                 },
+                "codex_cli_plan": {
+                    "description": "Use the configured model to decide whether and how Codex CLI should complete a task.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {"objective": {"type": "string"}, "preferred_sandbox": {"type": "string"}},
+                        "required": ["objective"],
+                    },
+                    "capability_group": "codex",
+                },
                 "codex_cli_run": {
                     "description": "Delegate a bounded task to Codex CLI using documented codex exec non-interactive mode.",
                     "risk_level": "high",
@@ -1475,7 +1486,7 @@ class ModelPlanProviderTests(unittest.TestCase):
 
         self.assertEqual(
             [step.tool_name for step in plan.steps],
-            ["codex_plugin_catalog", "codex_skill_catalog", "codex_skill_read", "codex_cli_run", "codex_skill_sync"],
+            ["codex_plugin_catalog", "codex_skill_catalog", "codex_skill_read", "codex_cli_plan", "codex_cli_run", "codex_skill_sync"],
         )
         self.assertEqual(plan.steps[0].source, "model:static")
 

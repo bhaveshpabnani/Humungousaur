@@ -1775,6 +1775,10 @@ class AutonomousCycleRunTool(Tool):
                 {
                     "max_cycles": {"type": "integer", "minimum": 1, "maximum": 5},
                     "approve_inner_high_risk": {"type": "boolean"},
+                    "allow_initiative": {
+                        "type": "boolean",
+                        "description": "Allow an idle model-led priority review to queue one interruptible next action.",
+                    },
                 }
             ),
             capability_group="cognition",
@@ -1783,18 +1787,25 @@ class AutonomousCycleRunTool(Tool):
     def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
         max_cycles = min(int(tool_input.get("max_cycles") or 1), 5)
         approve_inner = bool(tool_input.get("approve_inner_high_risk", False))
+        allow_initiative = bool(tool_input.get("allow_initiative", False))
         if config.dry_run:
-            return ToolResult(self.name, ActionStatus.SKIPPED, self.risk_level, "Dry run: would run autonomous cycle.", {"max_cycles": max_cycles})
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would run autonomous cycle.",
+                {"max_cycles": max_cycles, "allow_initiative": allow_initiative},
+            )
         from humungousaur.cognition.autonomous import AutonomousRuntime
 
         runtime = AutonomousRuntime(config)
-        results = [runtime.run_once(approve_high_risk=approve_inner) for _ in range(max_cycles)]
+        results = [runtime.run_once(approve_high_risk=approve_inner, allow_initiative=allow_initiative) for _ in range(max_cycles)]
         return ToolResult(
             self.name,
             ActionStatus.SUCCEEDED,
             self.risk_level,
             f"Ran {len(results)} autonomous cycle(s).",
-            {"cycles": [asdict(result) for result in results]},
+            {"cycles": [asdict(result) for result in results], "allow_initiative": allow_initiative},
         )
 
 
