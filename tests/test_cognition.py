@@ -22,6 +22,7 @@ from humungousaur.cognition import (
     EvidenceCurationProvider,
     EvidenceEnvironmentReviewProvider,
     EvidenceInteractionReviewProvider,
+    EvidencePriorityReviewProvider,
     EvidenceReflectionProvider,
     ExplicitCognitiveDecisionProvider,
     FocusStore,
@@ -43,12 +44,15 @@ from humungousaur.cognition import (
     ModelCurationProvider,
     ModelEnvironmentReviewProvider,
     ModelInteractionReviewProvider,
+    ModelPriorityReviewProvider,
     ModelReflectionProvider,
     EvidencePersonaEvolutionProvider,
     ModelPersonaEvolutionProvider,
     PersonaEvolutionEngine,
     PersonaEvolutionStore,
     PersonaStore,
+    PriorityReviewEngine,
+    PriorityReviewStore,
     RecoveryEngine,
     RecoveryStore,
     EvidenceRecoveryProvider,
@@ -78,6 +82,7 @@ from humungousaur.cognition.models import (
     CurationStatus,
     EnvironmentKind,
     EnvironmentReviewStatus,
+    PriorityReviewStatus,
     CognitiveEvent,
     CognitivePriority,
     CognitiveSnapshot,
@@ -128,6 +133,8 @@ from humungousaur.tools.cognition_tools import (
     CognitivePersonaEvolveTool,
     CognitivePersonaEvolutionStatusTool,
     CognitivePersonaUpdateTool,
+    CognitivePriorityReviewTool,
+    CognitivePriorityStatusTool,
     CognitiveReflectionStatusTool,
     CognitiveRecoveryStatusTool,
     CognitiveSelfReviewStatusTool,
@@ -949,6 +956,59 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertTrue(any(record.kind == EnvironmentKind.CONSTRAINT for record in records))
             self.assertEqual(EnvironmentReviewStore(db).recent()[0].review_id, review.review_id)
 
+    def test_model_priority_review_provider_ranks_exact_work_items(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            db = Path(tmp_dir) / "cognition.sqlite3"
+            goals = GoalStore(db)
+            goal = goals.create_goal("Ship priority review", ["Priority review is tested."])
+            task = goals.add_task(goal.goal_id, "Run focused tests", metadata={"success_criteria": ["Focused tests pass."]})
+            commitment = CommitmentStore(db).create(
+                title="Report priority review verification status.",
+                source="test",
+                evidence_refs=[f"task:{task.task_id}"],
+                confidence=0.7,
+            )
+            environment = EnvironmentStore(db).create(
+                kind=EnvironmentKind.CONSTRAINT,
+                title="Full suite required",
+                summary="Broad cognition changes should pass the full unit suite before commit.",
+                source="test",
+                evidence_refs=[f"goal:{goal.goal_id}"],
+                confidence=0.82,
+            )
+            snapshot = CognitiveSnapshot(active_goals=[goal], active_tasks=[task], commitments=[commitment], environment=[environment])
+            client = StaticModelClient(
+                json.dumps(
+                    {
+                        "status": "generated",
+                        "summary": "Prioritize verification before claiming the iteration complete.",
+                        "focus_recommendation": "Stay focused on the priority review slice until tests and commit evidence exist.",
+                        "ranked_goal_ids": [goal.goal_id, "goal-missing"],
+                        "ranked_task_ids": [task.task_id, "task-missing"],
+                        "ranked_commitment_ids": [commitment.commitment_id, "commitment-missing"],
+                        "next_actions": ["Run focused tests, then the full suite."],
+                        "deferred_items": ["Defer unrelated architecture slices until this commit is clean."],
+                        "escalation_items": ["Ask the user only if verification becomes blocked."],
+                        "evidence_refs": [f"goal:{goal.goal_id}", f"task:{task.task_id}", f"commitment:{commitment.commitment_id}", f"environment:{environment.environment_id}"],
+                        "confidence": 0.79,
+                    }
+                )
+            )
+            engine = PriorityReviewEngine(
+                PriorityReviewStore(db),
+                provider=ModelPriorityReviewProvider(client, fallback=EvidencePriorityReviewProvider()),
+            )
+
+            review = engine.review(snapshot=snapshot, purpose="initiative_review")
+
+            self.assertEqual(review.status, PriorityReviewStatus.GENERATED)
+            self.assertEqual(review.ranked_goal_ids, [goal.goal_id])
+            self.assertEqual(review.ranked_task_ids, [task.task_id])
+            self.assertEqual(review.ranked_commitment_ids, [commitment.commitment_id])
+            self.assertIn("verification", review.summary)
+            self.assertIn("full suite", review.next_actions[0])
+            self.assertEqual(PriorityReviewStore(db).recent()[0].review_id, review.review_id)
+
     def test_model_consolidation_provider_falls_back_without_inferred_memory(self) -> None:
         class FailingClient(StaticModelClient):
             def complete_json(self, prompt, schema):
@@ -1169,6 +1229,11 @@ class CognitiveStoreTests(unittest.TestCase):
                 config,
             )
             environment_status = CognitiveEnvironmentStatusTool().execute({"include_archived": True, "limit": 5}, config)
+            priority_review = CognitivePriorityReviewTool().execute(
+                {"purpose": "daily_planning", "include_state": True, "limit": 5},
+                config,
+            )
+            priority_status = CognitivePriorityStatusTool().execute({"limit": 5}, config)
             learning_record = LearningStore(config.cognition_db_path).append(
                 goal_id=goal.output["goal"]["goal_id"],
                 outcome="observed",
@@ -1248,6 +1313,8 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertEqual(environment_update.status, ActionStatus.SUCCEEDED)
             self.assertEqual(environment_review.status, ActionStatus.SUCCEEDED)
             self.assertEqual(environment_status.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(priority_review.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(priority_status.status, ActionStatus.SUCCEEDED)
             self.assertEqual(learning.status, ActionStatus.SUCCEEDED)
             self.assertEqual(consolidation.status, ActionStatus.SUCCEEDED)
             self.assertEqual(recovery.status, ActionStatus.SUCCEEDED)
@@ -1278,6 +1345,7 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertEqual(state.output["commitment_reviews"][0]["status"], CommitmentReviewStatus.SKIPPED)
             self.assertEqual(state.output["environment"][0]["kind"], EnvironmentKind.WORKSPACE)
             self.assertEqual(state.output["environment_reviews"][0]["status"], EnvironmentReviewStatus.SKIPPED)
+            self.assertEqual(state.output["priority_reviews"][0]["status"], PriorityReviewStatus.SKIPPED)
             self.assertEqual(briefing.output["briefing"]["status"], BriefingStatus.SKIPPED)
             self.assertEqual(briefing_status.output["briefings"][0]["briefing_id"], briefing.output["briefing"]["briefing_id"])
             self.assertEqual(curation.output["curation"]["status"], CurationStatus.SKIPPED)
@@ -1314,6 +1382,11 @@ class CognitiveStoreTests(unittest.TestCase):
                 environment_review.output["environment_review"]["review_id"],
             )
             self.assertEqual(environment_status.output["environment"][0]["environment_id"], environment.output["environment"]["environment_id"])
+            self.assertEqual(priority_review.output["priority_review"]["status"], PriorityReviewStatus.SKIPPED)
+            self.assertEqual(
+                priority_status.output["priority_reviews"][0]["review_id"],
+                priority_review.output["priority_review"]["review_id"],
+            )
             self.assertEqual(wakeup_status.output["wakeups"][0]["wakeup_id"], scheduled_wakeup.output["wakeup"]["wakeup_id"])
             self.assertEqual(state.output["wakeups"], [])
             self.assertEqual(state.output["knowledge"][0]["knowledge_id"], knowledge.output["knowledge"]["knowledge_id"])

@@ -514,6 +514,37 @@ class ModelPlanProviderTests(unittest.TestCase):
         self.assertEqual(plan.steps[0].tool_input["max_updates"], 5)
         self.assertEqual(plan.steps[0].source, "model:static")
 
+    def test_model_provider_can_handoff_to_cognitive_priority_review_tool(self) -> None:
+        client = StaticModelClient(
+            '{"steps":[{"tool_name":"cognitive_priority_review","tool_input":{"purpose":"daily_planning","include_state":false},"reason":"rank goals, commitments, and next actions from evidence"}]}'
+        )
+        provider = ModelPlanProvider(
+            client,
+            {"cognitive_priority_review"},
+            tool_catalog={
+                "cognitive_priority_review": {
+                    "description": "Run a model-led priority and initiative review across active goals, tasks, commitments, environment records, wakeups, risks, and memory.",
+                    "risk_level": "medium",
+                    "requires_approval": False,
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "purpose": {"type": "string"},
+                            "include_state": {"type": "boolean"},
+                        },
+                    },
+                    "capability_group": "cognition",
+                }
+            },
+            fallback=ExplicitFallbackPlanProvider(),
+        )
+
+        plan = provider.plan("decide what matters most next across my current goals and follow-ups")
+
+        self.assertEqual(plan.steps[0].tool_name, "cognitive_priority_review")
+        self.assertEqual(plan.steps[0].tool_input["purpose"], "daily_planning")
+        self.assertEqual(plan.steps[0].source, "model:static")
+
     def test_model_provider_can_handoff_to_activity_tools(self) -> None:
         client = StaticModelClient(
             '{"steps":[{"tool_name":"activity_search","tool_input":{"query":"meeting notes","limit":5},"reason":"search native activity memory"}]}'

@@ -66,6 +66,8 @@ from .models import (
     PersonaEvolutionRecord,
     PersonaEvolutionStatus,
     PersonaProfile,
+    PriorityReviewRecord,
+    PriorityReviewStatus,
     RecoveryRecord,
     RecoveryStatus,
     ReflectionRecord,
@@ -92,6 +94,13 @@ from .persona_evolution import (
     PersonaEvolutionStore,
 )
 from .persona import PersonaStore
+from .priority import (
+    EvidencePriorityReviewProvider,
+    ModelPriorityReviewProvider,
+    PriorityReviewEngine,
+    PriorityReviewProvider,
+    PriorityReviewStore,
+)
 from .recovery import EvidenceRecoveryProvider, ModelRecoveryProvider, RecoveryEngine, RecoveryProvider, RecoveryStore
 from .recorder import CognitiveRecorder
 from .reflection import EvidenceReflectionProvider, ModelReflectionProvider, ReflectionEngine, ReflectionProvider, ReflectionStore
@@ -187,6 +196,13 @@ __all__ = [
     "PersonaEvolutionStore",
     "PersonaProfile",
     "PersonaStore",
+    "EvidencePriorityReviewProvider",
+    "ModelPriorityReviewProvider",
+    "PriorityReviewEngine",
+    "PriorityReviewProvider",
+    "PriorityReviewRecord",
+    "PriorityReviewStatus",
+    "PriorityReviewStore",
     "EvidenceRecoveryProvider",
     "ModelRecoveryProvider",
     "RecoveryEngine",

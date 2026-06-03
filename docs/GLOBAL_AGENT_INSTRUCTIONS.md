@@ -6,7 +6,7 @@ These instructions apply to Humungousaur's cognitive, planning, routing, delegat
 
 Do not implement assistant intelligence anywhere through pattern-based, regex-based, keyword-list-based, hardcoded-constant-based, broad deterministic matching, deterministic natural-language handling, or static routing tables.
 
-This is a strict global constraint for every cognitive and agentic layer. No code path may decide user meaning, tool intent, task type, response mode, specialist delegation, completion status, memory importance, wakeup timing, skill choice, skill evolution, persona evolution, self-confidence, uncertainty, autonomy posture, interaction review, commitment extraction, commitment resolution, environment modeling, constraint detection, resource detection, risk detection, opportunity detection, relationship state, user-state hypotheses, conversation state, or recovery strategy by matching strings, regexes, fixed constants, command templates, keyword buckets, or brittle handcrafted cases.
+This is a strict global constraint for every cognitive and agentic layer. No code path may decide user meaning, tool intent, task type, response mode, specialist delegation, completion status, memory importance, wakeup timing, skill choice, skill evolution, persona evolution, self-confidence, uncertainty, autonomy posture, interaction review, commitment extraction, commitment resolution, environment modeling, constraint detection, resource detection, risk detection, opportunity detection, priority ranking, initiative, focus selection, relationship state, user-state hypotheses, conversation state, or recovery strategy by matching strings, regexes, fixed constants, command templates, keyword buckets, or brittle handcrafted cases.
 
 This prohibition covers:
 
@@ -27,6 +27,7 @@ This prohibition covers:
 - interaction review, relationship-state, user-state hypothesis, collaboration-posture, and conversation-state decisions
 - commitment extraction, commitment resolution, follow-up inference, promise tracking, and obligation status decisions
 - environment modeling, constraint detection, resource detection, risk detection, opportunity detection, and live-signal interpretation
+- priority ranking, initiative, urgency, importance, focus selection, deferral, and escalation decisions
 - autonomous continuation decisions
 - complex-task completion judgment
 - adaptive recovery decisions

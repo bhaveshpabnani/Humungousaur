@@ -197,6 +197,12 @@ class EnvironmentReviewStatus(StrEnum):
     FAILED = "failed"
 
 
+class PriorityReviewStatus(StrEnum):
+    GENERATED = "generated"
+    SKIPPED = "skipped"
+    FAILED = "failed"
+
+
 @dataclass(slots=True)
 class CognitiveEvent:
     event_id: str
@@ -547,6 +553,24 @@ class EnvironmentReviewRecord:
 
 
 @dataclass(slots=True)
+class PriorityReviewRecord:
+    review_id: str
+    status: PriorityReviewStatus = PriorityReviewStatus.SKIPPED
+    purpose: str = ""
+    summary: str = ""
+    focus_recommendation: str = ""
+    ranked_goal_ids: list[str] = field(default_factory=list)
+    ranked_task_ids: list[str] = field(default_factory=list)
+    ranked_commitment_ids: list[str] = field(default_factory=list)
+    next_actions: list[str] = field(default_factory=list)
+    deferred_items: list[str] = field(default_factory=list)
+    escalation_items: list[str] = field(default_factory=list)
+    evidence_refs: list[str] = field(default_factory=list)
+    confidence: float = 0.0
+    created_at: str = field(default_factory=utc_now)
+
+
+@dataclass(slots=True)
 class CognitiveSnapshot:
     active_goals: list[GoalRecord] = field(default_factory=list)
     active_tasks: list[TaskRecord] = field(default_factory=list)
@@ -567,6 +591,7 @@ class CognitiveSnapshot:
     commitment_reviews: list[CommitmentReviewRecord] = field(default_factory=list)
     environment: list[EnvironmentRecord] = field(default_factory=list)
     environment_reviews: list[EnvironmentReviewRecord] = field(default_factory=list)
+    priority_reviews: list[PriorityReviewRecord] = field(default_factory=list)
     skills: list[SkillRecord] = field(default_factory=list)
     specialists: list[SpecialistRecord] = field(default_factory=list)
 

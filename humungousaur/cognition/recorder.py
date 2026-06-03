@@ -32,6 +32,7 @@ from .models import (
 )
 from .persona_evolution import PersonaEvolutionStore
 from .persona import PersonaStore
+from .priority import PriorityReviewStore
 from .recovery import RecoveryStore
 from .self_review import SelfReviewStore
 from .skill_evolution import SkillEvolutionStore
@@ -65,6 +66,7 @@ class CognitiveRecorder:
         self.commitment_reviews = CommitmentReviewStore(self.config.cognition_db_path)
         self.environment = EnvironmentStore(self.config.cognition_db_path)
         self.environment_reviews = EnvironmentReviewStore(self.config.cognition_db_path)
+        self.priority_reviews = PriorityReviewStore(self.config.cognition_db_path)
         self.persona = PersonaStore(self.config.persona_path)
         self.skills = SkillStore(self.config.skill_library_path)
         self.specialists = SpecialistStore(self.config.specialist_registry_path)
@@ -92,6 +94,7 @@ class CognitiveRecorder:
             commitment_reviews=self.commitment_reviews.recent(limit=8),
             environment=self.environment.list(limit=8),
             environment_reviews=self.environment_reviews.recent(limit=8),
+            priority_reviews=self.priority_reviews.recent(limit=8),
             skills=self.skills.list(limit=8),
             specialists=self.specialists.list(limit=8),
         )

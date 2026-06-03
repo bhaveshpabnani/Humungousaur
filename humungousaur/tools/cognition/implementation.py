@@ -22,6 +22,7 @@ from humungousaur.cognition import (
     EvidenceEnvironmentReviewProvider,
     EvidenceInteractionReviewProvider,
     EvidencePersonaEvolutionProvider,
+    EvidencePriorityReviewProvider,
     EvidenceSelfReviewProvider,
     EvidenceSkillEvolutionProvider,
     FocusStore,
@@ -36,11 +37,14 @@ from humungousaur.cognition import (
     ModelEnvironmentReviewProvider,
     ModelInteractionReviewProvider,
     ModelPersonaEvolutionProvider,
+    ModelPriorityReviewProvider,
     ModelSelfReviewProvider,
     ModelSkillEvolutionProvider,
     PersonaStore,
     PersonaEvolutionEngine,
     PersonaEvolutionStore,
+    PriorityReviewEngine,
+    PriorityReviewStore,
     RecoveryStore,
     ReflectionStore,
     SelfReviewEngine,
@@ -88,6 +92,7 @@ class CognitiveStateTool(Tool):
         commitment_reviews = CommitmentReviewStore(config.cognition_db_path).recent(limit=limit)
         environment = EnvironmentStore(config.cognition_db_path).list(limit=limit)
         environment_reviews = EnvironmentReviewStore(config.cognition_db_path).recent(limit=limit)
+        priority_reviews = PriorityReviewStore(config.cognition_db_path).recent(limit=limit)
         wakeups = WakeupStore(config.cognition_db_path).scheduled(limit=limit)
         payload = {
             "active_goals": [asdict(goal) for goal in snapshot.active_goals[:limit]],
@@ -109,6 +114,7 @@ class CognitiveStateTool(Tool):
             "commitment_reviews": [asdict(record) for record in snapshot.commitment_reviews[:limit]],
             "environment": [asdict(record) for record in snapshot.environment[:limit]],
             "environment_reviews": [asdict(record) for record in snapshot.environment_reviews[:limit]],
+            "priority_reviews": [asdict(record) for record in snapshot.priority_reviews[:limit]],
             "skills": [asdict(skill) for skill in snapshot.skills[:limit]],
             "specialists": [asdict(specialist) for specialist in snapshot.specialists[:limit]],
             "recent_reflections": [asdict(reflection) for reflection in reflections],
@@ -122,13 +128,14 @@ class CognitiveStateTool(Tool):
             "recent_commitment_reviews": [asdict(record) for record in commitment_reviews],
             "recent_environment": [asdict(record) for record in environment],
             "recent_environment_reviews": [asdict(record) for record in environment_reviews],
+            "recent_priority_reviews": [asdict(record) for record in priority_reviews],
             "scheduled_wakeups": [asdict(wakeup) for wakeup in wakeups],
         }
         return ToolResult(
             self.name,
             ActionStatus.SUCCEEDED,
             self.risk_level,
-            f"Cognitive state: {len(payload['active_goals'])} active goals, {len(payload['active_tasks'])} active tasks, {len(payload['knowledge'])} knowledge records, {len(payload['skills'])} skills, {len(payload['specialists'])} specialists, {len(payload['consolidations'])} consolidations, {len(payload['wakeups'])} wakeups, {len(payload['recoveries'])} recoveries, {len(payload['briefings'])} briefings, {len(payload['curations'])} curations, {len(payload['skill_evolutions'])} skill evolutions, {len(payload['persona_evolutions'])} persona evolutions, {len(payload['self_reviews'])} self-reviews, {len(payload['interaction_reviews'])} interaction reviews, {len(payload['commitments'])} commitments, {len(payload['commitment_reviews'])} commitment reviews, {len(payload['environment'])} environment records, {len(payload['environment_reviews'])} environment reviews.",
+            f"Cognitive state: {len(payload['active_goals'])} active goals, {len(payload['active_tasks'])} active tasks, {len(payload['knowledge'])} knowledge records, {len(payload['skills'])} skills, {len(payload['specialists'])} specialists, {len(payload['consolidations'])} consolidations, {len(payload['wakeups'])} wakeups, {len(payload['recoveries'])} recoveries, {len(payload['briefings'])} briefings, {len(payload['curations'])} curations, {len(payload['skill_evolutions'])} skill evolutions, {len(payload['persona_evolutions'])} persona evolutions, {len(payload['self_reviews'])} self-reviews, {len(payload['interaction_reviews'])} interaction reviews, {len(payload['commitments'])} commitments, {len(payload['commitment_reviews'])} commitment reviews, {len(payload['environment'])} environment records, {len(payload['environment_reviews'])} environment reviews, {len(payload['priority_reviews'])} priority reviews.",
             payload,
         )
 
@@ -1493,6 +1500,78 @@ class CognitiveEnvironmentStatusTool(Tool):
         )
 
 
+class CognitivePriorityReviewTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="cognitive_priority_review",
+            description="Run a model-led priority and initiative review across active goals, tasks, commitments, environment records, wakeups, risks, and memory.",
+            risk_level=RiskLevel.MEDIUM,
+            input_schema=object_input_schema(
+                {
+                    "purpose": {"type": "string", "description": "Priority review purpose such as current_work, initiative_review, handoff, daily_planning, or before_response."},
+                    "include_state": {"type": "boolean", "description": "Attach the bounded raw cognitive state used for the review."},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                }
+            ),
+            capability_group="cognition",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        purpose = str(tool_input.get("purpose", "priority_review")).strip() or "priority_review"
+        limit = min(int(tool_input.get("limit") or 20), 50)
+        recorder = CognitiveRecorder(config)
+        snapshot = recorder.snapshot()
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would run cognitive priority review.",
+                {"purpose": purpose, "state": _snapshot_payload(snapshot, limit=limit)},
+            )
+        engine = PriorityReviewEngine(
+            PriorityReviewStore(config.cognition_db_path),
+            provider=_build_priority_review_provider(config),
+        )
+        review = engine.review(snapshot=snapshot, purpose=purpose)
+        payload: dict[str, Any] = {"priority_review": asdict(review)}
+        if bool(tool_input.get("include_state", False)) or review.status.value == "skipped":
+            payload["state"] = _snapshot_payload(snapshot, limit=limit)
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Cognitive priority review {review.status.value}: {review.summary}",
+            payload,
+        )
+
+
+class CognitivePriorityStatusTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="cognitive_priority_status",
+            description="Inspect recent cognitive priority, focus, and initiative review records.",
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema(
+                {
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                }
+            ),
+            capability_group="cognition",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        limit = min(int(tool_input.get("limit") or 10), 50)
+        reviews = PriorityReviewStore(config.cognition_db_path).recent(limit=limit)
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Found {len(reviews)} cognitive priority review record(s).",
+            {"priority_reviews": [asdict(record) for record in reviews]},
+        )
+
+
 class CognitiveReflectionStatusTool(Tool):
     def __init__(self) -> None:
         super().__init__(
@@ -1755,6 +1834,8 @@ def default_cognition_tools() -> dict[str, Tool]:
         CognitiveEnvironmentUpdateTool(),
         CognitiveEnvironmentReviewTool(),
         CognitiveEnvironmentStatusTool(),
+        CognitivePriorityReviewTool(),
+        CognitivePriorityStatusTool(),
         CognitiveReflectionStatusTool(),
         AutonomousEventSubmitTool(),
         AutonomousQueueStatusTool(),
@@ -1826,6 +1907,13 @@ def _build_environment_review_provider(config: AgentConfig) -> EvidenceEnvironme
     return ModelEnvironmentReviewProvider(build_model_client(config), fallback=fallback)
 
 
+def _build_priority_review_provider(config: AgentConfig) -> EvidencePriorityReviewProvider | ModelPriorityReviewProvider:
+    fallback = EvidencePriorityReviewProvider()
+    if config.planner_provider != "model":
+        return fallback
+    return ModelPriorityReviewProvider(build_model_client(config), fallback=fallback)
+
+
 def _snapshot_payload(snapshot: Any, *, limit: int) -> dict[str, Any]:
     return {
         "active_goals": [asdict(goal) for goal in snapshot.active_goals[:limit]],
@@ -1847,6 +1935,7 @@ def _snapshot_payload(snapshot: Any, *, limit: int) -> dict[str, Any]:
         "commitment_reviews": [asdict(record) for record in snapshot.commitment_reviews[:limit]],
         "environment": [asdict(record) for record in snapshot.environment[:limit]],
         "environment_reviews": [asdict(record) for record in snapshot.environment_reviews[:limit]],
+        "priority_reviews": [asdict(record) for record in snapshot.priority_reviews[:limit]],
         "skills": [asdict(record) for record in snapshot.skills[:limit]],
         "specialists": [asdict(record) for record in snapshot.specialists[:limit]],
     }
