@@ -1406,6 +1406,79 @@ class ModelPlanProviderTests(unittest.TestCase):
         )
         self.assertEqual(plan.steps[0].source, "model:static")
 
+    def test_model_provider_can_handoff_to_codex_skill_tools(self) -> None:
+        client = StaticModelClient(
+            '{"steps":[{"tool_name":"codex_plugin_catalog","tool_input":{"query":"browser","limit":10},"reason":"inspect Codex plugins"},{"tool_name":"codex_skill_catalog","tool_input":{"query":"playwright","limit":10},"reason":"find relevant Codex skills"},{"tool_name":"codex_skill_read","tool_input":{"skill_id":"user:playwright:12345678","max_chars":4000},"reason":"read selected skill"},{"tool_name":"codex_cli_run","tool_input":{"task":"summarize the repo","sandbox":"read-only","dry_run":true},"reason":"delegate through Codex exec"},{"tool_name":"codex_skill_sync","tool_input":{"profile":"core_assistant","reason":"sync useful Codex skills"},"reason":"write reusable agent skill records"}]}'
+        )
+        allowed = {"codex_plugin_catalog", "codex_skill_catalog", "codex_skill_read", "codex_cli_run", "codex_skill_sync"}
+        provider = ModelPlanProvider(
+            client,
+            allowed,
+            tool_catalog={
+                "codex_plugin_catalog": {
+                    "description": "List local Codex plugin manifests.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {"query": {"type": "string"}, "limit": {"type": "integer"}},
+                    },
+                    "capability_group": "codex",
+                },
+                "codex_skill_catalog": {
+                    "description": "List local Codex SKILL.md references.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {"query": {"type": "string"}, "limit": {"type": "integer"}},
+                    },
+                    "capability_group": "codex",
+                },
+                "codex_skill_read": {
+                    "description": "Read a bounded local Codex SKILL.md reference by exact skill_id.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {"skill_id": {"type": "string"}, "max_chars": {"type": "integer"}},
+                        "required": ["skill_id"],
+                    },
+                    "capability_group": "codex",
+                },
+                "codex_skill_sync": {
+                    "description": "Write relevant Codex SKILL.md references as reusable agent skill records.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {"profile": {"type": "string"}, "reason": {"type": "string"}},
+                    },
+                    "capability_group": "codex",
+                },
+                "codex_cli_run": {
+                    "description": "Delegate a bounded task to Codex CLI using documented codex exec non-interactive mode.",
+                    "risk_level": "high",
+                    "requires_approval": True,
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {"task": {"type": "string"}, "sandbox": {"type": "string"}, "dry_run": {"type": "boolean"}},
+                        "required": ["task"],
+                    },
+                    "capability_group": "codex",
+                },
+            },
+            fallback=ExplicitFallbackPlanProvider(),
+        )
+
+        plan = provider.plan("read useful Codex skills and integrate them into the agent")
+
+        self.assertEqual(
+            [step.tool_name for step in plan.steps],
+            ["codex_plugin_catalog", "codex_skill_catalog", "codex_skill_read", "codex_cli_run", "codex_skill_sync"],
+        )
+        self.assertEqual(plan.steps[0].source, "model:static")
+
 
 class PlannerFacadeTests(unittest.TestCase):
     def test_planner_passes_context_to_provider(self) -> None:

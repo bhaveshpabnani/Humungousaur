@@ -6,6 +6,15 @@ from unittest.mock import patch
 
 from humungousaur.config import AgentConfig
 from humungousaur.schemas import ActionStatus
+from humungousaur.tools.codex_tools import (
+    CodexCliRunTool,
+    CodexCliStatusTool,
+    CodexPluginCatalogTool,
+    CodexSkillCatalogTool,
+    CodexSkillImportTool,
+    CodexSkillReadTool,
+    CodexSkillSyncTool,
+)
 from humungousaur.tools.file_tools import (
     ListFilesTool,
     ListPDFsTool,
@@ -87,6 +96,20 @@ class ToolTests(unittest.TestCase):
         self.assertEqual(tools["python_interpreter_session"].input_schema["required"], ["session_id"])
         self.assertEqual(tools["plugin_manifests"].capability_group, "plugins")
         self.assertEqual(tools["plugin_manifest"].input_schema["required"], ["name"])
+        self.assertEqual(tools["codex_capability_status"].capability_group, "codex")
+        self.assertEqual(tools["codex_cli_status"].capability_group, "codex")
+        self.assertEqual(tools["codex_cli_run"].capability_group, "codex")
+        self.assertTrue(tools["codex_cli_run"].requires_approval)
+        self.assertEqual(tools["codex_cli_run"].input_schema["required"], ["task"])
+        self.assertEqual(tools["codex_plugin_catalog"].capability_group, "codex")
+        self.assertIn("codex_home", tools["codex_plugin_catalog"].input_schema["properties"])
+        self.assertIn("app", tools["codex_plugin_catalog"].input_schema["properties"]["source"]["enum"])
+        self.assertEqual(tools["codex_skill_catalog"].capability_group, "codex")
+        self.assertIn("query", tools["codex_skill_catalog"].input_schema["properties"])
+        self.assertIn("app", tools["codex_skill_catalog"].input_schema["properties"]["source"]["enum"])
+        self.assertEqual(tools["codex_skill_read"].input_schema["required"], ["skill_id"])
+        self.assertEqual(tools["codex_skill_import"].input_schema["required"], ["skill_ids", "reason"])
+        self.assertIn("profile", tools["codex_skill_sync"].input_schema["properties"])
         self.assertIn("url", tools["browser_open"].input_schema["properties"])
         self.assertEqual(tools["browser_open"].capability_group, "browser")
         self.assertIn("limit", tools["browser_sessions"].input_schema["properties"])
@@ -887,6 +910,139 @@ class ToolTests(unittest.TestCase):
             self.assertEqual(detail.output["manifest"]["tools"][0]["execution_status"], "blocked_until_trusted_runtime")
             self.assertEqual(blocked.status, ActionStatus.BLOCKED)
             self.assertIn("trusted plugin runtime", blocked.summary)
+
+    def test_codex_plugin_and_skill_catalog_imports_local_codex_references(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            plugin_root = workspace / ".codex" / "plugins" / "cache" / "openai-bundled" / "browser" / "1.0"
+            skill_root = plugin_root / "skills" / "control-in-app-browser"
+            script_root = plugin_root / "scripts"
+            (plugin_root / ".codex-plugin").mkdir(parents=True)
+            skill_root.mkdir(parents=True)
+            script_root.mkdir(parents=True)
+            (plugin_root / ".codex-plugin" / "plugin.json").write_text(
+                json.dumps(
+                    {
+                        "name": "browser",
+                        "version": "1.0",
+                        "description": "Control the in-app browser from Codex.",
+                        "license": "Proprietary",
+                        "keywords": ["browser", "automation", "chrome"],
+                        "skills": "./skills/",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (script_root / "browser-client.mjs").write_text("export const browserClient = true;\n", encoding="utf-8")
+            (skill_root / "SKILL.md").write_text(
+                "---\nname: control-in-app-browser\ndescription: Control the in-app Browser.\n---\n# Browser\nUse for browser automation.\n",
+                encoding="utf-8",
+            )
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts").normalized()
+
+            plugins = CodexPluginCatalogTool().execute({"query": "browser", "source": "workspace"}, config)
+            catalog = CodexSkillCatalogTool().execute({"query": "in-app", "source": "workspace"}, config)
+            skill_id = catalog.output["skills"][0]["skill_id"]
+            read = CodexSkillReadTool().execute({"skill_id": skill_id}, config)
+            imported = CodexSkillImportTool().execute({"skill_ids": [skill_id], "reason": "Enable browser skill guidance."}, config)
+
+            self.assertEqual(plugins.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(plugins.output["plugins"][0]["name"], "browser")
+            self.assertEqual(plugins.output["plugins"][0]["skill_count"], 1)
+            self.assertIn("scripts/browser-client.mjs", plugins.output["plugins"][0]["scripts"])
+            self.assertEqual(catalog.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(catalog.output["skills"][0]["name"], "control-in-app-browser")
+            self.assertIn("# Browser", read.output["content"])
+            self.assertEqual(imported.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(imported.output["imported_skills"][0]["name"], "Codex: control-in-app-browser")
+
+    def test_codex_catalog_discovers_bundled_app_resource_skills(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            app_root = workspace / "codex-app-resources"
+            plugin_root = app_root / "plugins" / "openai-bundled" / "plugins" / "computer-use"
+            skill_root = plugin_root / "skills" / "computer-use"
+            (plugin_root / ".codex-plugin").mkdir(parents=True)
+            skill_root.mkdir(parents=True)
+            (plugin_root / ".codex-plugin" / "plugin.json").write_text(
+                json.dumps(
+                    {
+                        "name": "computer-use",
+                        "version": "26.0",
+                        "description": "Control Windows desktop apps from Codex.",
+                        "skills": "./skills/",
+                        "keywords": ["computer-use", "windows"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (skill_root / "SKILL.md").write_text(
+                "---\nname: computer-use\ndescription: Use Computer Use for Microsoft Windows apps.\n---\n# Computer Use\n",
+                encoding="utf-8",
+            )
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts").normalized()
+
+            with patch("humungousaur.tools.codex.implementation._codex_app_resource_roots", return_value=[app_root]):
+                plugins = CodexPluginCatalogTool().execute({"query": "computer", "source": "app"}, config)
+                skills = CodexSkillCatalogTool().execute({"query": "computer-use", "source": "app"}, config)
+
+            self.assertEqual(plugins.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(plugins.output["plugins"][0]["name"], "computer-use")
+            self.assertEqual(plugins.output["plugins"][0]["skill_count"], 1)
+            self.assertEqual(skills.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(skills.output["skills"][0]["name"], "computer-use")
+            self.assertEqual(skills.output["skills"][0]["source"], "app")
+
+    def test_codex_cli_status_and_run_dry_run_build_exec_argv(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            fake_codex = workspace / "codex.exe"
+            fake_codex.write_text("", encoding="utf-8")
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", dry_run=True).normalized()
+
+            with patch("humungousaur.tools.codex.implementation._codex_cli_candidates", return_value=[fake_codex]):
+                status = CodexCliStatusTool().execute({}, config)
+                run = CodexCliRunTool().execute(
+                    {
+                        "task": "summarize this repository",
+                        "sandbox": "workspace-write",
+                        "approval_policy": "never",
+                        "json_output": True,
+                        "extra_args": ["--search", "--sandbox", "danger-full-access"],
+                    },
+                    config,
+                )
+
+            self.assertEqual(status.status, ActionStatus.SUCCEEDED)
+            self.assertTrue(status.output["cli"]["available"])
+            self.assertEqual(run.status, ActionStatus.SKIPPED)
+            self.assertEqual(run.output["argv"][:2], [str(fake_codex), "exec"])
+            self.assertIn("--sandbox", run.output["argv"])
+            self.assertIn("workspace-write", run.output["argv"])
+            self.assertIn("--ask-for-approval", run.output["argv"])
+            self.assertIn("never", run.output["argv"])
+            self.assertIn("--json", run.output["argv"])
+            self.assertIn("--search", run.output["argv"])
+            self.assertNotIn("danger-full-access", run.output["argv"])
+            self.assertEqual(run.output["argv"][-1], "summarize this repository")
+
+    def test_codex_skill_sync_writes_relevant_agent_skill_records(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            skill_root = workspace / ".codex" / "plugins" / "cache" / "openai-bundled" / "browser" / "1.0" / "skills" / "control-in-app-browser"
+            skill_root.mkdir(parents=True)
+            (skill_root / "SKILL.md").write_text(
+                "---\nname: control-in-app-browser\ndescription: Control the in-app Browser.\n---\n# Browser\nUse Browser before Computer Use fallback.\n",
+                encoding="utf-8",
+            )
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts").normalized()
+
+            synced = CodexSkillSyncTool().execute({"profile": "browser_computer", "reason": "Bring browser skills into agent."}, config)
+
+            self.assertEqual(synced.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(synced.output["synced_skills"][0]["name"], "Codex Browser workflow")
+            self.assertIn("browser_live_open", synced.output["synced_skills"][0]["tools"])
+            self.assertIsInstance(synced.output["missing"], list)
 
 
 if __name__ == "__main__":

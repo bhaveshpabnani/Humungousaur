@@ -34,6 +34,15 @@ event/wakeup -> perception -> attention -> cognitive decision -> goal/task updat
       -> recovery/learning/consolidation/curation/skill-evolution/persona-evolution/self-review/interaction-review/commitment-review/environment-review/priority-review -> briefing/response/schedule/sleep/continue
 ```
 
+Codex skill integration adds a reference-to-memory bridge:
+
+```text
+local .codex and Codex app plugins/skills -> codex catalog/read tools -> codex skill sync -> reusable cognitive skill records -> planner-visible skill context
+Codex manual / CLI surface -> codex_cli_status / codex_cli_run -> approval-gated codex exec delegation -> verified task output
+```
+
+This bridge reads OpenAI/Codex `SKILL.md`, plugin metadata, and documented Codex CLI behavior as evidence, then writes relevant reusable Humungousaur skill records or delegates an approved task through `codex exec`. It does not create deterministic natural-language routes.
+
 ## Layers
 
 1. Event bus
