@@ -101,8 +101,8 @@ This file tracks the external agent projects referenced in `task.md` and turns t
 ### P2: Interaction Harness And Voice Response
 
 - Native `InteractionHarness` accepts direct user text, voice transcripts, passive activity, accessibility, OCR, audio, browser, and system stimuli.
-- Harness decisions are explicit: `respond`, `analyze`, `observe`, or `ignore`.
-- Direct user and voice stimuli run the agent immediately; passive stimuli are recorded and only trigger an agent run when upstream structured metadata marks them as actionable.
+- Harness decisions are projected from the cognitive attention decision: `respond`, `analyze`, `observe`, `monitor`, or `ignore`.
+- Direct user and voice stimuli normally run the agent; passive stimuli are recorded, and a configured model can escalate them from structured evidence, current goals, and metadata while fallback stays conservative.
 - Response modes are `text`, `voice_prepare`, `voice_speak`, and `silent`.
 - Native voice tools are implemented: `voice_response_prepare`, `voice_speak`, and `voice_responses`.
 - Add streaming partial responses, barge-in/cancel support, and richer voice provider configuration.

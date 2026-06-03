@@ -182,8 +182,9 @@ python -m voice_wakeup dispatch-activation .\artifacts\recordings\20260601_15000
 
 Interaction harness behavior:
 
-- Direct user text and voice transcripts are treated as explicit stimuli and normally produce a response.
-- Passive activity, accessibility, OCR, browser, and audio snippets are recorded as context; they only trigger analysis when upstream structured metadata marks them as actionable.
+- The harness consumes the model-led cognitive attention decision as its source of truth for `respond`, `analyze`, `observe`, `monitor`, or `ignore`.
+- Direct user text and voice transcripts are explicit stimuli and normally produce a response.
+- Passive activity, accessibility, OCR, browser, and audio snippets are recorded as context; a configured model can escalate them from structured evidence, current goals, and metadata, while model-unavailable fallback remains conservative.
 - Response modes are `text`, `voice_prepare`, `voice_speak`, and `silent`.
 - `voice_response_prepare` writes a local spoken-response artifact under the data directory; `voice_speak` uses the local OS TTS engine where supported.
 

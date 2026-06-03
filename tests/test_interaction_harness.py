@@ -1,9 +1,12 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from humungousaur.config import AgentConfig
 from humungousaur.interaction import InteractionHarness, Stimulus, decide_interaction, normalize_stimulus
+from humungousaur.planning.model_clients import StaticModelClient
 from humungousaur.schemas import ActionStatus
 from humungousaur.tools.voice_tools import VoiceResponsePrepareTool, VoiceSpeakTool, VoiceResponsesTool, list_voice_responses
 
@@ -46,6 +49,51 @@ class InteractionHarnessTests(unittest.TestCase):
         self.assertEqual(result.decision.decision, "analyze")
         self.assertEqual(result.decision.response_mode, "silent")
         self.assertIsNotNone(result.run)
+
+    def test_harness_uses_model_led_cognitive_decision_for_passive_stimulus(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            (workspace / "README.md").write_text("# Model Harness\n\nA local assistant runtime.", encoding="utf-8")
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", planner_provider="model").normalized()
+            cognitive_response = json.dumps(
+                {
+                    "action": "analyze",
+                    "request": 'read_file {"path":"README.md"}',
+                    "response_mode": "silent",
+                    "reason": "Model judged the passive event relevant to active work.",
+                    "should_run_agent": True,
+                    "should_record_event": True,
+                    "memory_action": "remember",
+                    "focus_goal_id": "",
+                    "create_goal_title": "Inspect passive activity",
+                    "create_task_title": "Read referenced README",
+                    "stay_warm": False,
+                    "next_wakeup_seconds": None,
+                }
+            )
+            planner_response = json.dumps(
+                {
+                    "steps": [
+                        {
+                            "tool_name": "read_file",
+                            "tool_input": {"path": "README.md"},
+                            "reason": "Read the referenced file.",
+                        }
+                    ]
+                }
+            )
+
+            with (
+                patch("humungousaur.cognition.recorder.build_model_client", return_value=StaticModelClient(cognitive_response)),
+                patch("humungousaur.orchestrator.build_model_client", return_value=StaticModelClient(planner_response)),
+            ):
+                result = InteractionHarness(config).handle({"source": "activity", "text": "User paused on README."})
+
+        self.assertEqual(result.decision.decision, "analyze")
+        self.assertEqual(result.decision.reason, "Model judged the passive event relevant to active work.")
+        self.assertTrue(result.decision.should_run_agent)
+        self.assertIsNotNone(result.run)
+        self.assertIn("README.md", result.run.final_response)
 
     def test_voice_stimulus_prepares_spoken_response(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

@@ -202,6 +202,7 @@ The fifth implementation milestone adds model-led attention:
 - explicit fallback limited to source type, response mode, and structured metadata
 - no natural-language guessing when the model is unavailable
 - planner-visible decisions still flow through the same goal/task, focus, memory, learning, and audit stores
+- the interaction harness projects this cognitive decision into run/voice/recording behavior instead of making a separate source-type decision
 
 Attention is the activation gate. It decides whether an event should be answered, analyzed, observed, ignored, or monitored before planning and execution. The model provider owns generalized event interpretation; deterministic fallback exists only so direct commands, structured passive action metadata, and model-unavailable safe stops continue to work safely.
 

@@ -7,6 +7,7 @@ import uuid
 
 from humungousaur.config import AgentConfig
 from humungousaur.cognition import CognitiveRecorder
+from humungousaur.cognition.models import CognitiveDecision
 from humungousaur.memory.event_store import EventStore
 from humungousaur.orchestrator import AgentOrchestrator
 from humungousaur.schemas import AgentRunResult
@@ -23,7 +24,7 @@ STIMULUS_SOURCES = {
     "browser",
     "system",
 }
-HARNESS_DECISIONS = {"respond", "analyze", "observe", "ignore"}
+HARNESS_DECISIONS = {"respond", "analyze", "observe", "ignore", "monitor"}
 RESPONSE_MODES = {"text", "voice_prepare", "voice_speak", "silent"}
 ACTION_INTENTS = {"task", "question", "request", "respond", "analyze", "act"}
 
@@ -71,7 +72,6 @@ class InteractionHarness:
         approve_high_risk: bool = False,
     ) -> HarnessResult:
         normalized = normalize_stimulus(stimulus)
-        decision = decide_interaction(normalized, response_mode=response_mode)
         cognitive = CognitiveRecorder(self.config)
         cognitive_event, cognitive_decision, cognitive_goal_id, cognitive_task_id = cognitive.begin_stimulus(
             source=normalized.source,
@@ -80,6 +80,7 @@ class InteractionHarness:
             response_mode=response_mode,
             event_id=normalized.stimulus_id,
         )
+        decision = harness_decision_from_cognitive(cognitive_decision, normalized)
         recorded_event_id = self._record_stimulus(normalized, decision) if decision.should_record_activity else None
         run: AgentRunResult | None = None
         voice_result: dict[str, Any] | None = None
@@ -180,6 +181,8 @@ def normalize_stimulus(stimulus: Stimulus | dict[str, Any] | str) -> Stimulus:
 
 
 def decide_interaction(stimulus: Stimulus, response_mode: str | None = None) -> HarnessDecision:
+    """Explicit fallback helper for compatibility; InteractionHarness uses CognitiveRecorder decisions."""
+
     mode = (response_mode or str(stimulus.metadata.get("response_mode", "")) or _default_response_mode(stimulus)).strip().lower()
     if mode not in RESPONSE_MODES:
         mode = _default_response_mode(stimulus)
@@ -223,6 +226,24 @@ def decide_interaction(stimulus: Stimulus, response_mode: str | None = None) -> 
     )
 
 
+def harness_decision_from_cognitive(decision: CognitiveDecision, stimulus: Stimulus) -> HarnessDecision:
+    should_run = bool(decision.should_run_agent)
+    mode = _normalized_response_mode(decision.response_mode, stimulus) if should_run else "silent"
+    request = decision.request.strip() if should_run else ""
+    if should_run and not request:
+        request = stimulus.text.strip()
+    return HarnessDecision(
+        decision=decision.action.value if decision.action.value in HARNESS_DECISIONS else "observe",
+        request=request,
+        response_mode=mode,
+        reason=decision.reason,
+        should_run_agent=should_run,
+        should_record_activity=bool(decision.should_record_event),
+        should_prepare_voice=should_run and mode in {"voice_prepare", "voice_speak"},
+        should_speak=should_run and mode == "voice_speak",
+    )
+
+
 def harness_result_to_dict(result: HarnessResult) -> dict[str, Any]:
     payload = {
         "stimulus": asdict(result.stimulus),
@@ -241,6 +262,11 @@ def _default_response_mode(stimulus: Stimulus) -> str:
     if stimulus.source == "voice_transcript":
         return "voice_prepare"
     return "text"
+
+
+def _normalized_response_mode(response_mode: str, stimulus: Stimulus) -> str:
+    mode = str(response_mode or "").strip().lower()
+    return mode if mode in RESPONSE_MODES else _default_response_mode(stimulus)
 
 
 def _metadata_requests_action(stimulus: Stimulus) -> bool:

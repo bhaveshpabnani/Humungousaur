@@ -26,7 +26,7 @@ Umang integrates the reference projects as capability sources with explicit adap
 4. Voice and interaction harness
    - Status: native implementation started.
    - Evidence: Windows-Use includes provider-backed STT/TTS, while Umang's voice-wakeup bridge already dispatches transcripts into the daemon.
-   - Implemented: `InteractionHarness` for explicit stimulus decisions, direct voice/user response handling, passive activity observe/analyze policy, local spoken-response artifacts, Windows SAPI `voice_speak`, `voice_responses`, CLI `stimulus`, API `/stimuli`, and harness-backed voice activation.
+   - Implemented: `InteractionHarness` projects model-led cognitive attention decisions into direct voice/user response handling, passive activity observe/analyze/monitor policy, local spoken-response artifacts, Windows SAPI `voice_speak`, `voice_responses`, CLI `stimulus`, API `/stimuli`, and harness-backed voice activation.
    - Next: push-to-talk UI, interruption/cancel flow, streaming partial responses, provider-backed STT/TTS configuration, and passive capture adapters.
 
 5. Open Interpreter adapter
