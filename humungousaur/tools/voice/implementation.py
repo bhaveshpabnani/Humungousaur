@@ -181,6 +181,11 @@ class VoiceResponsePrepareTool(Tool):
                     "run_id": {"type": "string", "description": "Optional agent run id this spoken response belongs to."},
                     "stimulus_id": {"type": "string", "description": "Optional stimulus id this spoken response belongs to."},
                     "tts_provider": {"type": "string", "enum": sorted(VOICE_PREPARE_PROVIDERS), "description": "Optional speech artifact provider."},
+                    "fallback_tts_provider": {
+                        "type": "string",
+                        "enum": ["artifact", "system"],
+                        "description": "Optional fallback provider if the requested cloud TTS provider fails.",
+                    },
                     "rate": {"type": "integer", "minimum": -10, "maximum": 10, "description": "Windows SAPI speech rate for system synthesis."},
                     "volume": {"type": "integer", "minimum": 0, "maximum": 100, "description": "Windows SAPI speech volume for system synthesis."},
                     "voice_id": {"type": "string", "description": "ElevenLabs voice id. Can also be set with ELEVENLABS_VOICE_ID."},
@@ -201,6 +206,7 @@ class VoiceResponsePrepareTool(Tool):
         if channel not in {"voice", "notification", "transcript"}:
             return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Unsupported voice response channel.", error="Unsupported voice response channel.")
         provider = _voice_prepare_provider(tool_input)
+        fallback_provider = _voice_prepare_fallback_provider(tool_input, provider)
         payload = {
             "response_id": f"voice-response-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}",
             "created_at": datetime.now(timezone.utc).isoformat(),
@@ -235,8 +241,31 @@ class VoiceResponsePrepareTool(Tool):
                 )
             except SpeechProviderError as exc:
                 payload["provider_error"] = classify_provider_error(str(exc))
-                return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Text-to-speech provider failed.", payload, str(exc))
-            payload["audio"] = synthesis.as_dict()
+                if fallback_provider == "system":
+                    try:
+                        synthesis = windows_sapi_synthesize_to_file(
+                            text,
+                            _voice_audio_dir(config),
+                            response_id=payload["response_id"],
+                            rate=max(-10, min(int(tool_input.get("rate") or 0), 10)),
+                            volume=max(0, min(int(tool_input.get("volume") or 100), 100)),
+                            timeout_seconds=float(config.model_timeout_seconds or 60.0),
+                        )
+                    except SpeechProviderError as fallback_exc:
+                        payload["fallback_provider_error"] = classify_provider_error(str(fallback_exc))
+                        return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Text-to-speech provider and fallback failed.", payload, str(fallback_exc))
+                    payload["audio"] = synthesis.as_dict()
+                    payload["primary_tts_provider"] = provider
+                    payload["tts_provider"] = "system"
+                    payload["fallback_tts_provider"] = "system"
+                elif fallback_provider == "artifact":
+                    payload["primary_tts_provider"] = provider
+                    payload["tts_provider"] = "artifact"
+                    payload["fallback_tts_provider"] = "artifact"
+                else:
+                    return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Text-to-speech provider failed.", payload, str(exc))
+            else:
+                payload["audio"] = synthesis.as_dict()
         if provider == "system":
             try:
                 synthesis = windows_sapi_synthesize_to_file(
@@ -460,6 +489,13 @@ def _bounded_text(text: str, max_chars: int) -> str:
 def _voice_prepare_provider(tool_input: dict[str, Any]) -> str:
     provider = str(tool_input.get("tts_provider") or tool_input.get("provider") or _env_tts_provider() or "artifact").strip().lower()
     return provider if provider in VOICE_PREPARE_PROVIDERS else "artifact"
+
+
+def _voice_prepare_fallback_provider(tool_input: dict[str, Any], primary_provider: str) -> str:
+    provider = str(tool_input.get("fallback_tts_provider") or "").strip().lower()
+    if provider not in {"artifact", "system"} or provider == primary_provider:
+        return ""
+    return provider
 
 
 def _voice_speak_provider(tool_input: dict[str, Any]) -> str:

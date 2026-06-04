@@ -4,6 +4,7 @@ import base64
 import ctypes
 import ctypes.wintypes
 import json
+import os
 import platform
 import subprocess
 import uuid
@@ -1397,7 +1398,7 @@ def virtual_desktops_snapshot(limit: int = 20) -> dict[str, Any]:
     active_window = active_window_snapshot()
     active_handle = int(active_window.get("window_handle") or 0)
     try:
-        result = _run_powershell_ui_action(_virtual_desktops_script(handles=handles, active_handle=active_handle))
+        result = _run_powershell_ui_action(_virtual_desktops_script(handles=handles, active_handle=active_handle), timeout_seconds=25)
         if result.get("status") != "ok":
             raise RuntimeError(result.get("error", "Virtual desktop query failed."))
         raw = result.get("stdout", "")
@@ -1457,7 +1458,7 @@ def start_apps_snapshot(query: str = "", limit: int = 50) -> dict[str, Any]:
         payload["error"] = "Windows app listing is currently implemented for Windows only."
         return payload
     try:
-        result = _run_powershell_ui_action(_start_apps_script(query=query, limit=max(1, min(limit, 100))))
+        result = _run_powershell_ui_action(_start_apps_script(query=query, limit=max(1, min(limit, 100))), timeout_seconds=25)
         if result.get("status") != "ok":
             raise RuntimeError(result.get("error", "Windows app listing failed."))
         raw = result.get("stdout", "")
@@ -1468,9 +1469,41 @@ def start_apps_snapshot(query: str = "", limit: int = 50) -> dict[str, Any]:
         payload["apps"] = apps if isinstance(apps, list) else []
         payload["query"] = query
     except Exception as exc:
-        payload["supported"] = False
-        payload["error"] = str(exc)
+        fallback_apps = _start_menu_shortcut_apps(query=query, limit=max(1, min(limit, 100)))
+        payload["apps"] = fallback_apps
+        payload["query"] = query
+        payload["source"] = "windows_start_menu_shortcuts"
+        payload["degraded"] = True
+        payload["provider_error"] = str(exc)
+        payload["note"] = "Get-StartApps was unavailable or slow; returned Start-menu shortcut metadata instead."
     return payload
+
+
+def _start_menu_shortcut_apps(query: str = "", limit: int = 50) -> list[dict[str, Any]]:
+    roots = [
+        Path(os.environ.get("PROGRAMDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs",
+        Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs",
+    ]
+    normalized_query = query.lower()
+    apps: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for root in roots:
+        if not root.exists():
+            continue
+        for shortcut in root.rglob("*.lnk"):
+            name = shortcut.stem.strip()
+            app_id = str(shortcut)
+            haystack = f"{name} {app_id}".lower()
+            if normalized_query and normalized_query not in haystack:
+                continue
+            key = haystack
+            if key in seen:
+                continue
+            seen.add(key)
+            apps.append({"name": name, "app_id": app_id, "source": "start_menu_shortcut"})
+            if len(apps) >= limit:
+                return apps
+    return apps
 
 
 def observe_foreground_ui(max_elements: int = 40, include_values: bool = False) -> dict[str, Any]:
@@ -1620,7 +1653,7 @@ def _is_uuid(value: str) -> bool:
     return True
 
 
-def _run_powershell_ui_action(script: str) -> dict[str, str]:
+def _run_powershell_ui_action(script: str, *, timeout_seconds: float = 10) -> dict[str, str]:
     encoded = base64.b64encode(script.encode("utf-16le")).decode("ascii")
     try:
         completed = subprocess.run(
@@ -1635,7 +1668,7 @@ def _run_powershell_ui_action(script: str) -> dict[str, str]:
             ],
             capture_output=True,
             text=True,
-            timeout=10,
+            timeout=timeout_seconds,
         )
     except Exception as exc:
         return {"status": "failed", "error": str(exc)}
@@ -1880,43 +1913,55 @@ public interface IVirtualDesktopManager {{
     int MoveWindowToDesktop(IntPtr topLevelWindow, ref Guid desktopId);
 }}
 
+public class VirtualDesktopWindowPayload {{
+    public long window_handle {{ get; set; }}
+    public string desktop_id {{ get; set; }}
+    public bool on_current_desktop {{ get; set; }}
+    public int get_hr {{ get; set; }}
+    public int current_hr {{ get; set; }}
+    public string error {{ get; set; }}
+
+    public VirtualDesktopWindowPayload() {{
+        desktop_id = "";
+        error = "";
+    }}
+}}
+
 public static class UmangVirtualDesktop {{
     public static IVirtualDesktopManager Create() {{
         return (IVirtualDesktopManager)new CVirtualDesktopManager();
     }}
+
+    public static VirtualDesktopWindowPayload InspectWindow(long handleValue) {{
+        var manager = Create();
+        var handle = new IntPtr(handleValue);
+        var desktopId = Guid.Empty;
+        var onCurrent = false;
+        var getHr = manager.GetWindowDesktopId(handle, out desktopId);
+        var currentHr = manager.IsWindowOnCurrentVirtualDesktop(handle, out onCurrent);
+        var payload = new VirtualDesktopWindowPayload {{
+            window_handle = handleValue,
+            on_current_desktop = false,
+            get_hr = getHr,
+            current_hr = currentHr
+        }};
+        if (getHr == 0) {{ payload.desktop_id = desktopId.ToString(); }}
+        if (currentHr == 0) {{ payload.on_current_desktop = onCurrent; }}
+        if (getHr != 0 || currentHr != 0) {{ payload.error = "VirtualDesktopManager returned non-zero HRESULT."; }}
+        return payload;
+    }}
 }}
 "@
-$manager = [UmangVirtualDesktop]::Create()
-
-function DesktopPayload([int64]$handleValue) {{
-    $handle = [IntPtr]$handleValue
-    $desktopId = [Guid]::Empty
-    $onCurrent = $false
-    $getHr = $manager.GetWindowDesktopId($handle, [ref]$desktopId)
-    $currentHr = $manager.IsWindowOnCurrentVirtualDesktop($handle, [ref]$onCurrent)
-    $payload = [ordered]@{{
-        window_handle = $handleValue
-        desktop_id = ""
-        on_current_desktop = $false
-        get_hr = $getHr
-        current_hr = $currentHr
-        error = ""
-    }}
-    if ($getHr -eq 0) {{ $payload.desktop_id = $desktopId.ToString() }}
-    if ($currentHr -eq 0) {{ $payload.on_current_desktop = [bool]$onCurrent }}
-    if ($getHr -ne 0 -or $currentHr -ne 0) {{ $payload.error = "VirtualDesktopManager returned non-zero HRESULT." }}
-    return $payload
-}}
 
 $windows = @()
 foreach ($handleValue in @({handles_literal})) {{
     if ($handleValue -gt 0) {{
-        $windows += DesktopPayload ([int64]$handleValue)
+        $windows += [UmangVirtualDesktop]::InspectWindow([int64]$handleValue)
     }}
 }}
 $activePayload = [ordered]@{{}}
 if ({active_handle} -gt 0) {{
-    $activePayload = DesktopPayload ([int64]{active_handle})
+    $activePayload = [UmangVirtualDesktop]::InspectWindow([int64]{active_handle})
 }}
 [ordered]@{{
     supported = $true
@@ -1956,12 +2001,16 @@ public static class UmangVirtualDesktop {{
     public static IVirtualDesktopManager Create() {{
         return (IVirtualDesktopManager)new CVirtualDesktopManager();
     }}
+
+    public static int Move(long handleValue, string desktopIdText) {{
+        var manager = Create();
+        var handle = new IntPtr(handleValue);
+        var desktopId = Guid.Parse(desktopIdText);
+        return manager.MoveWindowToDesktop(handle, ref desktopId);
+    }}
 }}
 "@
-$manager = [UmangVirtualDesktop]::Create()
-$handle = [IntPtr]{handle}
-$desktopId = [Guid]{json.dumps(desktop_id)}
-$hr = $manager.MoveWindowToDesktop($handle, [ref]$desktopId)
+$hr = [UmangVirtualDesktop]::Move([int64]{handle}, {json.dumps(desktop_id)})
 if ($hr -ne 0) {{ throw "MoveWindowToDesktop returned HRESULT $hr." }}
 """
 

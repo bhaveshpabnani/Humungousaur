@@ -152,6 +152,7 @@ class InteractionHarness:
                 "model": settings.get("tts_model", ""),
                 "output_format": settings.get("tts_output_format", ""),
                 "allow_voice_lookup": bool(settings.get("allow_voice_lookup", False)),
+                "fallback_tts_provider": settings.get("fallback_tts_provider", ""),
             },
             self.config,
         )
@@ -297,8 +298,12 @@ def _voice_response_settings(metadata: dict[str, Any]) -> dict[str, Any]:
     tts_provider = str(metadata.get("tts_provider") or metadata.get("voice_provider") or "").strip().lower()
     if tts_provider not in {"artifact", "system", "elevenlabs"}:
         tts_provider = "system" if str(metadata.get("response_mode", "")).strip().lower() == "voice_speak" else "artifact"
+    fallback_tts_provider = str(metadata.get("fallback_tts_provider") or "").strip().lower()
+    if fallback_tts_provider not in {"artifact", "system"}:
+        fallback_tts_provider = ""
     return {
         "tts_provider": tts_provider,
+        "fallback_tts_provider": fallback_tts_provider,
         "voice_id": str(metadata.get("voice_id") or metadata.get("tts_voice_id") or "").strip(),
         "tts_model": str(metadata.get("tts_model") or metadata.get("model") or "").strip(),
         "tts_output_format": str(metadata.get("tts_output_format") or metadata.get("output_format") or "").strip(),

@@ -4,6 +4,7 @@ import json
 import http.client
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 from abc import ABC, abstractmethod
@@ -19,6 +20,23 @@ def redact_secrets(text: str) -> str:
     redacted = re.sub(r"sk-[A-Za-z0-9_*\-.]+", "sk-REDACTED", text)
     redacted = re.sub(r"Bearer\s+[A-Za-z0-9_*\-.]+", "Bearer REDACTED", redacted, flags=re.IGNORECASE)
     return redacted
+
+
+def _retry_after_seconds(exc: urllib.error.HTTPError) -> float:
+    header = exc.headers.get("Retry-After") if exc.headers is not None else None
+    if header:
+        try:
+            return max(0.5, min(float(header), 20.0))
+        except ValueError:
+            pass
+    try:
+        detail = exc.read().decode("utf-8", errors="replace")
+    except Exception:
+        return 2.0
+    match = re.search(r"try again in ([0-9.]+)s", detail, flags=re.IGNORECASE)
+    if match:
+        return max(0.5, min(float(match.group(1)) + 0.25, 20.0))
+    return 2.0
 
 
 class ModelClient(ABC):
@@ -98,11 +116,14 @@ class OpenAIResponsesClient(ModelClient):
 
     def _urlopen_json(self, request: urllib.request.Request) -> dict[str, Any]:
         last_exc: Exception | None = None
-        for _attempt in range(2):
+        for _attempt in range(3):
             try:
                 with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
                     return json.loads(response.read().decode("utf-8"))
-            except urllib.error.HTTPError:
+            except urllib.error.HTTPError as exc:
+                if exc.code == 429 and _attempt < 2:
+                    time.sleep(_retry_after_seconds(exc))
+                    continue
                 raise
             except (urllib.error.URLError, http.client.HTTPException) as exc:
                 last_exc = exc

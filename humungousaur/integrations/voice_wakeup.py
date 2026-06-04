@@ -55,6 +55,7 @@ def handle_activation(
     approve_high_risk: bool = False,
     stt_provider: str = "",
     tts_provider: str = "",
+    fallback_tts_provider: str = "",
     voice_id: str = "",
     tts_model: str = "",
 ) -> HarnessResult:
@@ -64,6 +65,8 @@ def handle_activation(
         metadata["stt_provider"] = stt_provider
     if tts_provider:
         metadata["tts_provider"] = tts_provider
+    if fallback_tts_provider:
+        metadata["fallback_tts_provider"] = fallback_tts_provider
     if voice_id:
         metadata["voice_id"] = voice_id
     if tts_model:

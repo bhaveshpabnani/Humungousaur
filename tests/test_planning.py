@@ -186,6 +186,68 @@ class ModelPlanProviderTests(unittest.TestCase):
         self.assertIn('"url"', prompt)
         self.assertIn("retrieved data", prompt)
 
+    def test_model_provider_uses_model_led_candidate_catalog_for_large_tool_surface(self) -> None:
+        client = SequenceModelClient(
+            [
+                '{"selectedgroups":["system"]}',
+                '{"groups":["system"],"reason":"system health is the relevant capability group"}',
+                '{"steps":[{"tool_name":"system_status","tool_input":{},"reason":"inspect local system health"}]}',
+            ]
+        )
+        provider = ModelPlanProvider(
+            client,
+            {"system_status", "browser_open", "browser_live_open", "os_windows", "voice_speak"},
+            tool_catalog={
+                "system_status": {
+                    "description": "Inspect local runtime health.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {"type": "object", "properties": {}},
+                    "capability_group": "system",
+                },
+                "browser_open": {
+                    "description": "Open a static browser session.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {"type": "object", "properties": {"url": {"type": "string"}}},
+                    "capability_group": "browser",
+                },
+                "browser_live_open": {
+                    "description": "Open a live browser session.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {"type": "object", "properties": {"url": {"type": "string"}}},
+                    "capability_group": "browser",
+                },
+                "os_windows": {
+                    "description": "List visible windows.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {"type": "object", "properties": {}},
+                    "capability_group": "os",
+                },
+                "voice_speak": {
+                    "description": "Speak text through a voice provider.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {"type": "object", "properties": {"text": {"type": "string"}, "reason": {"type": "string"}}},
+                    "capability_group": "voice",
+                },
+            },
+            fallback=ExplicitFallbackPlanProvider(),
+            max_prompt_tools=4,
+        )
+
+        plan = provider.plan("Check local system status")
+
+        self.assertEqual(client.call_count, 3)
+        self.assertIn("Select the smallest useful set of capability groups", client.prompts[0])
+        self.assertIn("Repair an invalid capability groups selection", client.prompts[1])
+        self.assertIn("Allowed tool catalog (1 selected from 5 total tools)", client.prompts[2])
+        self.assertIn("system_status", client.prompts[2])
+        self.assertNotIn("browser_open", client.prompts[2])
+        self.assertEqual(plan.steps[0].tool_name, "system_status")
+
     def test_explicit_provider_can_list_plugin_manifests(self) -> None:
         plan = ExplicitFallbackPlanProvider({"plugin_manifests"}).plan('plugin_manifests {"include_errors":true}')
 

@@ -8,7 +8,7 @@ import urllib.error
 from humungousaur.config import AgentConfig
 from humungousaur.schemas import ActionStatus
 from humungousaur.tools.voice_tools import VoiceProviderStatusTool, VoiceResponsePrepareTool, VoiceSpeakTool, VoiceTranscribeTool
-from humungousaur.tools.voice.providers import SpeechSynthesis
+from humungousaur.tools.voice.providers import SpeechProviderError, SpeechSynthesis
 
 
 class VoiceProviderTests(unittest.TestCase):
@@ -115,6 +115,46 @@ class VoiceProviderTests(unittest.TestCase):
         self.assertEqual(provider_error["provider_code"], "paid_plan_required")
         self.assertEqual(provider_error["category"], "provider_entitlement")
         self.assertIn("upgrade", provider_error["user_action"])
+
+    def test_voice_response_prepare_elevenlabs_can_fallback_to_system(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            audio = workspace / "fallback.wav"
+            audio.write_bytes(b"RIFF....WAVEfmt ")
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts").normalized()
+            with (
+                patch(
+                    "humungousaur.tools.voice.implementation.elevenlabs_synthesize_to_file",
+                    side_effect=SpeechProviderError("blocked"),
+                ),
+                patch(
+                    "humungousaur.tools.voice.implementation.windows_sapi_synthesize_to_file",
+                    return_value=SpeechSynthesis(
+                        provider="windows_sapi",
+                        audio_path=audio,
+                        voice_id="windows_sapi",
+                        model="windows_sapi",
+                        output_format="wav",
+                        mime_type="audio/wav",
+                        byte_count=audio.stat().st_size,
+                    ),
+                ),
+            ):
+                result = VoiceResponsePrepareTool().execute(
+                    {
+                        "text": "hello with fallback",
+                        "reason": "test",
+                        "tts_provider": "elevenlabs",
+                        "fallback_tts_provider": "system",
+                    },
+                    config,
+                )
+
+        self.assertEqual(result.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(result.output["primary_tts_provider"], "elevenlabs")
+        self.assertEqual(result.output["tts_provider"], "system")
+        self.assertEqual(result.output["fallback_tts_provider"], "system")
+        self.assertEqual(result.output["audio"]["provider"], "windows_sapi")
 
     def test_voice_speak_elevenlabs_can_synthesize_without_playback(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

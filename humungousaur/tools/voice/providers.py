@@ -450,13 +450,17 @@ if (-not $done) {{ throw "Media playback timed out." }}
 
 
 def _windows_sapi_wave_script(text: str, path: Path, rate: int, volume: int) -> str:
+    encoded_path = base64.b64encode(str(path).encode("utf-8")).decode("ascii")
+    encoded_text = base64.b64encode(text.encode("utf-8")).decode("ascii")
     return f"""
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Speech
 $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
 $synth.Rate = {rate}
 $synth.Volume = {volume}
-$synth.SetOutputToWaveFile({json.dumps(str(path))})
-$synth.Speak({json.dumps(text)})
+$wavePath = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String({json.dumps(encoded_path)}))
+$speakText = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String({json.dumps(encoded_text)}))
+$synth.SetOutputToWaveFile($wavePath)
+$synth.Speak($speakText)
 $synth.Dispose()
 """
