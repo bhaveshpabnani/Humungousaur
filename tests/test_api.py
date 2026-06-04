@@ -647,6 +647,60 @@ class APITests(unittest.TestCase):
             self.assertEqual(detail["links"][0]["text"], "Next")
             self.assertEqual(detail["images"][0]["alt"], "Preview image")
 
+    def test_api_exposes_workflow_plugin_endpoints(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            with running_api(AgentConfig(workspace=workspace, data_dir=workspace / "artifacts")) as base_url:
+                diff = api_post(base_url, "/workflow/diff", {"left_text": "a\nold\n", "right_text": "a\nnew\n"})
+                compacted = api_post(base_url, "/workflow/tokenjuice", {"text": "\n".join(f"line {index}" for index in range(600)), "max_chars": 1000})
+                llm_task = api_post(
+                    base_url,
+                    "/workflow/llm-task",
+                    {
+                        "objective": "Return dry-run JSON.",
+                        "json_schema": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": ["ok"],
+                            "properties": {"ok": {"type": "boolean"}},
+                        },
+                        "dry_run": True,
+                    },
+                )
+                workflow = api_post(
+                    base_url,
+                    "/workflow/lobster/start",
+                    {
+                        "name": "API workflow smoke",
+                        "objective": "Exercise workflow endpoints.",
+                        "steps": [{"type": "note", "title": "No-op checkpoint"}],
+                    },
+                )
+                workflow_id = workflow["workflow"]["workflow_id"]
+                workflow_status = api_get(base_url, f"/workflow/lobster/status?workflow_id={workflow_id}")
+                canvas = api_post(
+                    base_url,
+                    "/canvas/a2ui/create",
+                    {
+                        "title": "API canvas",
+                        "nodes": [
+                            {"id": "start", "label": "Start"},
+                            {"id": "done", "label": "Done", "x": 300},
+                        ],
+                        "edges": [{"from": "start", "to": "done"}],
+                    },
+                )
+                rendered = api_post(base_url, "/canvas/a2ui/render", {"canvas_id": canvas["canvas"]["canvas_id"]})
+
+            self.assertEqual(diff["status"], "succeeded")
+            self.assertEqual(diff["stats"]["added"], 1)
+            self.assertEqual(compacted["status"], "succeeded")
+            self.assertTrue(compacted["compacted"])
+            self.assertEqual(llm_task["status"], "skipped")
+            self.assertEqual(workflow_status["workflow"]["status"], "succeeded")
+            self.assertEqual(canvas["status"], "succeeded")
+            self.assertIn("<svg", rendered["svg"])
+
 
 class running_api:
     def __init__(self, config: AgentConfig) -> None:

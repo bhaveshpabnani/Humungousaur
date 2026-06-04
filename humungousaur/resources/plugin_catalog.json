@@ -433,6 +433,42 @@
       }
     },
     {
+      "plugin_id": "runtime.workflow_plugins",
+      "display_name": "Workflow Plugin Tools",
+      "kind": "orchestration",
+      "status": "implemented",
+      "owned_by": "humungousaur",
+      "runtime_adapter": "humungousaur.tools.workflow",
+      "channels": [],
+      "providers": ["openai", "groq", "ollama"],
+      "tools": [
+        "diff_render",
+        "llm_task_json",
+        "tokenjuice_compact",
+        "lobster_workflow_start",
+        "lobster_workflow_status",
+        "lobster_workflow_approve",
+        "canvas_a2ui_create",
+        "canvas_a2ui_render",
+        "tool_search"
+      ],
+      "skills": ["workflow-plugins", "typed-workflows", "canvas-a2ui"],
+      "setup": {
+        "required_env": [],
+        "optional_env": ["OPENAI_API_KEY", "GROQ_API_KEY", "OLLAMA_BASE_URL"],
+        "auth_choices": ["local_state", "model_json_task"]
+      },
+      "contracts": {
+        "diff_rendering": true,
+        "json_only_llm_tasks": true,
+        "noisy_output_compaction": true,
+        "typed_resumable_workflows": true,
+        "approval_checkpoints": true,
+        "large_catalog_discovery": true,
+        "a2ui_canvas_artifacts": true
+      }
+    },
+    {
       "plugin_id": "memory.active",
       "display_name": "Active Memory",
       "kind": "memory",

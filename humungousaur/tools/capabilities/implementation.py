@@ -95,6 +95,23 @@ CAPABILITY_SURFACES: tuple[dict[str, Any], ...] = (
         "purpose": "Search and describe the effective tool, skill, plugin, channel, and provider catalog without loading every detail into a prompt.",
     },
     {
+        "surface_id": "workflow_plugins",
+        "display_name": "Workflow Plugins",
+        "groups": ["workflow", "capabilities"],
+        "expected_tools": [
+            "diff_render",
+            "llm_task_json",
+            "tokenjuice_compact",
+            "lobster_workflow_start",
+            "lobster_workflow_status",
+            "lobster_workflow_approve",
+            "canvas_a2ui_create",
+            "canvas_a2ui_render",
+            "tool_search",
+        ],
+        "purpose": "Render diffs, run JSON-only LLM workflow steps, compact noisy output, resume approval workflows, and create A2UI canvas artifacts.",
+    },
+    {
         "surface_id": "policy_safety",
         "display_name": "Policy And Safety",
         "groups": ["system", "activity", "browser", "screen", "shell", "os", "channels"],

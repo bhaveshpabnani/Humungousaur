@@ -56,6 +56,16 @@ from humungousaur.tools.os_tools import list_screenshot_captures
 from humungousaur.tools.plugin_tools import discover_plugin_manifests, load_plugin_catalog
 from humungousaur.tools.system_tools import collect_system_status
 from humungousaur.tools.voice_tools import VoiceProviderStatusTool
+from humungousaur.tools.workflow_tools import (
+    CanvasA2uiCreateTool,
+    CanvasA2uiRenderTool,
+    DiffRenderTool,
+    LlmTaskJsonTool,
+    LobsterWorkflowApproveTool,
+    LobsterWorkflowStartTool,
+    LobsterWorkflowStatusTool,
+    TokenjuiceCompactTool,
+)
 
 
 DASHBOARD_DIR = Path(__file__).resolve().parent / "dashboard"
@@ -180,6 +190,16 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                 if path == "/skills/forge/packs":
                     result = SkillForgePacksTool().execute(
                         {"limit": _int_arg(query, "limit", 20)},
+                        effective_config(),
+                    )
+                    self._send_json({"status": result.status.value, "summary": result.summary, **result.output})
+                    return
+                if path == "/workflow/lobster/status":
+                    result = LobsterWorkflowStatusTool().execute(
+                        {
+                            "workflow_id": _str_arg(query, "workflow_id"),
+                            "limit": _int_arg(query, "limit", 20),
+                        },
                         effective_config(),
                     )
                     self._send_json({"status": result.status.value, "summary": result.summary, **result.output})
@@ -376,6 +396,41 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                 if path == "/multi-agent/coordinate":
                     run_config = request_config(effective_config(), payload)
                     result = MultiAgentCoordinateTool().execute(payload, run_config)
+                    self._send_json({"status": result.status.value, "summary": result.summary, **result.output}, HTTPStatus.CREATED)
+                    return
+                if path == "/workflow/diff":
+                    run_config = request_config(effective_config(), payload)
+                    result = DiffRenderTool().execute(payload, run_config)
+                    self._send_json({"status": result.status.value, "summary": result.summary, **result.output}, HTTPStatus.CREATED)
+                    return
+                if path == "/workflow/llm-task":
+                    run_config = request_config(effective_config(), payload)
+                    result = LlmTaskJsonTool().execute(payload, run_config)
+                    self._send_json({"status": result.status.value, "summary": result.summary, **result.output}, HTTPStatus.CREATED)
+                    return
+                if path == "/workflow/tokenjuice":
+                    run_config = request_config(effective_config(), payload)
+                    result = TokenjuiceCompactTool().execute(payload, run_config)
+                    self._send_json({"status": result.status.value, "summary": result.summary, **result.output}, HTTPStatus.CREATED)
+                    return
+                if path == "/workflow/lobster/start":
+                    run_config = request_config(effective_config(), payload)
+                    result = LobsterWorkflowStartTool().execute(payload, run_config)
+                    self._send_json({"status": result.status.value, "summary": result.summary, **result.output}, HTTPStatus.CREATED)
+                    return
+                if path == "/workflow/lobster/approve":
+                    run_config = request_config(effective_config(), payload)
+                    result = LobsterWorkflowApproveTool().execute(payload, run_config)
+                    self._send_json({"status": result.status.value, "summary": result.summary, **result.output}, HTTPStatus.CREATED)
+                    return
+                if path == "/canvas/a2ui/create":
+                    run_config = request_config(effective_config(), payload)
+                    result = CanvasA2uiCreateTool().execute(payload, run_config)
+                    self._send_json({"status": result.status.value, "summary": result.summary, **result.output}, HTTPStatus.CREATED)
+                    return
+                if path == "/canvas/a2ui/render":
+                    run_config = request_config(effective_config(), payload)
+                    result = CanvasA2uiRenderTool().execute(payload, run_config)
                     self._send_json({"status": result.status.value, "summary": result.summary, **result.output}, HTTPStatus.CREATED)
                     return
                 if path == "/skills/forge":

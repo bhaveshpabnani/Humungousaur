@@ -30,7 +30,16 @@ from humungousaur.tools.cognition_tools import (
     SkillForgeDraftTool,
 )
 from humungousaur.tools.skill_tools import AgentSkillCatalogTool
+from humungousaur.tools.validation import ToolInputValidationError, validate_tool_input
 from humungousaur.tools.voice_tools import VoiceProviderStatusTool, VoiceResponsePrepareTool, VoiceSpeakTool, VoiceTranscribeTool
+from humungousaur.tools.workflow_tools import (
+    CanvasA2uiCreateTool,
+    DiffRenderTool,
+    LlmTaskJsonTool,
+    LobsterWorkflowApproveTool,
+    LobsterWorkflowStartTool,
+    TokenjuiceCompactTool,
+)
 
 
 def main() -> int:
@@ -76,6 +85,14 @@ def main() -> int:
         "automation_daemon_tick",
         "multi_agent_coordinate",
         "multi_agent_board",
+        "diff_render",
+        "llm_task_json",
+        "tokenjuice_compact",
+        "lobster_workflow_start",
+        "lobster_workflow_status",
+        "lobster_workflow_approve",
+        "canvas_a2ui_create",
+        "canvas_a2ui_render",
         "screenpipe_search",
         "system_status",
     }
@@ -182,6 +199,84 @@ def main() -> int:
         multi_agent.status == ActionStatus.SUCCEEDED and board.status == ActionStatus.SUCCEEDED and bool(board.output.get("specialists")),
         {"goal_id": multi_agent.output.get("goal", {}).get("goal_id", ""), "specialist_count": len(board.output.get("specialists", []))},
     )
+    diff = DiffRenderTool().execute(
+        {"left_text": "alpha\nold\n", "right_text": "alpha\nnew\n", "left_label": "before", "right_label": "after"},
+        explicit_config,
+    )
+    tokenjuice = TokenjuiceCompactTool().execute({"text": "\n".join(f"line {index}" for index in range(800)), "max_chars": 1200}, explicit_config)
+    workflow_start = LobsterWorkflowStartTool().execute(
+        {
+            "name": "Smoke resumable workflow",
+            "objective": "Verify approval pause and resume.",
+            "input_schema": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["request_id"],
+                "properties": {"request_id": {"type": "string"}},
+            },
+            "input": {"request_id": "smoke"},
+            "steps": [
+                {
+                    "type": "tool",
+                    "title": "Write approved workflow note",
+                    "tool_name": "write_note",
+                    "tool_input": {"title": "workflow-smoke", "content": "approved"},
+                    "requires_approval": True,
+                }
+            ],
+        },
+        explicit_config,
+    )
+    workflow = workflow_start.output.get("workflow", {})
+    approval_token = ""
+    if workflow.get("steps"):
+        approval_token = workflow["steps"][0].get("approval_token", "")
+    workflow_approve = LobsterWorkflowApproveTool().execute(
+        {"workflow_id": workflow.get("workflow_id", ""), "approval_token": approval_token, "decision": "approve", "note": "smoke approved"},
+        explicit_config,
+    )
+    canvas = CanvasA2uiCreateTool().execute(
+        {
+            "title": "Smoke A2UI canvas",
+            "nodes": [
+                {"id": "input", "label": "Stimulus", "x": 40, "y": 80, "kind": "input", "color": "#dcfce7"},
+                {"id": "agent", "label": "Agent", "x": 300, "y": 80, "kind": "reasoning", "color": "#dbeafe"},
+            ],
+            "edges": [{"from": "input", "to": "agent", "label": "handled by"}],
+        },
+        explicit_config,
+    )
+    llm_task_dry_run = LlmTaskJsonTool().execute(
+        {
+            "objective": "Return a smoke JSON object.",
+            "json_schema": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["ok"],
+                "properties": {"ok": {"type": "boolean"}},
+            },
+        },
+        AgentConfig(workspace=workspace, data_dir=args.data_dir, planner_provider="model", dry_run=True).normalized(),
+    )
+    record(
+        "local",
+        "workflow_plugin_tools",
+        (
+            diff.status == ActionStatus.SUCCEEDED
+            and tokenjuice.status == ActionStatus.SUCCEEDED
+            and workflow_start.status == ActionStatus.SUCCEEDED
+            and workflow_approve.status == ActionStatus.SUCCEEDED
+            and canvas.status == ActionStatus.SUCCEEDED
+            and llm_task_dry_run.status == ActionStatus.SKIPPED
+        ),
+        {
+            "diff": diff.output.get("stats", {}),
+            "tokenjuice_compacted": tokenjuice.output.get("compacted", False),
+            "workflow_status": workflow_approve.output.get("workflow", {}).get("status", ""),
+            "canvas_id": canvas.output.get("canvas", {}).get("canvas_id", ""),
+            "llm_task_dry_run": llm_task_dry_run.status.value,
+        },
+    )
 
     harness = InteractionHarness(config)
     user_result = harness.handle('system_status {}')
@@ -229,6 +324,7 @@ def main() -> int:
 
     if args.live_groq:
         record("live", "groq_model_client", *_live_model_client_smoke(workspace, args.data_dir, "groq"))
+        record("live", "groq_llm_task_json_tool", *_live_llm_task_tool_smoke(workspace, args.data_dir, "groq"))
 
     if args.live_groq_agent:
         record("live", "groq_agent_run", *_live_agent_smoke(workspace, args.data_dir, "groq"))
@@ -297,20 +393,34 @@ def _live_voice_smoke(config: AgentConfig, *, voice_id: str, allow_voice_lookup:
 
 
 def _live_model_client_smoke(workspace: Path, data_dir: Path, provider: str) -> tuple[bool, dict[str, object]]:
+    schema = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["ok", "summary"],
+        "properties": {"ok": {"type": "boolean"}, "summary": {"type": "string"}},
+    }
     try:
         model_config = AgentConfig(workspace=workspace, data_dir=data_dir, planner_provider="model", model_provider=provider).normalized()
         client = build_model_client(model_config)
-        raw = client.complete_json(
-            "Return JSON confirming the Humungousaur live model smoke test is alive.",
-            {
-                "type": "object",
-                "additionalProperties": False,
-                "required": ["ok", "summary"],
-                "properties": {"ok": {"type": "boolean"}, "summary": {"type": "string"}},
-            },
-        )
-        parsed = json.loads(raw)
-        return _json_ok(parsed), parsed
+        prompt = _schema_prompt("Return JSON confirming the Humungousaur live model smoke test is alive.", schema)
+        raw = ""
+        parsed: dict[str, object] = {}
+        for attempt in range(2):
+            raw = client.complete_json(prompt, schema)
+            try:
+                parsed = json.loads(raw)
+                validate_tool_input(parsed, schema)
+                return bool(parsed["ok"]), parsed
+            except (json.JSONDecodeError, ToolInputValidationError) as exc:
+                if attempt == 0:
+                    prompt = _schema_prompt(
+                        "Repair the previous model smoke response so it validates against the schema.",
+                        schema,
+                        previous_error=str(exc),
+                        previous_output=raw[:2000],
+                    )
+                    continue
+                return False, {"error": str(exc), "raw_model_output": raw[:2000]}
     except Exception as exc:
         return False, {"error": str(exc)}
 
@@ -326,14 +436,40 @@ def _live_agent_smoke(workspace: Path, data_dir: Path, provider: str) -> tuple[b
         return False, {"error": str(exc)}
 
 
-def _json_ok(parsed: dict[str, object]) -> bool:
+def _live_llm_task_tool_smoke(workspace: Path, data_dir: Path, provider: str) -> tuple[bool, dict[str, object]]:
+    try:
+        model_config = AgentConfig(workspace=workspace, data_dir=data_dir, planner_provider="model", model_provider=provider).normalized()
+        result = LlmTaskJsonTool().execute(
+            {
+                "objective": "Confirm the workflow JSON task tool is alive.",
+                "context": "Smoke test for Humungousaur workflow plugin tools.",
+                "json_schema": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["ok", "summary"],
+                    "properties": {"ok": {"type": "boolean"}, "summary": {"type": "string"}},
+                },
+            },
+            model_config,
+        )
+        return result.status == ActionStatus.SUCCEEDED and bool(result.output.get("json", {}).get("ok")), {
+            "status": result.status.value,
+            "summary": result.summary,
+            "json": result.output.get("json", {}),
+            "error": result.error,
+        }
+    except Exception as exc:
+        return False, {"error": str(exc)}
+
+
+def _schema_prompt(objective: str, schema: dict[str, object], *, previous_error: str = "", previous_output: str = "") -> str:
     return (
-        bool(parsed.get("ok"))
-        or bool(parsed.get("verification"))
-        or bool(parsed.get("live_status"))
-        or str(parsed.get("result", "")).strip().lower() in {"ok", "success", "succeeded"}
-        or str(parsed.get("status", "")).strip().lower() in {"ok", "alive", "success", "succeeded"}
-        or str(parsed.get("test_status", "")).strip().lower() in {"ok", "alive", "success", "succeeded", "passed"}
+        "Return one JSON object only. The object must validate against this JSON schema exactly.\n"
+        "Do not use alternate field names. Do not return markdown.\n"
+        f"Objective: {objective}\n"
+        f"JSON schema: {json.dumps(schema, ensure_ascii=False, sort_keys=True)}\n"
+        f"Previous validation error: {previous_error}\n"
+        f"Previous model output: {previous_output}\n"
     )
 
 
