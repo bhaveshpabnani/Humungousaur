@@ -6,6 +6,22 @@ from humungousaur.planning.structured import PlanValidationError, StructuredPlan
 from humungousaur.planner import Planner
 
 
+class SequenceModelClient:
+    name = "sequence"
+
+    def __init__(self, responses: list[str]) -> None:
+        self.responses = responses
+        self.call_count = 0
+        self.prompts: list[str] = []
+
+    def complete_json(self, prompt: str, schema: dict) -> str:
+        del schema
+        self.prompts.append(prompt)
+        response = self.responses[min(self.call_count, len(self.responses) - 1)]
+        self.call_count += 1
+        return response
+
+
 class StructuredPlanParserTests(unittest.TestCase):
     def test_parses_allowed_tool_plan(self) -> None:
         parser = StructuredPlanParser({"list_files"})
@@ -64,6 +80,25 @@ class ModelPlanProviderTests(unittest.TestCase):
         self.assertEqual(plan.steps[0].tool_name, "search_workspace")
         self.assertEqual(plan.steps[0].source, "model:static")
         self.assertEqual(plan.used_provider, "model:static")
+        self.assertFalse(plan.fallback_used)
+
+    def test_model_plan_provider_repairs_invalid_model_plan_with_exact_tool_names(self) -> None:
+        client = SequenceModelClient(
+            [
+                '{"steps":[{"tool_name":"check_system","tool_input":{},"reason":"check local state"}]}',
+                '{"steps":[{"tool_name":"system_status","tool_input":{},"reason":"check local state"}]}',
+            ]
+        )
+        provider = ModelPlanProvider(client, {"system_status"}, fallback=ExplicitFallbackPlanProvider())
+
+        plan = provider.plan("check local system status")
+
+        self.assertEqual(client.call_count, 2)
+        self.assertIn("Repair an invalid tool plan", client.prompts[1])
+        self.assertIn("system_status", client.prompts[1])
+        self.assertEqual(plan.steps[0].tool_name, "system_status")
+        self.assertEqual(plan.steps[0].source, "model:sequence:repair")
+        self.assertEqual(plan.used_provider, "model:sequence:repair")
         self.assertFalse(plan.fallback_used)
 
     def test_model_plan_provider_falls_back_on_disallowed_tool(self) -> None:

@@ -9,6 +9,7 @@ from pathlib import Path
 from humungousaur.api import run_api_server
 from humungousaur.config import AgentConfig
 from humungousaur.cognition.loop import AutonomousLoopRunner, autonomous_loop_result_to_dict, autonomous_status
+from humungousaur.env import load_workspace_environment
 from humungousaur.indexing import FileIndex
 from humungousaur.integrations.voice_wakeup import handle_activation, run_activation
 from humungousaur.interaction import InteractionHarness, harness_result_to_dict
@@ -64,6 +65,10 @@ def build_parser() -> argparse.ArgumentParser:
         default="voice_prepare",
         help="Harness response mode when --harness is used",
     )
+    voice.add_argument("--stt-provider", default="", help="Speech-to-text provider for activation audio, such as deepgram")
+    voice.add_argument("--tts-provider", default="", help="Text-to-speech provider for harness voice output, such as elevenlabs or system")
+    voice.add_argument("--voice-id", default="", help="Provider voice id for TTS output")
+    voice.add_argument("--tts-model", default="", help="Provider TTS model id")
     voice.add_argument("--approve-high-risk", action="store_true")
     _add_planner_args(voice)
 
@@ -79,6 +84,11 @@ def build_parser() -> argparse.ArgumentParser:
     stimulus.add_argument("--workspace", type=Path, default=Path.cwd())
     stimulus.add_argument("--data-dir", type=Path, default=Path("artifacts"))
     stimulus.add_argument("--json", action="store_true")
+    stimulus.add_argument("--tts-provider", default="", help="Text-to-speech provider when response mode is voice_prepare or voice_speak")
+    stimulus.add_argument("--voice-id", default="", help="Provider voice id for TTS output")
+    stimulus.add_argument("--tts-model", default="", help="Provider TTS model id")
+    stimulus.add_argument("--allow-voice-lookup", action="store_true", help="Allow ElevenLabs to choose the first account voice when no voice id is set")
+    stimulus.add_argument("--no-playback", action="store_true", help="Synthesize provider audio without playing it locally")
     stimulus.add_argument("--approve-high-risk", action="store_true")
     _add_planner_args(stimulus)
 
@@ -184,6 +194,7 @@ def main() -> None:
     _configure_console_output()
     parser = build_parser()
     args = parser.parse_args()
+    load_workspace_environment(args.workspace)
 
     config = AgentConfig(
         workspace=args.workspace,
@@ -225,6 +236,10 @@ def main() -> None:
                 config,
                 response_mode=args.response_mode,
                 approve_high_risk=args.approve_high_risk,
+                stt_provider=args.stt_provider,
+                tts_provider=args.tts_provider,
+                voice_id=args.voice_id,
+                tts_model=args.tts_model,
             )
             if args.json:
                 print(json.dumps(harness_result_to_dict(result), indent=2, ensure_ascii=False))
@@ -247,7 +262,17 @@ def main() -> None:
 
     if args.command == "stimulus":
         result = InteractionHarness(config).handle(
-            {"text": args.text, "source": args.source},
+            {
+                "text": args.text,
+                "source": args.source,
+                "metadata": {
+                    "tts_provider": args.tts_provider,
+                    "voice_id": args.voice_id,
+                    "tts_model": args.tts_model,
+                    "allow_voice_lookup": args.allow_voice_lookup,
+                    "playback": not args.no_playback,
+                },
+            },
             response_mode=args.response_mode,
             approve_high_risk=args.approve_high_risk,
         )

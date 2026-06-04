@@ -8,3 +8,5 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 external_repos/
+[Bb]in/
+[Oo]bj/

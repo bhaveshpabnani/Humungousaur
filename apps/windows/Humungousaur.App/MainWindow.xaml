@@ -1,0 +1,477 @@
+<Window
+    x:Class="Humungousaur.App.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="Humungousaur">
+
+    <Grid x:Name="RootGrid" RowSpacing="0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="56" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid x:Name="AppTitleBar" Padding="18,0" Background="{ThemeResource LayerFillColorDefaultBrush}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                <Border Width="30" Height="30" CornerRadius="8" Background="{StaticResource AssistantAccentBrush}">
+                    <FontIcon Glyph="&#xE8D4;" FontSize="16" Foreground="White" />
+                </Border>
+                <StackPanel>
+                    <TextBlock Text="Humungousaur" FontSize="17" FontWeight="SemiBold" />
+                    <TextBlock x:Name="WorkspaceCaption" Text="Personal assistant shell" FontSize="12" Opacity="0.72" />
+                </StackPanel>
+            </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <Border Padding="10,5" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <Ellipse x:Name="StatusDot" Width="8" Height="8" Fill="#9CA3AF" VerticalAlignment="Center" />
+                        <TextBlock x:Name="StatusText" Text="Checking" FontSize="12" />
+                    </StackPanel>
+                </Border>
+                <Button x:Name="RefreshButton" Click="RefreshButton_Click" ToolTipService.ToolTip="Refresh">
+                    <FontIcon Glyph="&#xE72C;" />
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <NavigationView
+            x:Name="ShellNav"
+            Grid.Row="1"
+            IsBackButtonVisible="Collapsed"
+            IsSettingsVisible="False"
+            PaneDisplayMode="Left"
+            PaneTitle="Assistant"
+            SelectionChanged="ShellNav_SelectionChanged">
+            <NavigationView.MenuItems>
+                <NavigationViewItem Content="Assistant" Tag="assistant">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8BD;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Channels" Tag="channels">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE8F2;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Voice" Tag="voice">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE720;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Autonomy" Tag="autonomy">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE9D9;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Tools" Tag="tools">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE713;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Settings" Tag="settings">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE713;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+
+            <Grid Padding="22">
+                <InfoBar
+                    x:Name="NoticeBar"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Top"
+                    IsOpen="False"
+                    Severity="Informational"
+                    Title="Humungousaur" />
+
+                <Grid x:Name="AssistantPage" Margin="0,44,0,0" ColumnSpacing="18">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="2*" />
+                        <ColumnDefinition Width="360" />
+                    </Grid.ColumnDefinitions>
+                    <Grid RowSpacing="12">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Daily Console" FontSize="28" FontWeight="SemiBold" />
+                            <TextBlock Text="The live conversation surface for text, voice, activity, and channel stimuli." Opacity="0.68" />
+                        </StackPanel>
+                        <Border Grid.Row="1" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="12">
+                            <ListView x:Name="ChatLog" SelectionMode="None">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="0,4" Padding="10" Background="{ThemeResource LayerFillColorDefaultBrush}" CornerRadius="8">
+                                            <Grid>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                </Grid.RowDefinitions>
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <TextBlock Text="{Binding Speaker}" FontWeight="SemiBold" />
+                                                    <TextBlock Text="{Binding TimeText}" Opacity="0.58" FontSize="12" />
+                                                </StackPanel>
+                                                <TextBlock Grid.Row="1" Text="{Binding Text}" TextWrapping="WrapWholeWords" Margin="0,5,0,0" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </Border>
+                        <Border Grid.Row="2" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="12">
+                            <Grid RowSpacing="10">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <TextBox x:Name="PromptBox" AcceptsReturn="True" MinHeight="88" TextWrapping="Wrap" PlaceholderText="Ask, dictate, or simulate a stimulus" />
+                                <Grid Grid.Row="1" ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="170" />
+                                        <ColumnDefinition Width="170" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <ComboBox x:Name="StimulusSourceBox" SelectedIndex="0" HorizontalAlignment="Stretch">
+                                        <ComboBoxItem Content="User text" Tag="user_text" />
+                                        <ComboBoxItem Content="Voice transcript" Tag="voice_transcript" />
+                                        <ComboBoxItem Content="Activity" Tag="activity" />
+                                    </ComboBox>
+                                    <ComboBox x:Name="ResponseModeBox" Grid.Column="1" SelectedIndex="0" HorizontalAlignment="Stretch">
+                                        <ComboBoxItem Content="Text" Tag="text" />
+                                        <ComboBoxItem Content="Prepare voice" Tag="voice_prepare" />
+                                        <ComboBoxItem Content="Speak" Tag="voice_speak" />
+                                        <ComboBoxItem Content="Silent" Tag="silent" />
+                                    </ComboBox>
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                        <Button Content="System" Click="QuickSystemButton_Click" />
+                                        <Button Content="Status" Click="QuickAutonomyButton_Click" />
+                                        <Button Content="Channels" Click="QuickChannelsButton_Click" />
+                                    </StackPanel>
+                                    <Button Grid.Column="3" x:Name="SendButton" Click="SendButton_Click" Background="{StaticResource AssistantAccentBrush}" Foreground="White">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <FontIcon Glyph="&#xE724;" />
+                                            <TextBlock Text="Send" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                    </Grid>
+
+                    <Grid Grid.Column="1" RowSpacing="12">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Border CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="14">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Runtime" FontWeight="SemiBold" />
+                                <TextBlock x:Name="RuntimeSummaryText" Text="Waiting for API" TextWrapping="WrapWholeWords" />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button x:Name="StartAgentButton" Content="Start" Click="StartAgentButton_Click" />
+                                    <Button x:Name="StopAgentButton" Content="Stop" Click="StopAgentButton_Click" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Row="1" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="14">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Capability Pulse" FontWeight="SemiBold" />
+                                <Grid ColumnSpacing="12" RowSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock x:Name="ToolCountText" Text="Tools -" />
+                                    <TextBlock x:Name="ChannelCountText" Grid.Column="1" Text="Channels -" />
+                                    <TextBlock x:Name="VoiceReadyText" Grid.Row="1" Text="Voice -" />
+                                    <TextBlock x:Name="AutonomyReadyText" Grid.Row="1" Grid.Column="1" Text="Loop -" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Row="2" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="14">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Process Log" FontWeight="SemiBold" />
+                                <ListView x:Name="ProcessLog" SelectionMode="None" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Grid>
+
+                <Grid x:Name="ChannelsPage" Margin="0,44,0,0" Visibility="Collapsed" ColumnSpacing="18">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="360" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid RowSpacing="12">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Channels" FontSize="28" FontWeight="SemiBold" />
+                            <TextBlock Text="Onboard chat surfaces and preview the gateway path." Opacity="0.68" />
+                        </StackPanel>
+                        <ListView x:Name="ChannelList" Grid.Row="1" SelectionChanged="ChannelList_SelectionChanged">
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,5">
+                                        <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding Transport}" Opacity="0.64" FontSize="12" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </Grid>
+                    <Grid Grid.Column="1" RowSpacing="12">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Border CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="16">
+                            <StackPanel Spacing="8">
+                                <TextBlock x:Name="ChannelTitleText" Text="Select a channel" FontSize="20" FontWeight="SemiBold" />
+                                <TextBlock x:Name="ChannelCapabilityText" TextWrapping="WrapWholeWords" Opacity="0.72" />
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Row="1" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="16">
+                            <Grid RowSpacing="10" ColumnSpacing="10">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <ToggleSwitch x:Name="ChannelEnabledSwitch" Header="Enabled" />
+                                <ComboBox x:Name="ConversationTypeBox" Grid.Column="1" Header="Conversation" SelectedIndex="0">
+                                    <ComboBoxItem Content="DM" Tag="dm" />
+                                    <ComboBoxItem Content="Room" Tag="room" />
+                                    <ComboBoxItem Content="Channel" Tag="channel" />
+                                    <ComboBoxItem Content="Group" Tag="group" />
+                                </ComboBox>
+                                <TextBox x:Name="ConversationIdBox" Grid.Row="1" Header="Conversation id" PlaceholderText="workspace room, DM, or pairing id" />
+                                <TextBox x:Name="SecretNameBox" Grid.Row="1" Grid.Column="1" Header="Secret name" PlaceholderText="SLACK_BOT_TOKEN" />
+                                <PasswordBox x:Name="ChannelSecretBox" Grid.Row="2" Header="Token or pairing note" PlaceholderText="Kept out of saved settings" />
+                                <TextBox x:Name="ChannelNotesBox" Grid.Row="2" Grid.Column="1" Header="Setup notes" />
+                                <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="8">
+                                    <Button x:Name="SaveChannelButton" Content="Save setup" Click="SaveChannelButton_Click" />
+                                    <Button x:Name="TestChannelButton" Content="Preview inbound" Click="TestChannelButton_Click" />
+                                    <Button Content="Refresh outbox" Click="RefreshOutboxButton_Click" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                        <Border Grid.Row="2" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="16">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Prepared Replies" FontWeight="SemiBold" />
+                                <ListView x:Name="OutboxList" SelectionMode="None" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                </Grid>
+
+                <Grid x:Name="VoicePage" Margin="0,44,0,0" Visibility="Collapsed" RowSpacing="14">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="Voice" FontSize="28" FontWeight="SemiBold" />
+                        <TextBlock Text="Deepgram input, ElevenLabs or Windows speech output, and wakeup-response preferences." Opacity="0.68" />
+                    </StackPanel>
+                    <Grid Grid.Row="1" ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="16">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Speech to Text" FontWeight="SemiBold" />
+                                <TextBlock x:Name="DeepgramStatusText" Text="-" TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Column="1" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="16">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Text to Speech" FontWeight="SemiBold" />
+                                <TextBlock x:Name="ElevenLabsStatusText" Text="-" TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Column="2" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="16">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Windows Voice" FontWeight="SemiBold" />
+                                <TextBlock x:Name="SystemVoiceStatusText" Text="-" TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                    <Border Grid.Row="2" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="16">
+                        <Grid RowSpacing="12">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <Grid ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="220" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <ComboBox x:Name="TtsProviderBox" Header="TTS provider" SelectedIndex="0">
+                                    <ComboBoxItem Content="Windows SAPI" Tag="system" />
+                                    <ComboBoxItem Content="ElevenLabs" Tag="elevenlabs" />
+                                </ComboBox>
+                                <TextBox x:Name="VoiceIdBox" Grid.Column="1" Header="Voice id" />
+                                <Button Grid.Column="2" VerticalAlignment="Bottom" Content="Save voice" Click="SaveVoiceButton_Click" />
+                            </Grid>
+                            <TextBox x:Name="VoiceTestBox" Grid.Row="1" Text="I am online and ready to help." Header="Test phrase" />
+                            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
+                                <Button Content="Refresh voice" Click="RefreshVoiceButton_Click" />
+                                <Button Content="Speak test" Click="SpeakTestButton_Click" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <Grid x:Name="AutonomyPage" Margin="0,44,0,0" Visibility="Collapsed" RowSpacing="14">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="Autonomy" FontSize="28" FontWeight="SemiBold" />
+                        <TextBlock Text="Runtime queue, wakeups, trigger cycles, and bounded initiative controls." Opacity="0.68" />
+                    </StackPanel>
+                    <Border Grid.Row="1" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="16">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <ToggleSwitch x:Name="AllowInitiativeSwitch" Header="Initiative" />
+                            <TextBox x:Name="MaxCyclesBox" Header="Max cycles" Text="1" Width="120" />
+                            <TextBox x:Name="LoopIntervalBox" Header="Interval sec" Text="60" Width="130" />
+                            <ToggleSwitch x:Name="ContinuousLoopSwitch" Header="Continuous" Toggled="ContinuousLoopSwitch_Toggled" />
+                            <Button Content="Run cycle" VerticalAlignment="Bottom" Click="RunCycleButton_Click" />
+                            <Button Content="Refresh" VerticalAlignment="Bottom" Click="RefreshAutonomyButton_Click" />
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Row="2" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="16">
+                        <ScrollViewer>
+                            <TextBlock x:Name="AutonomyStatusText" TextWrapping="WrapWholeWords" FontFamily="Consolas" />
+                        </ScrollViewer>
+                    </Border>
+                </Grid>
+
+                <Grid x:Name="ToolsPage" Margin="0,44,0,0" Visibility="Collapsed" ColumnSpacing="14">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="330" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid RowSpacing="10">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Tools" FontSize="28" FontWeight="SemiBold" />
+                            <TextBlock x:Name="ToolsSummaryText" Text="-" Opacity="0.68" />
+                        </StackPanel>
+                        <ListView x:Name="ToolGroupList" Grid.Row="1" SelectionMode="None" />
+                    </Grid>
+                    <Grid Grid.Column="1" RowSpacing="10">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TextBox x:Name="ToolSearchBox" PlaceholderText="Filter tools" TextChanged="ToolSearchBox_TextChanged" />
+                        <ListView x:Name="ToolList" Grid.Row="1" SelectionMode="None">
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="0,5" Padding="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding CapabilityGroup}" Opacity="0.62" />
+                                                <TextBlock Text="{Binding RiskLevel}" Foreground="{StaticResource AssistantWarmBrush}" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Row="1" Text="{Binding Description}" TextWrapping="WrapWholeWords" Opacity="0.78" Margin="0,4,0,0" />
+                                            <TextBlock Grid.Row="2" Text="{Binding RequiresApproval}" Opacity="0.62" FontSize="12" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </Grid>
+                </Grid>
+
+                <Grid x:Name="SettingsPage" Margin="0,44,0,0" Visibility="Collapsed" RowSpacing="14">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="Settings" FontSize="28" FontWeight="SemiBold" />
+                        <TextBlock Text="Runtime connection, model defaults, workspace, and local process startup." Opacity="0.68" />
+                    </StackPanel>
+                    <Border Grid.Row="1" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="16">
+                        <Grid RowSpacing="12" ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <TextBox x:Name="ApiBaseUrlBox" Header="API base URL" />
+                            <TextBox x:Name="PortBox" Grid.Column="1" Header="Port" />
+                            <TextBox x:Name="WorkspacePathBox" Grid.Row="1" Grid.ColumnSpan="2" Header="Workspace path" />
+                            <TextBox x:Name="PythonPathBox" Grid.Row="2" Header="Python path" PlaceholderText="python" />
+                            <ComboBox x:Name="PlannerBox" Grid.Row="2" Grid.Column="1" Header="Planner" SelectedIndex="0">
+                                <ComboBoxItem Content="Model" Tag="model" />
+                                <ComboBoxItem Content="Explicit" Tag="explicit" />
+                            </ComboBox>
+                            <ComboBox x:Name="ModelProviderBox" Grid.Row="3" Header="Model provider" SelectedIndex="0">
+                                <ComboBoxItem Content="Groq" Tag="groq" />
+                                <ComboBoxItem Content="OpenAI" Tag="openai" />
+                                <ComboBoxItem Content="Ollama" Tag="ollama" />
+                                <ComboBoxItem Content="Local OpenAI" Tag="local-openai" />
+                            </ComboBox>
+                            <TextBox x:Name="ModelNameBox" Grid.Row="3" Grid.Column="1" Header="Model override" />
+                            <StackPanel Grid.Row="4" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="10">
+                                <ToggleSwitch x:Name="ApproveHighRiskSwitch" Header="Approve high risk" />
+                                <Button Content="Save settings" Click="SaveSettingsButton_Click" />
+                                <Button Content="Start agent" Click="StartAgentButton_Click" />
+                                <Button Content="Stop agent" Click="StopAgentButton_Click" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Grid>
+        </NavigationView>
+    </Grid>
+</Window>

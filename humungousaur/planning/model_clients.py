@@ -201,6 +201,7 @@ class OpenAICompatibleChatClient(ModelClient):
             ],
             "response_format": response_format,
             "stream": False,
+            "max_tokens": 600,
         }
         request = urllib.request.Request(
             f"{self.base_url.rstrip('/')}/chat/completions",

@@ -10,9 +10,8 @@ from humungousaur.planning.model_clients import ModelClient, ModelClientError, r
 from .models import AttentionAction, CognitiveDecision, CognitiveEvent, CognitiveSnapshot, MemoryAction
 
 
-PASSIVE_SOURCES = {"activity", "accessibility", "screen_ocr", "audio_transcript", "browser", "system"}
+PASSIVE_SOURCES = {"activity", "accessibility", "screen_ocr", "audio_transcript", "browser", "system", "channel_message"}
 DIRECT_SOURCES = {"user_text", "voice_transcript"}
-ACTION_INTENTS = {"task", "question", "request", "respond", "analyze", "act"}
 RESPONSE_MODES = {"text", "voice_prepare", "voice_speak", "silent"}
 
 
@@ -260,7 +259,7 @@ def _metadata_requests_action(event: CognitiveEvent) -> bool:
     metadata = event.metadata
     if metadata.get("should_run_agent") is True or metadata.get("requires_response") is True:
         return True
-    return str(metadata.get("intent", "")).strip().lower() in ACTION_INTENTS
+    return False
 
 
 def _goal_title(text: str) -> str:

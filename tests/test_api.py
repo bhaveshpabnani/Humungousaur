@@ -70,10 +70,22 @@ class APITests(unittest.TestCase):
                 self.assertIn("overall_status", health["system"])
                 system_status = api_get(base_url, "/system/status")
                 self.assertEqual(system_status["workspace"], str(workspace.resolve()))
+                tools = api_get(base_url, "/tools")
+                self.assertGreater(tools["tool_count"], 100)
+                self.assertIn("voice", {group["name"] for group in tools["groups"]})
+                self.assertIn("channels", {group["name"] for group in tools["groups"]})
+                self.assertIn("system_status", {tool["name"] for tool in tools["tools"]})
+                voice_status = api_get(base_url, "/voice/status")
+                self.assertEqual(voice_status["status"], "succeeded")
+                self.assertIn("stt", voice_status)
+                self.assertIn("tts", voice_status)
                 screen_captures = api_get(base_url, "/screen/captures")
                 self.assertFalse(screen_captures["image_bytes_served"])
                 self.assertEqual(screen_captures["captures"], [])
                 self.assertEqual(api_get(base_url, "/plugins"), [])
+                channels = api_get(base_url, "/channels")
+                self.assertIn("whatsapp", {channel["channel_id"] for channel in channels})
+                self.assertIn("slack", {channel["channel_id"] for channel in channels})
 
                 permissions = api_get(base_url, "/permissions")
                 self.assertEqual(permissions["workspace"], str(workspace.resolve()))
@@ -91,6 +103,8 @@ class APITests(unittest.TestCase):
                 self.assertIn("memory", group_names)
                 self.assertIn("os", group_names)
                 self.assertIn("plugins", group_names)
+                self.assertIn("channels", group_names)
+                self.assertIn("skills", group_names)
                 self.assertIn("screen", group_names)
                 self.assertIn("shell", group_names)
                 self.assertIn("integrations", group_names)
@@ -141,12 +155,29 @@ class APITests(unittest.TestCase):
                 self.assertEqual(stimulus["run"]["results"][0]["tool_name"], "read_file")
                 self.assertIn("README.md", stimulus["run"]["final_response"])
                 self.assertIn("response_id", stimulus["voice_result"])
+                channel = api_post(
+                    base_url,
+                    "/channels/inbound",
+                    {
+                        "channel_id": "slack",
+                        "conversation_id": "C123",
+                        "conversation_type": "dm",
+                        "sender_id": "U123",
+                        "text": 'read_file {"path":"README.md"}',
+                        "requires_response": True,
+                        "prepare_reply": True,
+                        "planner": "explicit",
+                    },
+                )
+                self.assertEqual(channel["stimulus"]["source"], "channel_message")
+                self.assertIsNotNone(channel["prepared_reply"])
+                self.assertEqual(api_get(base_url, "/channels/outbox")["messages"][0]["channel_id"], "slack")
 
                 plans = api_get(base_url, "/plans?limit=1")
-                self.assertEqual(plans[0]["run_id"], stimulus["run"]["run_id"])
+                self.assertEqual(plans[0]["run_id"], channel["harness"]["run"]["run_id"])
                 self.assertEqual(plans[0]["used_provider"], "explicit")
 
-                memory = api_get(base_url, "/memory?limit=5")
+                memory = api_get(base_url, "/memory?limit=20")
                 self.assertIn(stimulus["run"]["run_id"], [event["payload"].get("run_id") for event in memory])
                 memory_summary = api_get(base_url, "/memory/summary?period=recent")
                 self.assertGreaterEqual(memory_summary["total_events"], 1)

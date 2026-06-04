@@ -1,0 +1,13 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Target Name="GetMrtPackagingOutputs" Returns="@(_PackagingOutputsExpanded)" />
+  <Target Name="_GetPackageArchitecture">
+    <PropertyGroup>
+      <PackageArchitecture>x64</PackageArchitecture>
+    </PropertyGroup>
+  </Target>
+  <Target Name="_GetDefaultResourceLanguage">
+    <PropertyGroup>
+      <DefaultResourceLanguage Condition="'$(DefaultResourceLanguage)' == ''">en-US</DefaultResourceLanguage>
+    </PropertyGroup>
+  </Target>
+</Project>

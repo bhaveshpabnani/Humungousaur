@@ -9,6 +9,9 @@ This first slice focuses on trust and extensibility:
 - model-led structured planner with explicit command fallback
 - durable cognitive state for events, goals, persona, and reusable skills
 - file/workspace tools
+- Gateway-style channel catalog and prepared message outbox
+- file-backed `SKILL.md` catalog/import tools
+- Deepgram STT and ElevenLabs/system TTS provider tools
 - policy checks before every action
 - SQLite audit log
 - saved notes under `artifacts/notes`
@@ -104,8 +107,15 @@ python -m humungousaur reject APPROVAL_TOKEN --workspace .
 python -m humungousaur run "run python --version" --workspace . --approve-high-risk
 python -m humungousaur run-activation ..\voice-wakeup\artifacts\recordings\20260601_150000.json --workspace ..
 python -m humungousaur run-activation ..\voice-wakeup\artifacts\recordings\20260601_150000.json --workspace .. --harness --response-mode voice_prepare
-python -m humungousaur stimulus "summarize this project" --source voice_transcript --response-mode voice_prepare --workspace .
+python -m humungousaur stimulus "summarize this project" --source voice_transcript --response-mode voice_prepare --tts-provider elevenlabs --allow-voice-lookup --workspace .
 python -m humungousaur stimulus "User looked at a dashboard" --source activity --response-mode silent --workspace .
+python -m humungousaur run "voice_provider_status {}" --workspace . --planner explicit
+python -m humungousaur run "voice_transcribe {\"audio_path\":\"path\\to\\recording.wav\",\"reason\":\"voice smoke\"}" --workspace . --planner explicit
+python -m humungousaur run "voice_speak {\"text\":\"hello\",\"provider\":\"elevenlabs\",\"allow_voice_lookup\":true,\"playback\":false,\"reason\":\"voice smoke\"}" --workspace . --planner explicit
+python -m humungousaur run "channel_catalog {}" --workspace . --planner explicit
+python -m humungousaur run "channel_message_prepare {\"channel_id\":\"slack\",\"conversation_id\":\"C123\",\"text\":\"Prepared reply\",\"reason\":\"smoke\"}" --workspace . --planner explicit
+python -m humungousaur run "agent_skill_catalog {\"source\":\"workspace\"}" --workspace . --planner explicit
+python .\scripts\smoke_agent.py --workspace . --live-groq --live-voice
 python -m humungousaur run "say hello there" --workspace .
 python -m humungousaur audit --limit 5
 python -m humungousaur plans --limit 5
@@ -190,19 +200,24 @@ Interaction harness behavior:
 
 - The harness consumes the model-led cognitive attention decision as its source of truth for `respond`, `analyze`, `observe`, `monitor`, or `ignore`.
 - Direct user text and voice transcripts are explicit stimuli and normally produce a response.
-- Passive activity, accessibility, OCR, browser, and audio snippets are recorded as context; a configured model can escalate them from structured evidence, current goals, and metadata, while model-unavailable fallback remains conservative.
+- Channel messages enter as structured `channel_message` stimuli; the harness can observe, analyze, respond, and prepare an outbound channel reply envelope without claiming delivery.
+- Passive activity, accessibility, OCR, browser, channel, and audio snippets are recorded as context; a configured model can escalate them from structured evidence, current goals, and metadata, while model-unavailable fallback remains conservative.
 - Response modes are `text`, `voice_prepare`, `voice_speak`, and `silent`.
-- `voice_response_prepare` writes a local spoken-response artifact under the data directory; `voice_speak` uses the local OS TTS engine where supported.
+- `voice_transcribe` supports provider-backed STT for activation audio. `voice_response_prepare` writes local spoken-response artifacts and can synthesize ElevenLabs audio. `voice_speak` can use Windows SAPI or ElevenLabs synthesis plus optional local playback.
+- `channel_catalog`, `channel_manifest`, `channel_message_prepare`, and `channel_outbox` implement an OpenClaw-style Gateway surface for WhatsApp, Slack, Telegram, Discord, Teams, Signal, SMS, WebChat, voice calls, and related chat channels. Real sending stays behind trusted runtime plugins.
+- `agent_skill_catalog`, `agent_skill_read`, and `agent_skill_import` discover workspace `skills/**/SKILL.md` packs and promote exact skill IDs into durable cognitive skill memory.
 
 The rule is simple: every future capability becomes a tool with a risk level, policy check, execution result, and audit event.
 Tools also expose JSON-schema-style `input_schema` metadata, so model planning can select and populate tool calls from explicit contracts instead of fragile payload guessing. The executor validates those inputs before approval or execution.
-Tools are grouped by capability (`activity`, `files`, `browser`, `integrations`, `memory`, `os`, `plugins`, `screen`, `shell`, `system`, `voice`) so the permissions surface can stay understandable as the product grows.
+Tools are grouped by capability (`activity`, `files`, `browser`, `channels`, `code`, `codex`, `cognition`, `integrations`, `memory`, `os`, `plugins`, `screen`, `shell`, `skills`, `system`, `voice`) so the permissions surface can stay understandable as the product grows.
 Before planning, the orchestrator gathers a compact local context bundle: workspace paths, system health, active-window metadata, recent memory, recent browser sessions, and safety flags. This context is treated as untrusted data and its collection is recorded in the run timeline.
 
 External reference projects are integrated through explicit adapters, not copied wholesale:
 
 - `external_integrations_status` checks local development availability for Browser Use, Screenpipe, Windows-Use, and Open Interpreter.
 - `activity_ingest`, `activity_search`, `activity_policy`, `activity_policy_update`, and `activity_prune` implement a native Screenpipe-inspired activity-memory schema with local retention and privacy exclusions inside Umang.
+- `channel_catalog` uses the OpenClaw-style Gateway channel model from local reference notes; `channel_message_prepare` writes an audited outbox item and never sends without a trusted runtime.
+- `agent_skill_catalog` reads local `SKILL.md` packs in `skills/` or `.umang/skills`; `agent_skill_import` writes exact selected skills into cognitive memory.
 - `plugin_manifests` and `plugin_manifest` discover local JSON plugin manifests from `.umang/plugins` and the local data directory; manifest-declared tools are visible to planning and permissions but blocked until a trusted runtime exists.
 - Reference repos can be cloned under `external_repos/` for code inspection; that folder is ignored by git.
 
@@ -233,6 +248,15 @@ XAI_API_KEY=
 XAI_BASE_URL=https://api.x.ai/v1
 LOCAL_LLM_BASE_URL=http://127.0.0.1:11434/v1
 LOCAL_LLM_API_KEY=local
+DEEPGRAM_API_KEY=
+DEEPGRAM_BASE_URL=https://api.deepgram.com
+DEEPGRAM_MODEL=
+ELEVENLABS_API_KEY=
+ELEVENLABS_BASE_URL=https://api.elevenlabs.io
+ELEVENLABS_VOICE_ID=
+ELEVENLABS_MODEL_ID=
+ELEVENLABS_OUTPUT_FORMAT=
+HUMUNGOUSAUR_TTS_PROVIDER=
 ```
 
 ## Local API

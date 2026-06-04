@@ -13,20 +13,11 @@ dependencies = []
 [project.scripts]
 humungousaur = "humungousaur.cli:main"
 
-[tool.setuptools]
-packages = [
-  "humungousaur",
-  "humungousaur.dashboard",
-  "humungousaur.indexing",
-  "humungousaur.integrations",
-  "humungousaur.memory",
-  "humungousaur.planning",
-  "humungousaur.safety",
-  "humungousaur.tools",
-]
+[tool.setuptools.packages.find]
+include = ["humungousaur*"]
 
 [tool.setuptools.package-data]
-humungousaur = ["dashboard/*.html", "dashboard/*.css", "dashboard/*.js"]
+humungousaur = ["dashboard/*.html", "dashboard/*.css", "dashboard/*.js", "resources/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

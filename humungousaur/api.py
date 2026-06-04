@@ -13,6 +13,7 @@ from humungousaur.config import AgentConfig
 from humungousaur.cognition.loop import AutonomousLoopRunner, autonomous_loop_result_to_dict, autonomous_status
 from humungousaur.cognition.queue import RuntimeEventQueue
 from humungousaur.cognition.triggers import TriggerStore, stimulus_from_input
+from humungousaur.integrations.channels import handle_channel_inbound, list_outbox, load_channel_catalog
 from humungousaur.indexing import FileIndex
 from humungousaur.interaction import InteractionHarness, harness_result_to_dict
 from humungousaur.memory.event_store import EventStore
@@ -32,10 +33,12 @@ from humungousaur.safety.audit import AuditLog
 from humungousaur.safety.permissions import permissions_snapshot
 from humungousaur.safety.settings import PermissionSettingsStore
 from humungousaur.schemas import ActionStatus
+from humungousaur.tools import default_tools
 from humungousaur.tools.browser_tools import BrowserSessionStore
 from humungousaur.tools.os_tools import list_screenshot_captures
 from humungousaur.tools.plugin_tools import discover_plugin_manifests
 from humungousaur.tools.system_tools import collect_system_status
+from humungousaur.tools.voice_tools import VoiceProviderStatusTool
 
 
 DASHBOARD_DIR = Path(__file__).resolve().parent / "dashboard"
@@ -76,6 +79,13 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                     return
                 if path == "/system/status":
                     self._send_json(collect_system_status(effective_config()))
+                    return
+                if path == "/tools":
+                    self._send_json(_tool_catalog_payload(effective_config()))
+                    return
+                if path == "/voice/status":
+                    result = VoiceProviderStatusTool().execute({}, effective_config())
+                    self._send_json({"status": result.status.value, "summary": result.summary, **result.output})
                     return
                 if path == "/screen/captures":
                     self._send_json(
@@ -150,6 +160,12 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                     detail = _bool_arg(query, "detail", False)
                     self._send_json([manifest.detail() if detail else manifest.summary() for manifest in manifests])
                     return
+                if path == "/channels":
+                    self._send_json(load_channel_catalog())
+                    return
+                if path == "/channels/outbox":
+                    self._send_json({"messages": list_outbox(effective_config(), limit=_int_arg(query, "limit", 20))})
+                    return
                 if path == "/memory":
                     self._send_json(EventStore(effective_config().memory_db_path).tail(limit=_int_arg(query, "limit", 10)))
                     return
@@ -220,6 +236,16 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                         approve_high_risk=bool(payload.get("approve_high_risk", False)),
                     )
                     self._send_json(harness_result_to_dict(result), HTTPStatus.CREATED)
+                    return
+                if path == "/channels/inbound":
+                    run_config = request_config(effective_config(), payload)
+                    result = handle_channel_inbound(
+                        payload,
+                        run_config,
+                        response_mode=payload.get("response_mode"),
+                        approve_high_risk=bool(payload.get("approve_high_risk", False)),
+                    )
+                    self._send_json(result, HTTPStatus.CREATED)
                     return
                 if path == "/runs/async":
                     request = str(payload.get("request", "")).strip()
@@ -392,6 +418,29 @@ def _run_agent_background(config: AgentConfig, request: str, run_id: str, approv
     except Exception as exc:
         audit.log_run_event(run_id, "run_error", "Run failed with an unhandled error.", {"error": str(exc)})
         audit.finish_run(run_id, ActionStatus.FAILED, f"Run failed: {exc}")
+
+
+def _tool_catalog_payload(config: AgentConfig) -> dict[str, Any]:
+    tools = default_tools(config)
+    items = []
+    groups: dict[str, int] = {}
+    for tool in sorted(tools.values(), key=lambda item: (item.capability_group, item.name)):
+        groups[tool.capability_group] = groups.get(tool.capability_group, 0) + 1
+        items.append(
+            {
+                "name": tool.name,
+                "description": tool.description,
+                "risk_level": tool.risk_level.value,
+                "requires_approval": tool.requires_approval,
+                "capability_group": tool.capability_group,
+                "input_schema": tool.input_schema,
+            }
+        )
+    return {
+        "tool_count": len(items),
+        "groups": [{"name": name, "tool_count": count} for name, count in sorted(groups.items())],
+        "tools": items,
+    }
 
 
 def _int_arg(query: dict[str, list[str]], name: str, default: int) -> int:

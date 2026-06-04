@@ -17,6 +17,7 @@ from humungousaur.tools.voice_tools import VoiceResponsePrepareTool, VoiceSpeakT
 STIMULUS_SOURCES = {
     "user_text",
     "voice_transcript",
+    "channel_message",
     "activity",
     "accessibility",
     "screen_ocr",
@@ -26,7 +27,6 @@ STIMULUS_SOURCES = {
 }
 HARNESS_DECISIONS = {"respond", "analyze", "observe", "ignore", "monitor"}
 RESPONSE_MODES = {"text", "voice_prepare", "voice_speak", "silent"}
-ACTION_INTENTS = {"task", "question", "request", "respond", "analyze", "act"}
 
 
 @dataclass(slots=True)
@@ -92,6 +92,7 @@ class InteractionHarness:
                     stimulus_id=normalized.stimulus_id,
                     run_id=run.run_id,
                     speak=decision.should_speak,
+                    metadata=normalized.metadata,
                 )
         cognitive.finish_stimulus(
             event_id=cognitive_event.event_id,
@@ -136,7 +137,9 @@ class InteractionHarness:
             },
         )
 
-    def _emit_voice_response(self, text: str, stimulus_id: str, run_id: str, speak: bool) -> dict[str, Any]:
+    def _emit_voice_response(self, text: str, stimulus_id: str, run_id: str, speak: bool, metadata: dict[str, Any]) -> dict[str, Any]:
+        settings = _voice_response_settings(metadata)
+        prepare_provider = "artifact" if speak else settings.get("tts_provider", "artifact")
         prepared = VoiceResponsePrepareTool().execute(
             {
                 "text": text,
@@ -144,6 +147,11 @@ class InteractionHarness:
                 "reason": "Agent harness prepared a spoken response.",
                 "stimulus_id": stimulus_id,
                 "run_id": run_id,
+                "tts_provider": prepare_provider,
+                "voice_id": settings.get("voice_id", ""),
+                "model": settings.get("tts_model", ""),
+                "output_format": settings.get("tts_output_format", ""),
+                "allow_voice_lookup": bool(settings.get("allow_voice_lookup", False)),
             },
             self.config,
         )
@@ -151,7 +159,16 @@ class InteractionHarness:
         output["prepare_status"] = prepared.status.value
         if speak:
             spoken = VoiceSpeakTool().execute(
-                {"text": text, "reason": "Agent harness is responding aloud to the user."},
+                {
+                    "text": text,
+                    "reason": "Agent harness is responding aloud to the user.",
+                    "provider": settings.get("tts_provider", "system"),
+                    "voice_id": settings.get("voice_id", ""),
+                    "model": settings.get("tts_model", ""),
+                    "output_format": settings.get("tts_output_format", ""),
+                    "allow_voice_lookup": bool(settings.get("allow_voice_lookup", False)),
+                    "playback": bool(settings.get("playback", True)),
+                },
                 self.config,
             )
             output["speak_status"] = spoken.status.value
@@ -206,7 +223,7 @@ def decide_interaction(stimulus: Stimulus, response_mode: str | None = None) -> 
         decision = "analyze" if mode == "silent" else "respond"
         should_run = True
         reason = "Passive stimulus carried structured action metadata."
-    elif stimulus.source in {"activity", "accessibility", "screen_ocr", "audio_transcript", "browser"}:
+    elif stimulus.source in {"activity", "accessibility", "screen_ocr", "audio_transcript", "browser", "channel_message"}:
         decision = "observe"
         should_run = False
         reason = "Passive activity recorded for context; no explicit request detected."
@@ -273,5 +290,18 @@ def _metadata_requests_action(stimulus: Stimulus) -> bool:
     metadata = stimulus.metadata
     if metadata.get("should_run_agent") is True or metadata.get("requires_response") is True:
         return True
-    intent = str(metadata.get("intent", "")).strip().lower()
-    return intent in ACTION_INTENTS
+    return False
+
+
+def _voice_response_settings(metadata: dict[str, Any]) -> dict[str, Any]:
+    tts_provider = str(metadata.get("tts_provider") or metadata.get("voice_provider") or "").strip().lower()
+    if tts_provider not in {"artifact", "system", "elevenlabs"}:
+        tts_provider = "system" if str(metadata.get("response_mode", "")).strip().lower() == "voice_speak" else "artifact"
+    return {
+        "tts_provider": tts_provider,
+        "voice_id": str(metadata.get("voice_id") or metadata.get("tts_voice_id") or "").strip(),
+        "tts_model": str(metadata.get("tts_model") or metadata.get("model") or "").strip(),
+        "tts_output_format": str(metadata.get("tts_output_format") or metadata.get("output_format") or "").strip(),
+        "allow_voice_lookup": bool(metadata.get("allow_voice_lookup", False)),
+        "playback": bool(metadata.get("playback", True)),
+    }

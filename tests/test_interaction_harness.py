@@ -42,7 +42,7 @@ class InteractionHarnessTests(unittest.TestCase):
             config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", planner_provider="explicit").normalized()
 
             result = InteractionHarness(config).handle(
-                {"source": "activity", "text": 'read_file {"path":"README.md"}', "metadata": {"intent": "task"}},
+                {"source": "activity", "text": 'read_file {"path":"README.md"}', "metadata": {"requires_response": True}},
                 response_mode="silent",
             )
 
