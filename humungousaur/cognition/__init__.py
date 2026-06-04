@@ -1,4 +1,13 @@
 from .controller import CognitiveController, CognitiveDecisionProvider, ExplicitCognitiveDecisionProvider, ModelCognitiveDecisionProvider
+from .automation_daemon import (
+    AutomationDaemonProfile,
+    automation_daemon_profile_path,
+    automation_daemon_profile_with_overrides,
+    automation_daemon_status,
+    load_automation_daemon_profile,
+    run_automation_daemon_tick,
+    save_automation_daemon_profile,
+)
 from .briefing import BriefingEngine, BriefingProvider, BriefingStore, EvidenceBriefingProvider, ModelBriefingProvider
 from .commitments import (
     CommitmentReviewEngine,
@@ -87,6 +96,7 @@ from .models import (
     WakeupRecord,
     WakeupStatus,
 )
+from .multi_agent import MultiAgentCoordination, MultiAgentCoordinator, coordination_to_dict
 from .queue import RuntimeEventQueue
 from .persona_evolution import (
     EvidencePersonaEvolutionProvider,
@@ -114,6 +124,16 @@ from .skill_evolution import (
     SkillEvolutionProvider,
     SkillEvolutionStore,
 )
+from .skill_forge import (
+    EvidenceSkillForgeProvider,
+    ForgedSkillPack,
+    ModelSkillForgeProvider,
+    SkillForge,
+    SkillForgeProposal,
+    SkillForgeProvider,
+    forged_skill_packs,
+    pack_to_dict,
+)
 from .skills import SkillStore
 from .specialists import SpecialistStore
 from .triggers import TriggerStore, stimulus_from_input, trigger_matches
@@ -121,6 +141,7 @@ from .wakeups import WakeupStore
 
 __all__ = [
     "CognitiveController",
+    "AutomationDaemonProfile",
     "BriefingEngine",
     "BriefingProvider",
     "BriefingRecord",
@@ -185,6 +206,8 @@ __all__ = [
     "AutonomousLoopResult",
     "AutonomousLoopRunner",
     "ModelCognitiveDecisionProvider",
+    "MultiAgentCoordination",
+    "MultiAgentCoordinator",
     "ModelBriefingProvider",
     "ModelCommitmentReviewProvider",
     "ModelConsolidationProvider",
@@ -226,7 +249,9 @@ __all__ = [
     "RuntimeEvent",
     "RuntimeEventQueue",
     "EvidenceSelfReviewProvider",
+    "EvidenceSkillForgeProvider",
     "ModelSelfReviewProvider",
+    "ModelSkillForgeProvider",
     "SelfReviewEngine",
     "SelfReviewProvider",
     "SelfReviewRecord",
@@ -240,6 +265,10 @@ __all__ = [
     "SkillLifecycleStatus",
     "SkillRecord",
     "SkillStore",
+    "ForgedSkillPack",
+    "SkillForge",
+    "SkillForgeProposal",
+    "SkillForgeProvider",
     "SpecialistRecord",
     "SpecialistStore",
     "TaskRecord",
@@ -249,8 +278,17 @@ __all__ = [
     "WakeupRecord",
     "WakeupStatus",
     "WakeupStore",
+    "automation_daemon_profile_path",
+    "automation_daemon_profile_with_overrides",
+    "automation_daemon_status",
     "autonomous_loop_result_to_dict",
     "autonomous_status",
+    "coordination_to_dict",
+    "forged_skill_packs",
+    "load_automation_daemon_profile",
+    "pack_to_dict",
+    "run_automation_daemon_tick",
+    "save_automation_daemon_profile",
     "stimulus_from_input",
     "trigger_matches",
 ]

@@ -21,6 +21,14 @@ from humungousaur.schemas import ActionStatus
 from humungousaur.tools import default_tools
 from humungousaur.tools.capability_tools import CapabilitySurfaceTool, ToolDescribeTool, ToolSearchTool
 from humungousaur.tools.channel_tools import ChannelCatalogTool
+from humungousaur.tools.cognition_tools import (
+    AutomationDaemonConfigureTool,
+    AutomationDaemonStatusTool,
+    AutomationDaemonTickTool,
+    MultiAgentBoardTool,
+    MultiAgentCoordinateTool,
+    SkillForgeDraftTool,
+)
 from humungousaur.tools.skill_tools import AgentSkillCatalogTool
 from humungousaur.tools.voice_tools import VoiceProviderStatusTool, VoiceResponsePrepareTool, VoiceSpeakTool, VoiceTranscribeTool
 
@@ -63,6 +71,11 @@ def main() -> int:
         "channel_message_prepare",
         "agent_skill_catalog",
         "agent_skill_import",
+        "skill_forge_draft",
+        "automation_daemon_status",
+        "automation_daemon_tick",
+        "multi_agent_coordinate",
+        "multi_agent_board",
         "screenpipe_search",
         "system_status",
     }
@@ -102,6 +115,72 @@ def main() -> int:
         "tool_describe",
         tool_describe.status == ActionStatus.SUCCEEDED and "channel_message_send" in tool_describe.output["record"].get("tools", []),
         {"record_id": "plugin:channels.slack", "status": tool_describe.status.value},
+    )
+    explicit_config = AgentConfig(workspace=workspace, data_dir=args.data_dir, planner_provider="explicit").normalized()
+    skill_forge = SkillForgeDraftTool().execute(
+        {
+            "request": "Draft a smoke skill for voice response verification.",
+            "evidence": [
+                {
+                    "skill": {
+                        "name": "Smoke voice response verification",
+                        "description": "Verify transcript, agent result, and voice response artifacts.",
+                        "purpose": "Capture a reusable local smoke workflow for voice response checks.",
+                        "when_to_use": "Use when testing that voice stimuli become agent responses.",
+                        "tools": ["voice_transcribe", "voice_response_prepare"],
+                        "procedure": ["Capture transcript evidence.", "Run the harness.", "Verify the response artifact."],
+                        "verification_steps": ["Confirm transcript text.", "Confirm voice response id."],
+                        "failure_modes": ["Reporting voice success without a transcript or response artifact."],
+                        "evidence_refs": ["smoke:skill_forge"],
+                        "confidence": 0.8,
+                    }
+                }
+            ],
+            "write_pack": False,
+        },
+        explicit_config,
+    )
+    record("local", "skill_forge_draft", skill_forge.status == ActionStatus.SUCCEEDED, {"status": skill_forge.status.value, "summary": skill_forge.summary})
+    daemon_config = AutomationDaemonConfigureTool().execute(
+        {"enabled": True, "poll_seconds": 1, "max_cycles_per_tick": 1, "stop_after_idle_cycles": 1},
+        explicit_config,
+    )
+    daemon_status = AutomationDaemonStatusTool().execute({}, explicit_config)
+    daemon_tick = AutomationDaemonTickTool().execute({"max_cycles_per_tick": 1}, explicit_config)
+    record(
+        "local",
+        "automation_daemon_tick",
+        daemon_config.status == ActionStatus.SUCCEEDED and daemon_status.status == ActionStatus.SUCCEEDED and daemon_tick.status == ActionStatus.SUCCEEDED,
+        {"profile": daemon_status.output.get("profile", {}), "tick_status": daemon_tick.output.get("loop", {}).get("cycles", [{}])[0].get("status", "")},
+    )
+    multi_agent = MultiAgentCoordinateTool().execute(
+        {
+            "goal_title": "Smoke multi-agent coordination",
+            "specialists": [
+                {
+                    "name": "Smoke reviewer",
+                    "purpose": "Inspect local status during smoke tests.",
+                    "contract": "Use low-risk status tools and report exact evidence.",
+                    "tools": ["system_status"],
+                }
+            ],
+            "tasks": [
+                {
+                    "task_id": "status",
+                    "title": "Inspect system status",
+                    "owner": "Smoke reviewer",
+                    "request": "system_status {}",
+                }
+            ],
+        },
+        explicit_config,
+    )
+    board = MultiAgentBoardTool().execute({}, explicit_config)
+    record(
+        "local",
+        "multi_agent_coordinate",
+        multi_agent.status == ActionStatus.SUCCEEDED and board.status == ActionStatus.SUCCEEDED and bool(board.output.get("specialists")),
+        {"goal_id": multi_agent.output.get("goal", {}).get("goal_id", ""), "specialist_count": len(board.output.get("specialists", []))},
     )
 
     harness = InteractionHarness(config)

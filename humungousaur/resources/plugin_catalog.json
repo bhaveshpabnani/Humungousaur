@@ -403,7 +403,19 @@
       "runtime_adapter": "humungousaur.cognition.queue",
       "channels": [],
       "providers": [],
-      "tools": ["autonomous_cycle_run", "autonomous_task_graph_create", "cognitive_goal_create", "cognitive_wakeup_schedule"],
+      "tools": [
+        "autonomous_cycle_run",
+        "autonomous_task_graph_create",
+        "automation_daemon_configure",
+        "automation_daemon_status",
+        "automation_daemon_tick",
+        "cognitive_goal_create",
+        "cognitive_wakeup_schedule",
+        "multi_agent_board",
+        "multi_agent_coordinate",
+        "skill_forge_draft",
+        "skill_forge_packs"
+      ],
       "skills": ["taskflow"],
       "setup": {
         "required_env": [],
@@ -414,7 +426,10 @@
         "durable_tasks": true,
         "wakeups": true,
         "autonomous_cycles": true,
-        "delegation": true
+        "delegation": true,
+        "skill_forge": true,
+        "automation_daemon": true,
+        "multi_agent_coordination": true
       }
     },
     {

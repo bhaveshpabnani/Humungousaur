@@ -58,7 +58,22 @@ from humungousaur.cognition import (
     stimulus_from_input,
 )
 from humungousaur.cognition.models import CognitivePriority, CommitmentStatus, EnvironmentKind, FocusMode, KnowledgeKind, TriggerStatus, WakeupStatus
+from humungousaur.cognition.automation_daemon import (
+    automation_daemon_profile_with_overrides,
+    automation_daemon_status,
+    load_automation_daemon_profile,
+    run_automation_daemon_tick,
+    save_automation_daemon_profile,
+)
+from humungousaur.cognition.multi_agent import MultiAgentCoordinator, coordination_to_dict
 from humungousaur.cognition.queue import RuntimeEventQueue
+from humungousaur.cognition.skill_forge import (
+    EvidenceSkillForgeProvider,
+    ModelSkillForgeProvider,
+    SkillForge,
+    forged_skill_packs,
+    pack_to_dict,
+)
 from humungousaur.cognition.wakeups import scheduled_for_from_delay, try_normalize_scheduled_for
 from humungousaur.config import AgentConfig
 from humungousaur.planning.model_factory import build_model_client
@@ -380,6 +395,105 @@ class CognitiveSkillEvolutionStatusTool(Tool):
             self.risk_level,
             f"Found {len(evolutions)} cognitive skill evolution record(s).",
             {"skill_evolutions": [asdict(record) for record in evolutions]},
+        )
+
+
+class SkillForgeDraftTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="skill_forge_draft",
+            description=(
+                "Create a model-led reusable SKILL.md pack from task, tool, web, or runtime evidence. "
+                "Writes to .umang/skills when requested and can import the result into durable skill memory."
+            ),
+            risk_level=RiskLevel.MEDIUM,
+            input_schema=object_input_schema(
+                {
+                    "request": {"type": "string", "description": "Skill authoring request or reusable workflow gap to capture."},
+                    "evidence": {
+                        "type": "array",
+                        "items": {"type": "object"},
+                        "maxItems": 50,
+                        "description": "Structured evidence from web research, task traces, tool output, memory, or explicit skill content.",
+                    },
+                    "available_tools": {"type": "array", "items": {"type": "string"}, "maxItems": 80},
+                    "max_steps": {"type": "integer", "minimum": 1, "maximum": 30},
+                    "write_pack": {"type": "boolean", "description": "Write the generated SKILL.md under .umang/skills."},
+                    "import_memory": {"type": "boolean", "description": "Also upsert the forged skill into durable cognitive skill memory."},
+                    "include_proposal": {"type": "boolean", "description": "Include the model proposal in the output."},
+                },
+                required=["request"],
+            ),
+            capability_group="skills",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        request = str(tool_input.get("request", "")).strip()
+        if not request:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Skill forge request is empty.")
+        evidence = tool_input.get("evidence", [])
+        if not isinstance(evidence, list):
+            evidence = []
+        available_tools = tool_input.get("available_tools", [])
+        if not isinstance(available_tools, list):
+            available_tools = []
+        max_steps = min(max(int(tool_input.get("max_steps") or 12), 1), 30)
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would draft a reusable SKILL.md pack from supplied evidence.",
+                {
+                    "request": request,
+                    "evidence_count": len(evidence),
+                    "available_tool_count": len(available_tools),
+                    "write_pack": bool(tool_input.get("write_pack", False)),
+                },
+            )
+        forge = SkillForge(config, provider=_build_skill_forge_provider(config))
+        proposal = forge.draft(
+            request=request,
+            evidence=evidence,
+            available_tools=[str(item) for item in available_tools if str(item)],
+            max_steps=max_steps,
+        )
+        output: dict[str, Any] = {"proposal": asdict(proposal)}
+        if proposal.status != "recorded":
+            return ToolResult(self.name, ActionStatus.SKIPPED, self.risk_level, proposal.summary or "Skill forge skipped.", output)
+        if bool(tool_input.get("write_pack", False)):
+            pack = forge.write_pack(proposal, import_memory=bool(tool_input.get("import_memory", True)))
+            output["pack"] = pack_to_dict(pack)
+        elif not bool(tool_input.get("include_proposal", True)):
+            output.pop("proposal", None)
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Skill forge drafted {proposal.name}.",
+            output,
+        )
+
+
+class SkillForgePacksTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="skill_forge_packs",
+            description="List SKILL.md packs forged under the workspace .umang/skills folder.",
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema({"limit": {"type": "integer", "minimum": 1, "maximum": 100}}),
+            capability_group="skills",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        limit = min(int(tool_input.get("limit") or 20), 100)
+        packs = forged_skill_packs(config, limit=limit)
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Found {len(packs)} forged skill pack(s).",
+            {"packs": packs},
         )
 
 
@@ -741,6 +855,102 @@ class CognitiveWakeupCancelTool(Tool):
         return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Cancelled wakeup {wakeup_id}.", {"wakeup": asdict(record)})
 
 
+class AutomationDaemonConfigureTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="automation_daemon_configure",
+            description="Persist the bounded autonomous automation daemon profile used by the Windows app, CLI, and daemon tick tool.",
+            risk_level=RiskLevel.MEDIUM,
+            input_schema=object_input_schema(
+                {
+                    "enabled": {"type": "boolean"},
+                    "poll_seconds": {"type": "number", "minimum": 0.1, "maximum": 3600},
+                    "max_cycles_per_tick": {"type": "integer", "minimum": 1, "maximum": 100},
+                    "stop_after_idle_cycles": {"type": "integer", "minimum": 1, "maximum": 100},
+                    "allow_initiative": {"type": "boolean"},
+                    "approve_high_risk": {"type": "boolean"},
+                    "response_mode": {"type": "string", "enum": ["silent", "text", "voice_prepare", "voice_speak"]},
+                    "note": {"type": "string"},
+                }
+            ),
+            capability_group="cognition",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        if config.dry_run:
+            return ToolResult(self.name, ActionStatus.SKIPPED, self.risk_level, "Dry run: would persist automation daemon profile.", dict(tool_input))
+        profile = save_automation_daemon_profile(config, tool_input)
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            "Saved automation daemon profile.",
+            {"profile": asdict(profile)},
+        )
+
+
+class AutomationDaemonStatusTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="automation_daemon_status",
+            description="Inspect the automation daemon profile, queue, wakeups, triggers, and suggested bounded daemon command.",
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema({"limit": {"type": "integer", "minimum": 1, "maximum": 100}}),
+            capability_group="cognition",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        limit = min(int(tool_input.get("limit") or 10), 100)
+        payload = automation_daemon_status(config, limit=limit)
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            "Automation daemon status loaded.",
+            payload,
+        )
+
+
+class AutomationDaemonTickTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="automation_daemon_tick",
+            description="Run one bounded automation daemon tick over queued events, due wakeups, ready tasks, and optional model initiative.",
+            risk_level=RiskLevel.HIGH,
+            requires_approval=True,
+            input_schema=object_input_schema(
+                {
+                    "max_cycles_per_tick": {"type": "integer", "minimum": 1, "maximum": 100},
+                    "stop_after_idle_cycles": {"type": "integer", "minimum": 1, "maximum": 100},
+                    "allow_initiative": {"type": "boolean"},
+                    "approve_high_risk": {"type": "boolean"},
+                }
+            ),
+            capability_group="cognition",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        profile = load_automation_daemon_profile(config)
+        if tool_input:
+            profile = automation_daemon_profile_with_overrides(profile, tool_input)
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would run one bounded automation daemon tick.",
+                {"profile": asdict(profile)},
+            )
+        payload = run_automation_daemon_tick(config, profile=profile)
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Automation daemon tick ran {payload['loop']['cycle_count']} cycle(s).",
+            payload,
+        )
+
+
 class CognitiveTriggerRecordTool(Tool):
     def __init__(self) -> None:
         super().__init__(
@@ -1015,6 +1225,112 @@ class CognitiveSpecialistRecordTool(Tool):
             confidence=float(tool_input.get("confidence", 0.5)),
         )
         return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Recorded specialist {specialist.name}.", {"specialist": asdict(specialist)})
+
+
+class MultiAgentCoordinateTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="multi_agent_coordinate",
+            description=(
+                "Create or update specialist contracts and build a dependency-aware multi-specialist task graph. "
+                "Execution is handled by autonomous_cycle_run or automation_daemon_tick under normal approvals."
+            ),
+            risk_level=RiskLevel.MEDIUM,
+            input_schema=object_input_schema(
+                {
+                    "goal_title": {"type": "string"},
+                    "success_criteria": {"type": "array", "items": {"type": "string"}, "maxItems": 12},
+                    "specialists": {
+                        "type": "array",
+                        "maxItems": 30,
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "properties": {
+                                "name": {"type": "string"},
+                                "purpose": {"type": "string"},
+                                "contract": {"type": "string"},
+                                "tools": {"type": "array", "items": {"type": "string"}, "maxItems": 30},
+                                "success_criteria": {"type": "array", "items": {"type": "string"}, "maxItems": 20},
+                                "permission_notes": {"type": "array", "items": {"type": "string"}, "maxItems": 20},
+                                "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                            },
+                            "required": ["name", "purpose", "contract"],
+                        },
+                    },
+                    "tasks": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": 50,
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "properties": {
+                                "task_id": {"type": "string"},
+                                "title": {"type": "string"},
+                                "request": {"type": "string"},
+                                "owner": {"type": "string"},
+                                "success_criteria": {"type": "array", "items": {"type": "string"}, "maxItems": 12},
+                                "depends_on": {"type": "array", "items": {"type": "string"}, "maxItems": 20},
+                            },
+                            "required": ["title"],
+                        },
+                    },
+                },
+                required=["goal_title", "tasks"],
+            ),
+            capability_group="cognition",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        tasks = tool_input.get("tasks", [])
+        specialists = tool_input.get("specialists", [])
+        if not isinstance(tasks, list) or not tasks:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "At least one coordination task is required.")
+        if not isinstance(specialists, list):
+            specialists = []
+        if config.dry_run:
+            return ToolResult(self.name, ActionStatus.SKIPPED, self.risk_level, "Dry run: would create multi-agent coordination graph.", dict(tool_input))
+        try:
+            record = MultiAgentCoordinator(config).create_coordination(
+                goal_title=str(tool_input.get("goal_title", "")),
+                success_criteria=[str(item) for item in tool_input.get("success_criteria", [])],
+                specialists=specialists,
+                tasks=tasks,
+                run_cycles=False,
+            )
+        except ValueError as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, str(exc))
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Created multi-agent coordination graph {record.goal.goal_id} with {len(record.tasks)} task(s).",
+            coordination_to_dict(record),
+        )
+
+
+class MultiAgentBoardTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="multi_agent_board",
+            description="Inspect active specialist contracts, active goals, ready tasks, and task ownership for multi-agent coordination.",
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema({"limit": {"type": "integer", "minimum": 1, "maximum": 100}}),
+            capability_group="cognition",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        limit = min(int(tool_input.get("limit") or 20), 100)
+        board = MultiAgentCoordinator(config).board(limit=limit)
+        owner_count = len(board["active_tasks_by_owner"])
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Multi-agent board has {len(board['specialists'])} specialist(s), {len(board['active_goals'])} active goal(s), and {owner_count} active owner lane(s).",
+            board,
+        )
 
 
 class CognitivePersonaUpdateTool(Tool):
@@ -2022,6 +2338,8 @@ def default_cognition_tools() -> dict[str, Tool]:
         CognitiveCurationStatusTool(),
         CognitiveSkillEvolveTool(),
         CognitiveSkillEvolutionStatusTool(),
+        SkillForgeDraftTool(),
+        SkillForgePacksTool(),
         CognitiveGoalCreateTool(),
         CognitiveFocusUpdateTool(),
         CognitiveKnowledgeRecordTool(),
@@ -2032,12 +2350,17 @@ def default_cognition_tools() -> dict[str, Tool]:
         CognitiveWakeupScheduleTool(),
         CognitiveWakeupStatusTool(),
         CognitiveWakeupCancelTool(),
+        AutomationDaemonConfigureTool(),
+        AutomationDaemonStatusTool(),
+        AutomationDaemonTickTool(),
         CognitiveTriggerRecordTool(),
         CognitiveTriggerStatusTool(),
         CognitiveTriggerEvaluateTool(),
         CognitiveTriggerCancelTool(),
         CognitiveSkillRecordTool(),
         CognitiveSpecialistRecordTool(),
+        MultiAgentCoordinateTool(),
+        MultiAgentBoardTool(),
         CognitivePersonaUpdateTool(),
         CognitivePersonaEvolveTool(),
         CognitivePersonaEvolutionStatusTool(),
@@ -2089,6 +2412,13 @@ def _build_skill_evolution_provider(config: AgentConfig) -> EvidenceSkillEvoluti
     if config.planner_provider != "model":
         return fallback
     return ModelSkillEvolutionProvider(build_model_client(config), fallback=fallback)
+
+
+def _build_skill_forge_provider(config: AgentConfig) -> EvidenceSkillForgeProvider | ModelSkillForgeProvider:
+    fallback = EvidenceSkillForgeProvider()
+    if config.planner_provider != "model":
+        return fallback
+    return ModelSkillForgeProvider(build_model_client(config), fallback=fallback)
 
 
 def _build_persona_evolution_provider(config: AgentConfig) -> EvidencePersonaEvolutionProvider | ModelPersonaEvolutionProvider:

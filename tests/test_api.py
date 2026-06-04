@@ -318,6 +318,81 @@ class APITests(unittest.TestCase):
             self.assertEqual(after["scheduled_wakeups"], [])
             self.assertEqual(after["recent_wakeups"][0]["status"], WakeupStatus.FIRED)
 
+    def test_api_exposes_skill_forge_daemon_and_multi_agent_surfaces(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            (workspace / "README.md").write_text("# Coordination API\n\nEvidence.", encoding="utf-8")
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", planner_provider="explicit").normalized()
+
+            with running_api(config) as base_url:
+                forged = api_post(
+                    base_url,
+                    "/skills/forge",
+                    {
+                        "request": "Create a reusable coordination skill.",
+                        "planner": "explicit",
+                        "evidence": [
+                            {
+                                "skill": {
+                                    "name": "Coordination smoke",
+                                    "description": "Coordinate a simple specialist task.",
+                                    "purpose": "Capture a reusable specialist coordination smoke workflow.",
+                                    "when_to_use": "Use when validating specialist contracts and task graph execution.",
+                                    "tools": ["multi_agent_coordinate", "multi_agent_board", "autonomous_cycle_run"],
+                                    "procedure": ["Create a specialist contract.", "Create a task graph.", "Inspect the board."],
+                                    "verification_steps": ["Confirm the board lists the specialist."],
+                                    "failure_modes": ["Treating a graph as complete before a cycle runs."],
+                                    "evidence_refs": ["api:test"],
+                                    "confidence": 0.8,
+                                }
+                            }
+                        ],
+                        "write_pack": True,
+                        "import_memory": True,
+                    },
+                )
+                packs = api_get(base_url, "/skills/forge/packs")
+                daemon_config = api_post(
+                    base_url,
+                    "/automation/daemon/configure",
+                    {"enabled": True, "poll_seconds": 1, "max_cycles_per_tick": 1, "planner": "explicit"},
+                )
+                daemon = api_get(base_url, "/automation/daemon")
+                tick = api_post(base_url, "/automation/daemon/tick", {"max_cycles_per_tick": 1, "planner": "explicit"})
+                coordination = api_post(
+                    base_url,
+                    "/multi-agent/coordinate",
+                    {
+                        "planner": "explicit",
+                        "goal_title": "Coordinate API README review",
+                        "specialists": [
+                            {
+                                "name": "API reviewer",
+                                "purpose": "Read files for API smoke tasks.",
+                                "contract": "Use read-only tools and exact evidence.",
+                                "tools": ["read_file"],
+                            }
+                        ],
+                        "tasks": [
+                            {
+                                "task_id": "readme",
+                                "title": "Read README",
+                                "owner": "API reviewer",
+                                "request": 'read_file {"path":"README.md"}',
+                            }
+                        ],
+                    },
+                )
+                board = api_get(base_url, "/multi-agent/board")
+
+            self.assertEqual(forged["status"], "succeeded")
+            self.assertEqual(packs["packs"][0]["name"], "Coordination smoke")
+            self.assertEqual(daemon_config["status"], "succeeded")
+            self.assertTrue(daemon["profile"]["enabled"])
+            self.assertEqual(tick["status"], "succeeded")
+            self.assertEqual(coordination["status"], "succeeded")
+            self.assertEqual(board["specialists"][0]["name"], "API reviewer")
+
     def test_api_evaluates_structured_triggers_into_autonomous_queue(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)

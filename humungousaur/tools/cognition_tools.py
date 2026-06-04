@@ -1,5 +1,8 @@
 from humungousaur.tools.cognition.implementation import (
     AutonomousCycleRunTool,
+    AutomationDaemonConfigureTool,
+    AutomationDaemonStatusTool,
+    AutomationDaemonTickTool,
     AutonomousEventSubmitTool,
     AutonomousQueueStatusTool,
     AutonomousTaskGraphCreateTool,
@@ -44,6 +47,10 @@ from humungousaur.tools.cognition.implementation import (
     CognitiveWakeupCancelTool,
     CognitiveWakeupScheduleTool,
     CognitiveWakeupStatusTool,
+    MultiAgentBoardTool,
+    MultiAgentCoordinateTool,
+    SkillForgeDraftTool,
+    SkillForgePacksTool,
     default_cognition_tools,
 )
 
@@ -90,8 +97,15 @@ __all__ = [
     "CognitiveWakeupScheduleTool",
     "CognitiveWakeupStatusTool",
     "AutonomousCycleRunTool",
+    "AutomationDaemonConfigureTool",
+    "AutomationDaemonStatusTool",
+    "AutomationDaemonTickTool",
     "AutonomousEventSubmitTool",
     "AutonomousQueueStatusTool",
     "AutonomousTaskGraphCreateTool",
+    "MultiAgentBoardTool",
+    "MultiAgentCoordinateTool",
+    "SkillForgeDraftTool",
+    "SkillForgePacksTool",
     "default_cognition_tools",
 ]

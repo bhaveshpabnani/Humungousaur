@@ -26,6 +26,13 @@ from humungousaur.runtime import (
 )
 from humungousaur.safety.approvals import ApprovalStore
 from humungousaur.safety.audit import AuditLog
+from humungousaur.tools.cognition_tools import (
+    AutomationDaemonConfigureTool,
+    AutomationDaemonStatusTool,
+    AutomationDaemonTickTool,
+    MultiAgentBoardTool,
+    SkillForgePacksTool,
+)
 from humungousaur.tools.os_tools import list_screenshot_captures
 
 
@@ -152,6 +159,47 @@ def build_parser() -> argparse.ArgumentParser:
     autonomous_loop.add_argument("--allow-initiative", action="store_true", help="Allow an idle model-led priority review to queue one next action")
     autonomous_loop.add_argument("--json", action="store_true")
     _add_planner_args(autonomous_loop)
+
+    daemon_status = subparsers.add_parser("automation-daemon-status", help="Inspect the persisted automation daemon profile and autonomous queue")
+    daemon_status.add_argument("--workspace", type=Path, default=Path.cwd())
+    daemon_status.add_argument("--data-dir", type=Path, default=Path("artifacts"))
+    daemon_status.add_argument("--limit", type=int, default=10)
+    daemon_status.add_argument("--json", action="store_true")
+
+    daemon_configure = subparsers.add_parser("automation-daemon-configure", help="Persist a bounded automation daemon profile")
+    daemon_configure.add_argument("--workspace", type=Path, default=Path.cwd())
+    daemon_configure.add_argument("--data-dir", type=Path, default=Path("artifacts"))
+    daemon_configure.add_argument("--enabled", action="store_true")
+    daemon_configure.add_argument("--poll-seconds", type=float, default=5.0)
+    daemon_configure.add_argument("--max-cycles-per-tick", type=int, default=3)
+    daemon_configure.add_argument("--stop-after-idle-cycles", type=int, default=1)
+    daemon_configure.add_argument("--allow-initiative", action="store_true")
+    daemon_configure.add_argument("--approve-high-risk", action="store_true")
+    daemon_configure.add_argument("--response-mode", default="silent", choices=["silent", "text", "voice_prepare", "voice_speak"])
+    daemon_configure.add_argument("--note", default="")
+    daemon_configure.add_argument("--json", action="store_true")
+
+    daemon_tick = subparsers.add_parser("automation-daemon-tick", help="Run one bounded automation daemon tick")
+    daemon_tick.add_argument("--workspace", type=Path, default=Path.cwd())
+    daemon_tick.add_argument("--data-dir", type=Path, default=Path("artifacts"))
+    daemon_tick.add_argument("--max-cycles-per-tick", type=int)
+    daemon_tick.add_argument("--stop-after-idle-cycles", type=int)
+    daemon_tick.add_argument("--allow-initiative", action="store_true")
+    daemon_tick.add_argument("--approve-high-risk", action="store_true")
+    daemon_tick.add_argument("--json", action="store_true")
+    _add_planner_args(daemon_tick)
+
+    multi_agent_board = subparsers.add_parser("multi-agent-board", help="Inspect specialist coordination board")
+    multi_agent_board.add_argument("--workspace", type=Path, default=Path.cwd())
+    multi_agent_board.add_argument("--data-dir", type=Path, default=Path("artifacts"))
+    multi_agent_board.add_argument("--limit", type=int, default=20)
+    multi_agent_board.add_argument("--json", action="store_true")
+
+    skill_forge_packs = subparsers.add_parser("skill-forge-packs", help="List forged SKILL.md packs")
+    skill_forge_packs.add_argument("--workspace", type=Path, default=Path.cwd())
+    skill_forge_packs.add_argument("--data-dir", type=Path, default=Path("artifacts"))
+    skill_forge_packs.add_argument("--limit", type=int, default=20)
+    skill_forge_packs.add_argument("--json", action="store_true")
 
     approvals = subparsers.add_parser("approvals", help="List approval queue items")
     approvals.add_argument("--workspace", type=Path, default=Path.cwd())
@@ -387,6 +435,82 @@ def main() -> None:
             )
             for cycle in payload["cycles"]:
                 print(f"- {cycle['status']}: {cycle['reason']}")
+        return
+
+    if args.command == "automation-daemon-status":
+        result = AutomationDaemonStatusTool().execute({"limit": args.limit}, config)
+        payload = {"status": result.status.value, "summary": result.summary, **result.output}
+        if args.json:
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            profile = payload["profile"]
+            autonomous = payload["autonomous"]
+            print(
+                f"Automation daemon: enabled={profile['enabled']}, poll={profile['poll_seconds']}s, "
+                f"tick_cycles={profile['max_cycles_per_tick']}, queued={len(autonomous['queued_events'])}, "
+                f"wakeups={len(autonomous['scheduled_wakeups'])}."
+            )
+        return
+
+    if args.command == "automation-daemon-configure":
+        result = AutomationDaemonConfigureTool().execute(
+            {
+                "enabled": args.enabled,
+                "poll_seconds": args.poll_seconds,
+                "max_cycles_per_tick": args.max_cycles_per_tick,
+                "stop_after_idle_cycles": args.stop_after_idle_cycles,
+                "allow_initiative": args.allow_initiative,
+                "approve_high_risk": args.approve_high_risk,
+                "response_mode": args.response_mode,
+                "note": args.note,
+            },
+            config,
+        )
+        payload = {"status": result.status.value, "summary": result.summary, **result.output}
+        if args.json:
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            print(result.summary)
+        return
+
+    if args.command == "automation-daemon-tick":
+        tool_input = {}
+        if args.max_cycles_per_tick is not None:
+            tool_input["max_cycles_per_tick"] = args.max_cycles_per_tick
+        if args.stop_after_idle_cycles is not None:
+            tool_input["stop_after_idle_cycles"] = args.stop_after_idle_cycles
+        if args.allow_initiative:
+            tool_input["allow_initiative"] = True
+        if args.approve_high_risk:
+            tool_input["approve_high_risk"] = True
+        result = AutomationDaemonTickTool().execute(tool_input, config)
+        payload = {"status": result.status.value, "summary": result.summary, **result.output}
+        if args.json:
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            print(result.summary)
+            for cycle in payload.get("loop", {}).get("cycles", []):
+                print(f"- {cycle['status']}: {cycle['reason']}")
+        return
+
+    if args.command == "multi-agent-board":
+        result = MultiAgentBoardTool().execute({"limit": args.limit}, config)
+        payload = {"status": result.status.value, "summary": result.summary, **result.output}
+        if args.json:
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            print(result.summary)
+        return
+
+    if args.command == "skill-forge-packs":
+        result = SkillForgePacksTool().execute({"limit": args.limit}, config)
+        payload = {"status": result.status.value, "summary": result.summary, **result.output}
+        if args.json:
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            print(result.summary)
+            for pack in payload["packs"]:
+                print(f"- {pack['name']}: {pack['relative_path']}")
         return
 
     if args.command == "approvals":

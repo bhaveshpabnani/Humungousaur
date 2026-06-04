@@ -49,14 +49,14 @@ CAPABILITY_SURFACES: tuple[dict[str, Any], ...] = (
         "surface_id": "sessions_agents",
         "display_name": "Sessions And Agents",
         "groups": ["cognition", "codex"],
-        "expected_tools": ["cognitive_state", "autonomous_queue_status", "codex_cli_plan", "codex_cli_run"],
+        "expected_tools": ["cognitive_state", "autonomous_queue_status", "multi_agent_board", "multi_agent_coordinate", "codex_cli_plan", "codex_cli_run"],
         "purpose": "Inspect current work, delegate coding tasks, and coordinate durable agent state.",
     },
     {
         "surface_id": "automation",
         "display_name": "Automation",
         "groups": ["cognition"],
-        "expected_tools": ["cognitive_wakeup_schedule", "cognitive_trigger_record", "autonomous_event_submit", "autonomous_cycle_run"],
+        "expected_tools": ["cognitive_wakeup_schedule", "cognitive_trigger_record", "autonomous_event_submit", "autonomous_cycle_run", "automation_daemon_status", "automation_daemon_configure", "automation_daemon_tick"],
         "purpose": "Schedule wakeups, evaluate structured triggers, and run bounded autonomous cycles.",
     },
     {
@@ -77,7 +77,7 @@ CAPABILITY_SURFACES: tuple[dict[str, Any], ...] = (
         "surface_id": "skills",
         "display_name": "Skills",
         "groups": ["skills", "codex", "cognition"],
-        "expected_tools": ["agent_skill_catalog", "agent_skill_read", "agent_skill_import", "codex_skill_catalog", "cognitive_skill_evolve"],
+        "expected_tools": ["agent_skill_catalog", "agent_skill_read", "agent_skill_import", "codex_skill_catalog", "cognitive_skill_evolve", "skill_forge_draft", "skill_forge_packs"],
         "purpose": "Discover reusable workflow instructions, import selected skills, and evolve durable skill memory.",
     },
     {

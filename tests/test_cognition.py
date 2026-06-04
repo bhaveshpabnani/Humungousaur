@@ -114,6 +114,9 @@ from humungousaur.schemas import ActionStatus, AgentRunResult, ApprovalRequest, 
 from humungousaur.tools.cognition_tools import (
     AutonomousQueueStatusTool,
     AutonomousTaskGraphCreateTool,
+    AutomationDaemonConfigureTool,
+    AutomationDaemonStatusTool,
+    AutomationDaemonTickTool,
     CognitiveBriefingPrepareTool,
     CognitiveBriefingStatusTool,
     CognitiveCommitmentRecordTool,
@@ -155,6 +158,10 @@ from humungousaur.tools.cognition_tools import (
     CognitiveWakeupCancelTool,
     CognitiveWakeupScheduleTool,
     CognitiveWakeupStatusTool,
+    MultiAgentBoardTool,
+    MultiAgentCoordinateTool,
+    SkillForgeDraftTool,
+    SkillForgePacksTool,
 )
 
 
@@ -1818,6 +1825,131 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertEqual(reflection_tool.output["reflections"][0]["task_id"], task_id)
             self.assertEqual(consolidation_tool.status, ActionStatus.SUCCEEDED)
             self.assertEqual(consolidation_tool.output["consolidations"][0]["task_id"], task_id)
+
+    def test_skill_forge_writes_workspace_pack_and_memory_skill(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", planner_provider="explicit").normalized()
+
+            result = SkillForgeDraftTool().execute(
+                {
+                    "request": "Create a reusable voice follow-up skill from exact evidence.",
+                    "evidence": [
+                        {
+                            "skill": {
+                                "name": "Voice follow-up loop",
+                                "description": "Handle wakeup, transcription, agent work, and spoken response.",
+                                "purpose": "Run an end-to-end voice interaction loop with verification.",
+                                "when_to_use": "Use when a voice wakeup or spoken request should become an agent task and spoken answer.",
+                                "tools": ["voice_transcribe", "voice_response_prepare", "voice_speak"],
+                                "procedure": [
+                                    "Transcribe the captured audio and keep the transcript as evidence.",
+                                    "Run the transcript through the agent harness with an explicit response mode.",
+                                    "Prepare or speak the response and verify the audio artifact or provider result.",
+                                ],
+                                "verification_steps": ["Confirm a transcript exists.", "Confirm a response artifact or provider result exists."],
+                                "failure_modes": ["Treating wake-word detection alone as proof that a transcript was handled."],
+                                "evidence_refs": ["test:voice-loop"],
+                                "confidence": 0.86,
+                            }
+                        }
+                    ],
+                    "write_pack": True,
+                    "import_memory": True,
+                },
+                config,
+            )
+            packs = SkillForgePacksTool().execute({}, config)
+            memory_skills = SkillStore(config.skill_library_path).list(limit=5)
+
+            self.assertEqual(result.status, ActionStatus.SUCCEEDED)
+            self.assertIn(".umang/skills", result.output["pack"]["relative_path"])
+            self.assertTrue(Path(result.output["pack"]["path"]).exists())
+            self.assertEqual(packs.output["packs"][0]["name"], "Voice follow-up loop")
+            self.assertEqual(memory_skills[0].name, "Voice follow-up loop")
+
+    def test_automation_daemon_configure_status_and_tick_runs_due_work(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            (workspace / "README.md").write_text("# Automation Daemon\n\nTick evidence.", encoding="utf-8")
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", planner_provider="explicit").normalized()
+            WakeupStore(config.cognition_db_path).schedule(
+                scheduled_for=_utc_seconds_from_now(-1),
+                event_type="STIMULUS",
+                payload={
+                    "text": 'read_file {"path":"README.md"}',
+                    "source": "wakeup",
+                    "metadata": {"should_run_agent": True, "intent": "task"},
+                    "response_mode": "silent",
+                },
+                reason="Daemon tick smoke.",
+            )
+
+            configured = AutomationDaemonConfigureTool().execute(
+                {
+                    "enabled": True,
+                    "poll_seconds": 1,
+                    "max_cycles_per_tick": 2,
+                    "stop_after_idle_cycles": 1,
+                    "allow_initiative": False,
+                    "response_mode": "silent",
+                },
+                config,
+            )
+            status_before = AutomationDaemonStatusTool().execute({}, config)
+            tick = AutomationDaemonTickTool().execute({}, config)
+            status_after = AutomationDaemonStatusTool().execute({}, config)
+
+            self.assertEqual(configured.status, ActionStatus.SUCCEEDED)
+            self.assertTrue(status_before.output["profile"]["enabled"])
+            self.assertEqual(len(status_before.output["autonomous"]["scheduled_wakeups"]), 1)
+            self.assertEqual(tick.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(tick.output["loop"]["cycles"][0]["status"], RuntimeCycleStatus.RUN_FINISHED)
+            self.assertEqual(status_after.output["autonomous"]["scheduled_wakeups"], [])
+            self.assertEqual(status_after.output["autonomous"]["recent_wakeups"][0]["status"], WakeupStatus.FIRED)
+
+    def test_multi_agent_coordinate_creates_specialist_graph_and_board(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            (workspace / "README.md").write_text("# Multi Agent\n\nCoordinator evidence.", encoding="utf-8")
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", planner_provider="explicit").normalized()
+
+            graph = MultiAgentCoordinateTool().execute(
+                {
+                    "goal_title": "Coordinate README review",
+                    "success_criteria": ["README evidence is captured."],
+                    "specialists": [
+                        {
+                            "name": "Evidence reviewer",
+                            "purpose": "Read files and report exact evidence.",
+                            "contract": "Use read-only evidence tools and do not infer unread content.",
+                            "tools": ["read_file"],
+                            "success_criteria": ["README was read."],
+                            "confidence": 0.9,
+                        }
+                    ],
+                    "tasks": [
+                        {
+                            "task_id": "readme",
+                            "title": "Read README",
+                            "owner": "Evidence reviewer",
+                            "request": 'read_file {"path":"README.md"}',
+                            "success_criteria": ["README was read."],
+                        }
+                    ],
+                },
+                config,
+            )
+            board = MultiAgentBoardTool().execute({}, config)
+            run = AutonomousRuntime(config).run_once()
+            task = GoalStore(config.cognition_db_path).get_task(graph.output["tasks"][0]["task_id"])
+
+            self.assertEqual(graph.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(board.output["specialists"][0]["name"], "Evidence reviewer")
+            self.assertIn("Evidence reviewer", board.output["active_tasks_by_owner"])
+            self.assertEqual(run.status, RuntimeCycleStatus.TASK_FINISHED)
+            self.assertIsNotNone(task)
+            self.assertEqual(task.metadata["specialist_id"], graph.output["specialists"][0]["specialist_id"])
 
 
 def _utc_seconds_from_now(seconds: int) -> str:

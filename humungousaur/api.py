@@ -43,6 +43,15 @@ from humungousaur.schemas import ActionStatus
 from humungousaur.tools import default_tools
 from humungousaur.tools.browser_tools import BrowserSessionStore
 from humungousaur.tools.capability_tools import CapabilitySurfaceTool, ToolDescribeTool, ToolSearchTool
+from humungousaur.tools.cognition_tools import (
+    AutomationDaemonConfigureTool,
+    AutomationDaemonStatusTool,
+    AutomationDaemonTickTool,
+    MultiAgentBoardTool,
+    MultiAgentCoordinateTool,
+    SkillForgeDraftTool,
+    SkillForgePacksTool,
+)
 from humungousaur.tools.os_tools import list_screenshot_captures
 from humungousaur.tools.plugin_tools import discover_plugin_manifests, load_plugin_catalog
 from humungousaur.tools.system_tools import collect_system_status
@@ -153,6 +162,27 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                     return
                 if path == "/autonomous/status":
                     self._send_json(autonomous_status(effective_config(), limit=_int_arg(query, "limit", 10)))
+                    return
+                if path == "/automation/daemon":
+                    result = AutomationDaemonStatusTool().execute(
+                        {"limit": _int_arg(query, "limit", 10)},
+                        effective_config(),
+                    )
+                    self._send_json({"status": result.status.value, "summary": result.summary, **result.output})
+                    return
+                if path == "/multi-agent/board":
+                    result = MultiAgentBoardTool().execute(
+                        {"limit": _int_arg(query, "limit", 20)},
+                        effective_config(),
+                    )
+                    self._send_json({"status": result.status.value, "summary": result.summary, **result.output})
+                    return
+                if path == "/skills/forge/packs":
+                    result = SkillForgePacksTool().execute(
+                        {"limit": _int_arg(query, "limit", 20)},
+                        effective_config(),
+                    )
+                    self._send_json({"status": result.status.value, "summary": result.summary, **result.output})
                     return
                 if path == "/index/status":
                     self._send_json(FileIndex(effective_config().file_index_db_path).status(effective_config()))
@@ -332,6 +362,26 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                         allow_initiative=_payload_bool(payload, "allow_initiative", False),
                     )
                     self._send_json(autonomous_loop_result_to_dict(result), HTTPStatus.CREATED)
+                    return
+                if path == "/automation/daemon/configure":
+                    run_config = request_config(effective_config(), payload)
+                    result = AutomationDaemonConfigureTool().execute(payload, run_config)
+                    self._send_json({"status": result.status.value, "summary": result.summary, **result.output}, HTTPStatus.CREATED)
+                    return
+                if path == "/automation/daemon/tick":
+                    run_config = request_config(effective_config(), payload)
+                    result = AutomationDaemonTickTool().execute(payload, run_config)
+                    self._send_json({"status": result.status.value, "summary": result.summary, **result.output}, HTTPStatus.CREATED)
+                    return
+                if path == "/multi-agent/coordinate":
+                    run_config = request_config(effective_config(), payload)
+                    result = MultiAgentCoordinateTool().execute(payload, run_config)
+                    self._send_json({"status": result.status.value, "summary": result.summary, **result.output}, HTTPStatus.CREATED)
+                    return
+                if path == "/skills/forge":
+                    run_config = request_config(effective_config(), payload)
+                    result = SkillForgeDraftTool().execute(payload, run_config)
+                    self._send_json({"status": result.status.value, "summary": result.summary, **result.output}, HTTPStatus.CREATED)
                     return
                 if path == "/triggers/evaluate":
                     run_config = request_config(effective_config(), payload)
