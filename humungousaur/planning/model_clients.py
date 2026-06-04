@@ -147,6 +147,7 @@ class OpenAICompatibleChatClient(ModelClient):
     timeout_seconds: float = 45.0
     name: str = "openai-compatible-chat"
     fallback_to_json_object: bool = True
+    max_tokens: int = 400
 
     def complete_json(self, prompt: str, schema: dict[str, Any]) -> str:
         api_key = self._api_key()
@@ -201,7 +202,7 @@ class OpenAICompatibleChatClient(ModelClient):
             ],
             "response_format": response_format,
             "stream": False,
-            "max_tokens": 600,
+            "max_tokens": max(128, min(int(self.max_tokens or 400), 1200)),
         }
         request = urllib.request.Request(
             f"{self.base_url.rstrip('/')}/chat/completions",

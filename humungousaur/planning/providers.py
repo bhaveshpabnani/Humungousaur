@@ -237,6 +237,18 @@ def _context_for_prompt(context: dict[str, Any]) -> dict[str, Any]:
         compact["recent_memory"] = [_compact_context_item(item) for item in compact["recent_memory"][:3]]
     if isinstance(compact.get("browser_sessions"), list):
         compact["browser_sessions"] = compact["browser_sessions"][:3]
+    if isinstance(compact.get("available_workspace_skills"), list):
+        compact["available_workspace_skills"] = [
+            _compact_context_item(item) for item in compact["available_workspace_skills"][:8]
+        ]
+    if isinstance(compact.get("capability_plugins"), list):
+        compact["capability_plugins"] = [
+            _compact_context_item(item) for item in compact["capability_plugins"][:12]
+        ]
+    if isinstance(compact.get("gateway_channels"), list):
+        compact["gateway_channels"] = [
+            _compact_context_item(item) for item in compact["gateway_channels"][:12]
+        ]
     if isinstance(compact.get("screen_captures"), dict):
         captures = dict(compact["screen_captures"])
         if isinstance(captures.get("latest"), list):

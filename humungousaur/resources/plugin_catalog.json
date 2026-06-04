@@ -156,7 +156,7 @@
       "runtime_adapter": "humungousaur.tools.voice.providers.deepgram",
       "channels": ["voice_call", "webchat"],
       "providers": ["deepgram"],
-      "tools": ["voice_transcribe_file", "voice_provider_status"],
+      "tools": ["voice_transcribe", "voice_provider_status"],
       "skills": ["voice-loop", "speech-operations"],
       "setup": {
         "required_env": ["DEEPGRAM_API_KEY"],
@@ -266,7 +266,20 @@
       "runtime_adapter": "humungousaur.tools.browser",
       "channels": [],
       "providers": [],
-      "tools": ["browser_open", "browser_click", "browser_type", "browser_snapshot", "browser_screenshot"],
+      "tools": [
+        "fetch_web_page",
+        "research_web_pages",
+        "browser_open",
+        "browser_observe",
+        "browser_extract",
+        "browser_click_element",
+        "browser_type",
+        "browser_live_open",
+        "browser_live_observe",
+        "browser_live_click",
+        "browser_live_type",
+        "browser_live_screenshot"
+      ],
       "skills": ["browser-computer-use", "openai-computer-use", "claude-computer-use"],
       "setup": {
         "required_env": [],
@@ -288,7 +301,17 @@
       "runtime_adapter": "humungousaur.tools.os_control",
       "channels": [],
       "providers": [],
-      "tools": ["os_active_window", "os_click", "os_type_text", "os_screenshot", "os_key_press"],
+      "tools": [
+        "os_active_window",
+        "os_windows",
+        "os_observe_ui",
+        "os_click_element",
+        "os_type_text",
+        "os_send_keys",
+        "os_click_coordinates",
+        "screenshot_capture",
+        "screen_captures"
+      ],
       "skills": ["browser-computer-use", "openai-computer-use", "claude-computer-use"],
       "setup": {
         "required_env": [],
@@ -307,7 +330,7 @@
       "kind": "coding_delegate",
       "status": "implemented",
       "owned_by": "humungousaur",
-      "runtime_adapter": "humungousaur.tools.codex_cli",
+      "runtime_adapter": "humungousaur.tools.codex",
       "channels": [],
       "providers": ["openai"],
       "tools": ["codex_cli_status", "codex_cli_plan", "codex_cli_run"],
@@ -380,7 +403,7 @@
       "runtime_adapter": "humungousaur.cognition.queue",
       "channels": [],
       "providers": [],
-      "tools": ["autonomous_cycle", "cognitive_task_create", "cognitive_wakeup_schedule"],
+      "tools": ["autonomous_cycle_run", "autonomous_task_graph_create", "cognitive_goal_create", "cognitive_wakeup_schedule"],
       "skills": ["taskflow"],
       "setup": {
         "required_env": [],

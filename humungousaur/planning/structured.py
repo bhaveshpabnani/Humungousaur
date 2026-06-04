@@ -65,9 +65,9 @@ class StructuredPlanParser:
         for index, item in enumerate(steps, start=1):
             if not isinstance(item, dict):
                 raise PlanValidationError(f"Step {index} must be an object.")
-            tool_name = item.get("tool_name")
-            tool_input = item.get("tool_input", {})
-            reason = item.get("reason", "Model-planned step.")
+            tool_name = _step_tool_name(item)
+            tool_input = item.get("tool_input", item.get("input", item.get("args", {})))
+            reason = item.get("reason", item.get("rationale", "Model-planned step."))
             self._validate_step(index, tool_name, tool_input, reason)
             parsed.append(PlannedStep(str(tool_name), tool_input, str(reason), "structured-json"))
         return parsed
@@ -89,3 +89,10 @@ class StructuredPlanParser:
             raise PlanValidationError(f"Step {index} tool_input must be an object.")
         if not isinstance(reason, str) or not reason.strip():
             raise PlanValidationError(f"Step {index} reason must be a non-empty string.")
+
+
+def _step_tool_name(item: dict[str, Any]) -> Any:
+    tool_name = item.get("tool_name", item.get("tool", item.get("function_name", item.get("name"))))
+    if isinstance(tool_name, dict):
+        return tool_name.get("tool_name", tool_name.get("name", tool_name.get("function_name")))
+    return tool_name

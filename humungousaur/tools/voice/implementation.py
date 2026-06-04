@@ -15,16 +15,18 @@ from humungousaur.schemas import ActionStatus, RiskLevel, ToolResult
 from humungousaur.tools.base import Tool, object_input_schema
 from humungousaur.tools.voice.providers import (
     SpeechProviderError,
+    classify_provider_error,
     deepgram_transcribe_file,
     elevenlabs_synthesize_to_file,
     play_audio_file,
+    windows_sapi_synthesize_to_file,
 )
 
 
 VOICE_RESPONSE_MAX_CHARS = 20_000
 VOICE_SPEAK_MAX_CHARS = 4_000
 VOICE_TRANSCRIBE_PROVIDERS = {"deepgram"}
-VOICE_PREPARE_PROVIDERS = {"artifact", "elevenlabs"}
+VOICE_PREPARE_PROVIDERS = {"artifact", "elevenlabs", "system"}
 VOICE_SPEAK_PROVIDERS = {"system", "elevenlabs"}
 
 
@@ -142,6 +144,7 @@ class VoiceTranscribeTool(Tool):
                 timeout_seconds=float(config.model_timeout_seconds or 60.0),
             )
         except SpeechProviderError as exc:
+            output["provider_error"] = classify_provider_error(str(exc))
             return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Speech-to-text provider failed.", output, str(exc))
         payload = {**output, **transcription.as_dict(), "transcript_length": len(transcription.transcript)}
         if not transcription.transcript:
@@ -178,6 +181,8 @@ class VoiceResponsePrepareTool(Tool):
                     "run_id": {"type": "string", "description": "Optional agent run id this spoken response belongs to."},
                     "stimulus_id": {"type": "string", "description": "Optional stimulus id this spoken response belongs to."},
                     "tts_provider": {"type": "string", "enum": sorted(VOICE_PREPARE_PROVIDERS), "description": "Optional speech artifact provider."},
+                    "rate": {"type": "integer", "minimum": -10, "maximum": 10, "description": "Windows SAPI speech rate for system synthesis."},
+                    "volume": {"type": "integer", "minimum": 0, "maximum": 100, "description": "Windows SAPI speech volume for system synthesis."},
                     "voice_id": {"type": "string", "description": "ElevenLabs voice id. Can also be set with ELEVENLABS_VOICE_ID."},
                     "model": {"type": "string", "description": "Optional ElevenLabs model id."},
                     "output_format": {"type": "string", "description": "Optional ElevenLabs output format."},
@@ -214,7 +219,7 @@ class VoiceResponsePrepareTool(Tool):
                 ActionStatus.SKIPPED,
                 self.risk_level,
                 "Dry run: would prepare a local spoken-response artifact.",
-                {**payload, "artifact_not_written": True, "speech_not_synthesized": provider == "elevenlabs"},
+                {**payload, "artifact_not_written": True, "speech_not_synthesized": provider in {"elevenlabs", "system"}},
             )
         if provider == "elevenlabs":
             try:
@@ -229,7 +234,22 @@ class VoiceResponsePrepareTool(Tool):
                     timeout_seconds=float(config.model_timeout_seconds or 60.0),
                 )
             except SpeechProviderError as exc:
+                payload["provider_error"] = classify_provider_error(str(exc))
                 return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Text-to-speech provider failed.", payload, str(exc))
+            payload["audio"] = synthesis.as_dict()
+        if provider == "system":
+            try:
+                synthesis = windows_sapi_synthesize_to_file(
+                    text,
+                    _voice_audio_dir(config),
+                    response_id=payload["response_id"],
+                    rate=max(-10, min(int(tool_input.get("rate") or 0), 10)),
+                    volume=max(0, min(int(tool_input.get("volume") or 100), 100)),
+                    timeout_seconds=float(config.model_timeout_seconds or 60.0),
+                )
+            except SpeechProviderError as exc:
+                payload["provider_error"] = classify_provider_error(str(exc))
+                return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "System text-to-speech provider failed.", payload, str(exc))
             payload["audio"] = synthesis.as_dict()
         path = _voice_response_path(config, payload["response_id"])
         path.write_text(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
@@ -301,6 +321,7 @@ class VoiceSpeakTool(Tool):
                     timeout_seconds=float(config.model_timeout_seconds or 60.0),
                 )
             except SpeechProviderError as exc:
+                output["provider_error"] = classify_provider_error(str(exc))
                 return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Text-to-speech provider failed.", output, str(exc))
             payload = {**output, "response_id": response_id, "audio": synthesis.as_dict()}
             if not bool(tool_input.get("playback", True)):

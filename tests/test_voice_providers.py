@@ -3,10 +3,12 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+import urllib.error
 
 from humungousaur.config import AgentConfig
 from humungousaur.schemas import ActionStatus
 from humungousaur.tools.voice_tools import VoiceProviderStatusTool, VoiceResponsePrepareTool, VoiceSpeakTool, VoiceTranscribeTool
+from humungousaur.tools.voice.providers import SpeechSynthesis
 
 
 class VoiceProviderTests(unittest.TestCase):
@@ -80,6 +82,40 @@ class VoiceProviderTests(unittest.TestCase):
         self.assertEqual(request.full_url, "https://api.elevenlabs.io/v1/text-to-speech/voice-1")
         self.assertEqual(request.headers["Xi-api-key"], "el-test")
 
+    def test_voice_response_prepare_elevenlabs_reports_paid_plan_required(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
+            error_body = json.dumps(
+                {
+                    "detail": {
+                        "type": "payment_required",
+                        "code": "paid_plan_required",
+                        "message": "Free users cannot use library voices via the API.",
+                        "status": "payment_required",
+                    }
+                }
+            ).encode("utf-8")
+            with (
+                patch.dict("os.environ", {"ELEVENLABS_API_KEY": "el-test"}, clear=False),
+                patch("urllib.request.urlopen", side_effect=urllib.error.HTTPError("url", 402, "Payment Required", {}, _FakeResponse(error_body))),
+            ):
+                result = VoiceResponsePrepareTool().execute(
+                    {
+                        "text": "hello there",
+                        "reason": "test",
+                        "tts_provider": "elevenlabs",
+                        "voice_id": "library-voice",
+                    },
+                    config,
+                )
+
+        self.assertEqual(result.status, ActionStatus.FAILED)
+        provider_error = result.output["provider_error"]
+        self.assertEqual(provider_error["http_status"], 402)
+        self.assertEqual(provider_error["provider_code"], "paid_plan_required")
+        self.assertEqual(provider_error["category"], "provider_entitlement")
+        self.assertIn("upgrade", provider_error["user_action"])
+
     def test_voice_speak_elevenlabs_can_synthesize_without_playback(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
@@ -102,6 +138,39 @@ class VoiceProviderTests(unittest.TestCase):
             self.assertFalse(result.output["speech_played"])
             self.assertTrue(Path(result.output["audio"]["audio_path"]).exists())
 
+    def test_voice_response_prepare_system_writes_audio_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            audio = workspace / "system.wav"
+            audio.write_bytes(b"RIFF....WAVEfmt ")
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts").normalized()
+
+            with patch(
+                "humungousaur.tools.voice.implementation.windows_sapi_synthesize_to_file",
+                return_value=SpeechSynthesis(
+                    provider="windows_sapi",
+                    audio_path=audio,
+                    voice_id="windows_sapi",
+                    model="windows_sapi",
+                    output_format="wav",
+                    mime_type="audio/wav",
+                    byte_count=audio.stat().st_size,
+                ),
+            ):
+                result = VoiceResponsePrepareTool().execute(
+                    {
+                        "text": "hello from system voice",
+                        "reason": "test",
+                        "tts_provider": "system",
+                    },
+                    config,
+                )
+            artifact_path_exists = Path(result.output["path"]).exists()
+
+        self.assertEqual(result.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(result.output["audio"]["provider"], "windows_sapi")
+        self.assertTrue(artifact_path_exists)
+
 
 class _FakeResponse:
     def __init__(self, body: bytes) -> None:
@@ -117,6 +186,9 @@ class _FakeResponse:
         if size is None or size < 0:
             return self.body
         return self.body[:size]
+
+    def close(self) -> None:
+        return None
 
 
 if __name__ == "__main__":

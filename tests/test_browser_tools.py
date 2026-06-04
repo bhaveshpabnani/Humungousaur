@@ -682,7 +682,7 @@ class BrowserToolTests(unittest.TestCase):
 
     def test_browser_form_submit_requires_approval_and_replays(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
-            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts", planner_provider="explicit").normalized()
             with running_web_server({"/": FORM_HTML}) as base_url:
                 opened = BrowserOpenTool().execute({"url": base_url}, config)
                 fill_result = AgentOrchestrator(config).run(

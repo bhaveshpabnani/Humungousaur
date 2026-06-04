@@ -209,6 +209,7 @@ class ScreenpipeSearchTool(Tool):
 def default_external_tools() -> dict[str, Tool]:
     tools: list[Tool] = [
         ExternalIntegrationsStatusTool(),
+        ScreenpipeSearchTool(),
     ]
     return {tool.name: tool for tool in tools}
 

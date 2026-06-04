@@ -42,6 +42,7 @@ from humungousaur.safety.settings import PermissionSettingsStore
 from humungousaur.schemas import ActionStatus
 from humungousaur.tools import default_tools
 from humungousaur.tools.browser_tools import BrowserSessionStore
+from humungousaur.tools.capability_tools import CapabilitySurfaceTool, ToolDescribeTool, ToolSearchTool
 from humungousaur.tools.os_tools import list_screenshot_captures
 from humungousaur.tools.plugin_tools import discover_plugin_manifests, load_plugin_catalog
 from humungousaur.tools.system_tools import collect_system_status
@@ -89,6 +90,39 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                     return
                 if path == "/tools":
                     self._send_json(_tool_catalog_payload(effective_config()))
+                    return
+                if path == "/capabilities":
+                    result = CapabilitySurfaceTool().execute(
+                        {
+                            "include_records": _bool_arg(query, "include_records", False),
+                            "include_tool_schemas": _bool_arg(query, "include_tool_schemas", False),
+                        },
+                        effective_config(),
+                    )
+                    self._send_json({"status": result.status.value, "summary": result.summary, **result.output})
+                    return
+                if path == "/tools/search":
+                    result = ToolSearchTool().execute(
+                        {
+                            "query": _str_arg(query, "q"),
+                            "kind": _str_arg(query, "kind", "all"),
+                            "limit": _int_arg(query, "limit", 10),
+                            "include_tool_schemas": _bool_arg(query, "include_tool_schemas", False),
+                        },
+                        effective_config(),
+                    )
+                    self._send_json({"status": result.status.value, "summary": result.summary, **result.output})
+                    return
+                if path == "/tools/describe":
+                    result = ToolDescribeTool().execute(
+                        {
+                            "record_id": _str_arg(query, "record_id"),
+                            "include_tool_schema": _bool_arg(query, "include_tool_schema", True),
+                        },
+                        effective_config(),
+                    )
+                    status = HTTPStatus.OK if result.status == ActionStatus.SUCCEEDED else HTTPStatus.NOT_FOUND
+                    self._send_json({"status": result.status.value, "summary": result.summary, **result.output}, status)
                     return
                 if path == "/voice/status":
                     result = VoiceProviderStatusTool().execute({}, effective_config())

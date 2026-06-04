@@ -59,6 +59,18 @@ class StructuredPlanParserTests(unittest.TestCase):
         self.assertEqual(steps[0].tool_name, "search_workspace")
         self.assertEqual(steps[0].tool_input, {"query": "voice response"})
 
+    def test_accepts_step_level_tool_alias_shapes(self) -> None:
+        parser = StructuredPlanParser({"system_status", "search_workspace"})
+
+        steps = parser.parse(
+            '{"steps":[{"tool":{"name":"system_status"},"args":{},"rationale":"check status"},'
+            '{"function_name":"search_workspace","input":{"query":"voice"},"reason":"search"}]}'
+        )
+
+        self.assertEqual([step.tool_name for step in steps], ["system_status", "search_workspace"])
+        self.assertEqual(steps[0].tool_input, {})
+        self.assertEqual(steps[1].tool_input, {"query": "voice"})
+
     def test_json_schema_limits_tool_names_to_allowlist(self) -> None:
         parser = StructuredPlanParser({"list_files", "read_file"})
 

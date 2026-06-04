@@ -26,6 +26,47 @@ class SpeechProviderError(RuntimeError):
     pass
 
 
+def classify_provider_error(error: str) -> dict[str, Any]:
+    payload: dict[str, Any] = {"raw": error}
+    marker = "HTTP "
+    if marker in error:
+        after_http = error.split(marker, 1)[1]
+        status_text, _, detail = after_http.partition(":")
+        try:
+            payload["http_status"] = int(status_text.strip())
+        except ValueError:
+            payload["http_status"] = None
+        detail = detail.strip()
+        if detail:
+            payload["detail"] = _json_provider_detail(detail)
+    detail_payload = payload.get("detail", {})
+    if isinstance(detail_payload, dict):
+        detail_inner = detail_payload.get("detail", detail_payload)
+        if isinstance(detail_inner, dict):
+            payload["provider_type"] = detail_inner.get("type", "")
+            payload["provider_code"] = detail_inner.get("code", "")
+            payload["provider_status"] = detail_inner.get("status", "")
+            payload["provider_message"] = detail_inner.get("message", "")
+            payload["request_id"] = detail_inner.get("request_id", "")
+    code = str(payload.get("provider_code") or payload.get("provider_status") or "").strip()
+    if code in {"payment_required", "paid_plan_required"}:
+        payload["category"] = "provider_entitlement"
+        payload["user_action"] = "Use an ElevenLabs voice available to this account through the API, or upgrade the ElevenLabs plan for library voice API access."
+    elif code in {"detected_unusual_activity", "quota_exceeded", "rate_limit_exceeded"}:
+        payload["category"] = "provider_account"
+        payload["user_action"] = "Resolve the ElevenLabs account status or quota in the provider dashboard, then rerun the smoke test."
+    elif payload.get("http_status") in {401, 403}:
+        payload["category"] = "provider_auth"
+        payload["user_action"] = "Check the ElevenLabs API key and account permissions."
+    elif payload.get("http_status") == 429:
+        payload["category"] = "provider_rate_limit"
+        payload["user_action"] = "Wait for provider rate limits to reset or lower request volume."
+    else:
+        payload["category"] = "provider_error"
+        payload["user_action"] = "Inspect the provider error details and retry after the provider-side issue is fixed."
+    return payload
+
+
 @dataclass(slots=True)
 class SpeechTranscription:
     provider: str
@@ -208,6 +249,38 @@ def elevenlabs_synthesize_to_file(
     )
 
 
+def windows_sapi_synthesize_to_file(
+    text: str,
+    output_dir: Path,
+    *,
+    response_id: str,
+    rate: int = 0,
+    volume: int = 100,
+    timeout_seconds: float = 60.0,
+) -> SpeechSynthesis:
+    if platform.system().lower() != "windows":
+        raise SpeechProviderError("Windows SAPI synthesis is available on Windows only.")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    audio_path = output_dir / f"{_safe_file_stem(response_id)}.wav"
+    result = _run_powershell_audio(
+        _windows_sapi_wave_script(text=text, path=audio_path, rate=max(-10, min(rate, 10)), volume=max(0, min(volume, 100))),
+        timeout_seconds=timeout_seconds,
+    )
+    if result.get("status") != "ok":
+        raise SpeechProviderError(result.get("error") or "Windows SAPI synthesis failed.")
+    if not audio_path.exists() or audio_path.stat().st_size <= 0:
+        raise SpeechProviderError("Windows SAPI synthesis produced no audio file.")
+    return SpeechSynthesis(
+        provider="windows_sapi",
+        audio_path=audio_path,
+        voice_id="windows_sapi",
+        model="windows_sapi",
+        output_format="wav",
+        mime_type="audio/wav",
+        byte_count=audio_path.stat().st_size,
+    )
+
+
 def elevenlabs_first_voice_id(
     *,
     api_key: str,
@@ -292,6 +365,13 @@ def _provider_error(detail: str) -> str:
     return detail[:500]
 
 
+def _json_provider_detail(detail: str) -> Any:
+    try:
+        return json.loads(detail)
+    except json.JSONDecodeError:
+        return detail[:500]
+
+
 def _shape(payload: Any) -> dict[str, Any]:
     if isinstance(payload, dict):
         return {"type": "object", "keys": sorted(str(key) for key in payload.keys())[:20]}
@@ -366,4 +446,17 @@ $deadline = (Get-Date).AddSeconds(60)
 while (-not $done -and (Get-Date) -lt $deadline) {{ Start-Sleep -Milliseconds 100 }}
 $player.Close()
 if (-not $done) {{ throw "Media playback timed out." }}
+"""
+
+
+def _windows_sapi_wave_script(text: str, path: Path, rate: int, volume: int) -> str:
+    return f"""
+$ErrorActionPreference = "Stop"
+Add-Type -AssemblyName System.Speech
+$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
+$synth.Rate = {rate}
+$synth.Volume = {volume}
+$synth.SetOutputToWaveFile({json.dumps(str(path))})
+$synth.Speak({json.dumps(text)})
+$synth.Dispose()
 """
