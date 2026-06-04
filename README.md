@@ -204,7 +204,7 @@ Interaction harness behavior:
 - Passive activity, accessibility, OCR, browser, channel, and audio snippets are recorded as context; a configured model can escalate them from structured evidence, current goals, and metadata, while model-unavailable fallback remains conservative.
 - Response modes are `text`, `voice_prepare`, `voice_speak`, and `silent`.
 - `voice_transcribe` supports provider-backed STT for activation audio. `voice_response_prepare` writes local spoken-response artifacts and can synthesize ElevenLabs audio. `voice_speak` can use Windows SAPI or ElevenLabs synthesis plus optional local playback.
-- `channel_catalog`, `channel_manifest`, `channel_message_prepare`, and `channel_outbox` implement an OpenClaw-style Gateway surface for WhatsApp, Slack, Telegram, Discord, Teams, Signal, SMS, WebChat, voice calls, and related chat channels. Real sending stays behind trusted runtime plugins.
+- `channel_catalog`, `channel_manifest`, `channel_setup_*`, `channel_doctor`, `channel_message_prepare`, `channel_message_send`, and `channel_outbox` implement the Humungousaur Gateway surface for WhatsApp, Slack, Telegram, Discord, Teams, Signal, SMS, WebChat, voice calls, and related chat channels. Prepared messages stay local; real external sends require a Humungousaur adapter, credentials, and approval.
 - `agent_skill_catalog`, `agent_skill_read`, and `agent_skill_import` discover workspace `skills/**/SKILL.md` packs and promote exact skill IDs into durable cognitive skill memory.
 
 The rule is simple: every future capability becomes a tool with a risk level, policy check, execution result, and audit event.
@@ -216,7 +216,7 @@ External reference projects are integrated through explicit adapters, not copied
 
 - `external_integrations_status` checks local development availability for Browser Use, Screenpipe, Windows-Use, and Open Interpreter.
 - `activity_ingest`, `activity_search`, `activity_policy`, `activity_policy_update`, and `activity_prune` implement a native Screenpipe-inspired activity-memory schema with local retention and privacy exclusions inside Umang.
-- `channel_catalog` uses the OpenClaw-style Gateway channel model from local reference notes; `channel_message_prepare` writes an audited outbox item and never sends without a trusted runtime.
+- `channel_catalog` uses the Humungousaur Gateway channel model; `channel_message_prepare` writes an audited outbox item and `channel_message_send` only sends through owned adapters when credentials and approval are present.
 - `agent_skill_catalog` reads local `SKILL.md` packs in `skills/` or `.umang/skills`; `agent_skill_import` writes exact selected skills into cognitive memory.
 - `plugin_manifests` and `plugin_manifest` discover local JSON plugin manifests from `.umang/plugins` and the local data directory; manifest-declared tools are visible to planning and permissions but blocked until a trusted runtime exists.
 - Reference repos can be cloned under `external_repos/` for code inspection; that folder is ignored by git.

@@ -83,9 +83,28 @@ class APITests(unittest.TestCase):
                 self.assertFalse(screen_captures["image_bytes_served"])
                 self.assertEqual(screen_captures["captures"], [])
                 self.assertEqual(api_get(base_url, "/plugins"), [])
+                plugin_catalog = api_get(base_url, "/plugins/catalog")
+                self.assertIn("channels.whatsapp", {plugin["plugin_id"] for plugin in plugin_catalog})
+                self.assertIn("voice.deepgram", {plugin["plugin_id"] for plugin in plugin_catalog})
                 channels = api_get(base_url, "/channels")
                 self.assertIn("whatsapp", {channel["channel_id"] for channel in channels})
                 self.assertIn("slack", {channel["channel_id"] for channel in channels})
+                self.assertEqual(next(channel for channel in channels if channel["channel_id"] == "slack")["setup"]["auth_type"], "slack_app")
+                channel_status = api_get(base_url, "/channels/status?channel_id=slack")
+                self.assertIn("SLACK_BOT_TOKEN", channel_status["channels"][0]["missing_send_env"])
+                channel_doctor = api_get(base_url, "/channels/doctor?channel_id=slack")
+                self.assertEqual(channel_doctor["overall_status"], "needs_setup")
+                saved_setup = api_post(
+                    base_url,
+                    "/channels/setup",
+                    {
+                        "channel_id": "slack",
+                        "enabled": True,
+                        "secret_refs": {"bot_token": "SLACK_BOT_TOKEN"},
+                        "conversation_defaults": {"conversation_id": "C123"},
+                    },
+                )
+                self.assertTrue(saved_setup["setup"]["enabled"])
 
                 permissions = api_get(base_url, "/permissions")
                 self.assertEqual(permissions["workspace"], str(workspace.resolve()))

@@ -13,7 +13,14 @@ from humungousaur.config import AgentConfig
 from humungousaur.cognition.loop import AutonomousLoopRunner, autonomous_loop_result_to_dict, autonomous_status
 from humungousaur.cognition.queue import RuntimeEventQueue
 from humungousaur.cognition.triggers import TriggerStore, stimulus_from_input
-from humungousaur.integrations.channels import handle_channel_inbound, list_outbox, load_channel_catalog
+from humungousaur.integrations.channels import (
+    channel_doctor,
+    channel_setup_status,
+    handle_channel_inbound,
+    list_outbox,
+    load_channel_catalog,
+    save_channel_setup,
+)
 from humungousaur.indexing import FileIndex
 from humungousaur.interaction import InteractionHarness, harness_result_to_dict
 from humungousaur.memory.event_store import EventStore
@@ -36,7 +43,7 @@ from humungousaur.schemas import ActionStatus
 from humungousaur.tools import default_tools
 from humungousaur.tools.browser_tools import BrowserSessionStore
 from humungousaur.tools.os_tools import list_screenshot_captures
-from humungousaur.tools.plugin_tools import discover_plugin_manifests
+from humungousaur.tools.plugin_tools import discover_plugin_manifests, load_plugin_catalog
 from humungousaur.tools.system_tools import collect_system_status
 from humungousaur.tools.voice_tools import VoiceProviderStatusTool
 
@@ -160,8 +167,17 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                     detail = _bool_arg(query, "detail", False)
                     self._send_json([manifest.detail() if detail else manifest.summary() for manifest in manifests])
                     return
+                if path == "/plugins/catalog":
+                    self._send_json(load_plugin_catalog())
+                    return
                 if path == "/channels":
                     self._send_json(load_channel_catalog())
+                    return
+                if path == "/channels/status":
+                    self._send_json(channel_setup_status(effective_config(), channel_id=_str_arg(query, "channel_id") or None))
+                    return
+                if path == "/channels/doctor":
+                    self._send_json(channel_doctor(effective_config(), channel_id=_str_arg(query, "channel_id") or None))
                     return
                 if path == "/channels/outbox":
                     self._send_json({"messages": list_outbox(effective_config(), limit=_int_arg(query, "limit", 20))})
@@ -246,6 +262,14 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                         approve_high_risk=bool(payload.get("approve_high_risk", False)),
                     )
                     self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/channels/setup":
+                    channel_id = str(payload.get("channel_id", "")).strip()
+                    if not channel_id:
+                        self._send_error(HTTPStatus.BAD_REQUEST, "Field 'channel_id' is required.")
+                        return
+                    setup = save_channel_setup(effective_config(), channel_id, payload)
+                    self._send_json({"setup": setup, **channel_setup_status(effective_config(), channel_id=channel_id)}, HTTPStatus.CREATED)
                     return
                 if path == "/runs/async":
                     request = str(payload.get("request", "")).strip()

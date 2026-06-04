@@ -1,0 +1,421 @@
+{
+  "catalog_version": 1,
+  "owner": "humungousaur_gateway",
+  "plugins": [
+    {
+      "plugin_id": "channels.slack",
+      "display_name": "Slack Channel",
+      "kind": "channel",
+      "status": "implemented",
+      "owned_by": "humungousaur",
+      "runtime_adapter": "humungousaur.channel_adapters.slack",
+      "channels": ["slack"],
+      "providers": [],
+      "tools": ["channel_catalog", "channel_manifest", "channel_message_prepare", "channel_message_send", "channel_doctor"],
+      "skills": ["slack-operations", "channel-operations"],
+      "setup": {
+        "required_env": ["SLACK_BOT_TOKEN"],
+        "optional_env": ["SLACK_APP_TOKEN", "SLACK_SIGNING_SECRET", "SLACK_USER_TOKEN"],
+        "auth_choices": ["socket_mode", "http_events", "outbound_only"]
+      },
+      "contracts": {
+        "outbound_text": true,
+        "inbound_events": true,
+        "media": true,
+        "reactions": true,
+        "ambient_rooms": true,
+        "bot_loop_protection": true
+      }
+    },
+    {
+      "plugin_id": "channels.whatsapp",
+      "display_name": "WhatsApp Channel",
+      "kind": "channel",
+      "status": "implemented_cloud_api_outbox_qr_contract",
+      "owned_by": "humungousaur",
+      "runtime_adapter": "humungousaur.channel_adapters.whatsapp",
+      "channels": ["whatsapp"],
+      "providers": [],
+      "tools": ["channel_catalog", "channel_manifest", "channel_message_prepare", "channel_message_send", "channel_doctor"],
+      "skills": ["whatsapp-operations", "wacli-operations", "channel-operations"],
+      "setup": {
+        "required_env": ["WHATSAPP_ACCESS_TOKEN", "WHATSAPP_PHONE_NUMBER_ID"],
+        "optional_env": ["WHATSAPP_BUSINESS_ACCOUNT_ID"],
+        "auth_choices": ["cloud_api", "prepared_outbox_qr_bridge"]
+      },
+      "contracts": {
+        "outbound_text": true,
+        "inbound_events": true,
+        "media": true,
+        "reactions": true,
+        "ambient_rooms": false,
+        "bot_loop_protection": false
+      }
+    },
+    {
+      "plugin_id": "channels.telegram",
+      "display_name": "Telegram Channel",
+      "kind": "channel",
+      "status": "implemented",
+      "owned_by": "humungousaur",
+      "runtime_adapter": "humungousaur.channel_adapters.telegram",
+      "channels": ["telegram"],
+      "providers": [],
+      "tools": ["channel_catalog", "channel_manifest", "channel_message_prepare", "channel_message_send", "channel_doctor"],
+      "skills": ["telegram-operations", "channel-operations"],
+      "setup": {
+        "required_env": ["TELEGRAM_BOT_TOKEN"],
+        "optional_env": ["TELEGRAM_WEBHOOK_SECRET"],
+        "auth_choices": ["long_polling", "webhook", "outbound_only"]
+      },
+      "contracts": {
+        "outbound_text": true,
+        "inbound_events": true,
+        "media": true,
+        "reactions": true,
+        "ambient_rooms": true,
+        "markdown_image_to_media": true
+      }
+    },
+    {
+      "plugin_id": "channels.discord",
+      "display_name": "Discord Channel",
+      "kind": "channel",
+      "status": "implemented",
+      "owned_by": "humungousaur",
+      "runtime_adapter": "humungousaur.channel_adapters.discord",
+      "channels": ["discord"],
+      "providers": [],
+      "tools": ["channel_catalog", "channel_manifest", "channel_message_prepare", "channel_message_send", "channel_doctor"],
+      "skills": ["discord-operations", "channel-operations"],
+      "setup": {
+        "required_env": ["DISCORD_BOT_TOKEN"],
+        "optional_env": ["DISCORD_APPLICATION_ID", "DISCORD_PUBLIC_KEY"],
+        "auth_choices": ["gateway_bot", "interactions", "outbound_only"]
+      },
+      "contracts": {
+        "outbound_text": true,
+        "inbound_events": true,
+        "media": true,
+        "reactions": true,
+        "ambient_rooms": true,
+        "bot_loop_protection": true
+      }
+    },
+    {
+      "plugin_id": "channels.sms",
+      "display_name": "SMS Channel",
+      "kind": "channel",
+      "status": "implemented",
+      "owned_by": "humungousaur",
+      "runtime_adapter": "humungousaur.channel_adapters.sms",
+      "channels": ["sms"],
+      "providers": ["twilio"],
+      "tools": ["channel_message_send", "channel_doctor"],
+      "skills": ["channel-operations"],
+      "setup": {
+        "required_env": ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER"],
+        "optional_env": [],
+        "auth_choices": ["twilio_sms"]
+      },
+      "contracts": {
+        "outbound_text": true,
+        "inbound_events": true,
+        "media": true
+      }
+    },
+    {
+      "plugin_id": "channels.enterprise_chat",
+      "display_name": "Enterprise Chat Channels",
+      "kind": "channel_bundle",
+      "status": "prepared_contracts_with_selected_webhook_senders",
+      "owned_by": "humungousaur",
+      "runtime_adapter": "humungousaur.channel_adapters.enterprise_chat",
+      "channels": ["googlechat", "msteams", "mattermost", "matrix", "nextcloud_talk", "feishu"],
+      "providers": ["google", "microsoft"],
+      "tools": ["channel_catalog", "channel_manifest", "channel_message_prepare", "channel_doctor"],
+      "skills": ["channel-operations"],
+      "setup": {
+        "required_env": [],
+        "optional_env": ["GOOGLE_CHAT_WEBHOOK_URL", "TEAMS_WEBHOOK_URL", "MATTERMOST_BOT_TOKEN", "MATRIX_ACCESS_TOKEN"],
+        "auth_choices": ["webhook", "bot_token", "prepared_outbox"]
+      },
+      "contracts": {
+        "outbound_text": true,
+        "inbound_events": true,
+        "ambient_rooms": true,
+        "bot_loop_protection": true
+      }
+    },
+    {
+      "plugin_id": "voice.deepgram",
+      "display_name": "Deepgram Speech To Text",
+      "kind": "speech_to_text_provider",
+      "status": "implemented",
+      "owned_by": "humungousaur",
+      "runtime_adapter": "humungousaur.tools.voice.providers.deepgram",
+      "channels": ["voice_call", "webchat"],
+      "providers": ["deepgram"],
+      "tools": ["voice_transcribe_file", "voice_provider_status"],
+      "skills": ["voice-loop", "speech-operations"],
+      "setup": {
+        "required_env": ["DEEPGRAM_API_KEY"],
+        "optional_env": [],
+        "auth_choices": ["api_key"]
+      },
+      "contracts": {
+        "file_transcription": true,
+        "realtime_transcription": true,
+        "wake_word_followup": true
+      }
+    },
+    {
+      "plugin_id": "voice.elevenlabs",
+      "display_name": "ElevenLabs Text To Speech",
+      "kind": "text_to_speech_provider",
+      "status": "implemented",
+      "owned_by": "humungousaur",
+      "runtime_adapter": "humungousaur.tools.voice.providers.elevenlabs",
+      "channels": ["voice_call", "webchat"],
+      "providers": ["elevenlabs"],
+      "tools": ["voice_response_prepare", "voice_speak", "voice_provider_status"],
+      "skills": ["voice-loop", "speech-operations"],
+      "setup": {
+        "required_env": ["ELEVENLABS_API_KEY"],
+        "optional_env": ["XI_API_KEY"],
+        "auth_choices": ["api_key"]
+      },
+      "contracts": {
+        "tts_file": true,
+        "tts_playback": true,
+        "voice_lookup": true
+      }
+    },
+    {
+      "plugin_id": "models.openai",
+      "display_name": "OpenAI Models",
+      "kind": "model_provider",
+      "status": "implemented",
+      "owned_by": "humungousaur",
+      "runtime_adapter": "humungousaur.planning.model_clients.openai",
+      "channels": [],
+      "providers": ["openai"],
+      "tools": [],
+      "skills": [],
+      "setup": {
+        "required_env": ["OPENAI_API_KEY"],
+        "optional_env": ["OPENAI_BASE_URL"],
+        "auth_choices": ["api_key", "openai_compatible_base_url"]
+      },
+      "contracts": {
+        "planning": true,
+        "response_synthesis": true,
+        "cognitive_decisions": true
+      }
+    },
+    {
+      "plugin_id": "models.groq",
+      "display_name": "Groq Models",
+      "kind": "model_provider",
+      "status": "implemented",
+      "owned_by": "humungousaur",
+      "runtime_adapter": "humungousaur.planning.model_clients.groq",
+      "channels": [],
+      "providers": ["groq"],
+      "tools": [],
+      "skills": [],
+      "setup": {
+        "required_env": ["GROQ_API_KEY"],
+        "optional_env": ["GROQ_BASE_URL"],
+        "auth_choices": ["openai_compatible_api_key"]
+      },
+      "contracts": {
+        "planning": true,
+        "response_synthesis": true,
+        "cognitive_decisions": true
+      }
+    },
+    {
+      "plugin_id": "models.ollama",
+      "display_name": "Ollama Models",
+      "kind": "model_provider",
+      "status": "implemented",
+      "owned_by": "humungousaur",
+      "runtime_adapter": "humungousaur.planning.model_clients.ollama",
+      "channels": [],
+      "providers": ["ollama"],
+      "tools": [],
+      "skills": [],
+      "setup": {
+        "required_env": [],
+        "optional_env": ["OLLAMA_BASE_URL"],
+        "auth_choices": ["local_openai_compatible"]
+      },
+      "contracts": {
+        "planning": true,
+        "response_synthesis": true,
+        "offline_local": true
+      }
+    },
+    {
+      "plugin_id": "browser.playwright",
+      "display_name": "Browser And Playwright",
+      "kind": "computer_use",
+      "status": "implemented",
+      "owned_by": "humungousaur",
+      "runtime_adapter": "humungousaur.tools.browser",
+      "channels": [],
+      "providers": [],
+      "tools": ["browser_open", "browser_click", "browser_type", "browser_snapshot", "browser_screenshot"],
+      "skills": ["browser-computer-use", "openai-computer-use", "claude-computer-use"],
+      "setup": {
+        "required_env": [],
+        "optional_env": ["PLAYWRIGHT_BROWSERS_PATH"],
+        "auth_choices": ["local_browser"]
+      },
+      "contracts": {
+        "web_observe": true,
+        "web_act": true,
+        "frontend_qa": true
+      }
+    },
+    {
+      "plugin_id": "computer.windows_ui",
+      "display_name": "Windows UI Control",
+      "kind": "computer_use",
+      "status": "implemented",
+      "owned_by": "humungousaur",
+      "runtime_adapter": "humungousaur.tools.os_control",
+      "channels": [],
+      "providers": [],
+      "tools": ["os_active_window", "os_click", "os_type_text", "os_screenshot", "os_key_press"],
+      "skills": ["browser-computer-use", "openai-computer-use", "claude-computer-use"],
+      "setup": {
+        "required_env": [],
+        "optional_env": [],
+        "auth_choices": ["local_desktop_permission"]
+      },
+      "contracts": {
+        "desktop_observe": true,
+        "desktop_act": true,
+        "approval_gated_actions": true
+      }
+    },
+    {
+      "plugin_id": "delegation.codex_cli",
+      "display_name": "Codex CLI Delegation",
+      "kind": "coding_delegate",
+      "status": "implemented",
+      "owned_by": "humungousaur",
+      "runtime_adapter": "humungousaur.tools.codex_cli",
+      "channels": [],
+      "providers": ["openai"],
+      "tools": ["codex_cli_status", "codex_cli_plan", "codex_cli_run"],
+      "skills": ["codex-delegation", "coding-agent"],
+      "setup": {
+        "required_env": [],
+        "optional_env": ["OPENAI_API_KEY"],
+        "auth_choices": ["installed_cli", "api_key"]
+      },
+      "contracts": {
+        "background_coding": true,
+        "repo_qa": true,
+        "approval_gated_execution": true
+      }
+    },
+    {
+      "plugin_id": "productivity.google_workspace",
+      "display_name": "Google Workspace",
+      "kind": "productivity",
+      "status": "skill_and_cli_contract",
+      "owned_by": "humungousaur",
+      "runtime_adapter": "humungousaur.external_tools.gog",
+      "channels": [],
+      "providers": ["google"],
+      "tools": ["run_shell_command"],
+      "skills": ["gog"],
+      "setup": {
+        "required_env": [],
+        "optional_env": ["GOG_ACCOUNT"],
+        "required_binaries": ["gog"],
+        "auth_choices": ["oauth_cli"]
+      },
+      "contracts": {
+        "gmail": true,
+        "calendar": true,
+        "drive": true,
+        "sheets": true,
+        "docs": true
+      }
+    },
+    {
+      "plugin_id": "productivity.whatsapp_cli",
+      "display_name": "WhatsApp CLI Companion",
+      "kind": "productivity",
+      "status": "skill_and_cli_contract",
+      "owned_by": "humungousaur",
+      "runtime_adapter": "humungousaur.external_tools.wacli",
+      "channels": ["whatsapp"],
+      "providers": [],
+      "tools": ["run_shell_command"],
+      "skills": ["wacli-operations"],
+      "setup": {
+        "required_env": [],
+        "optional_env": [],
+        "required_binaries": ["wacli"],
+        "auth_choices": ["qr_cli"]
+      },
+      "contracts": {
+        "third_party_send": true,
+        "history_search": true,
+        "history_sync": true
+      }
+    },
+    {
+      "plugin_id": "runtime.taskflow",
+      "display_name": "TaskFlow",
+      "kind": "orchestration",
+      "status": "implemented_cognitive_runtime",
+      "owned_by": "humungousaur",
+      "runtime_adapter": "humungousaur.cognition.queue",
+      "channels": [],
+      "providers": [],
+      "tools": ["autonomous_cycle", "cognitive_task_create", "cognitive_wakeup_schedule"],
+      "skills": ["taskflow"],
+      "setup": {
+        "required_env": [],
+        "optional_env": [],
+        "auth_choices": ["local_state"]
+      },
+      "contracts": {
+        "durable_tasks": true,
+        "wakeups": true,
+        "autonomous_cycles": true,
+        "delegation": true
+      }
+    },
+    {
+      "plugin_id": "memory.active",
+      "display_name": "Active Memory",
+      "kind": "memory",
+      "status": "implemented",
+      "owned_by": "humungousaur",
+      "runtime_adapter": "humungousaur.memory",
+      "channels": [],
+      "providers": [],
+      "tools": ["memory_write", "memory_search", "memory_profile"],
+      "skills": ["capability-surfaces"],
+      "setup": {
+        "required_env": [],
+        "optional_env": [],
+        "auth_choices": ["local_sqlite"]
+      },
+      "contracts": {
+        "episodic_memory": true,
+        "profile": true,
+        "forgetting": true,
+        "retrieval": true
+      }
+    }
+  ]
+}

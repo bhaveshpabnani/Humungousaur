@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from humungousaur.config import AgentConfig
+from humungousaur.env import load_workspace_environment
 from humungousaur.schemas import ActionStatus, RiskLevel, ToolResult
 from humungousaur.tools.base import Tool, object_input_schema
 
 
+PLUGIN_CATALOG_PATH = Path(__file__).resolve().parents[2] / "resources" / "plugin_catalog.json"
 PLUGIN_MANIFEST_FILENAMES = ("plugin.json",)
 PLUGIN_MANIFEST_SUFFIX = ".plugin.json"
 PLUGIN_MANIFEST_LIMIT = 100
@@ -135,6 +138,100 @@ class PluginManifestTool(Tool):
         )
 
 
+class PluginCatalogTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="plugin_catalog",
+            description=(
+                "List Humungousaur-owned runtime capabilities and plugin-style adapters, including channels, "
+                "voice providers, browser/computer use, model providers, delegation, memory, and productivity connectors."
+            ),
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema(
+                {
+                    "kind": {"type": "string", "description": "Optional exact kind such as channel, model_provider, computer_use, productivity, or memory."},
+                    "plugin_id": {"type": "string", "description": "Optional exact plugin id such as channels.slack."},
+                    "include_contracts": {"type": "boolean", "description": "Include setup and contract details."},
+                }
+            ),
+            capability_group="plugins",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        load_workspace_environment(config.normalized().workspace)
+        kind = str(tool_input.get("kind") or "").strip()
+        plugin_id = str(tool_input.get("plugin_id") or "").strip()
+        include_contracts = bool(tool_input.get("include_contracts", True))
+        plugins = load_plugin_catalog()
+        if kind:
+            plugins = [plugin for plugin in plugins if plugin.get("kind") == kind]
+        if plugin_id:
+            plugins = [plugin for plugin in plugins if plugin.get("plugin_id") == plugin_id]
+        items = [_plugin_catalog_summary(plugin, include_contracts=include_contracts) for plugin in plugins]
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Found {len(items)} Humungousaur capability plugin(s).",
+            {
+                "plugins": items,
+                "source": str(PLUGIN_CATALOG_PATH),
+                "boundary": "Catalog entries are Humungousaur-owned capability contracts; they are not third-party package install directives.",
+            },
+        )
+
+
+class PluginSetupPlanTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="plugin_setup_plan",
+            description="Return setup requirements, missing environment/configuration, related channels, tools, and skills for one exact Humungousaur plugin id.",
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema(
+                {"plugin_id": {"type": "string", "description": "Exact plugin id from plugin_catalog."}},
+                required=["plugin_id"],
+            ),
+            capability_group="plugins",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        normalized = config.normalized()
+        load_workspace_environment(normalized.workspace)
+        plugin_id = str(tool_input.get("plugin_id") or "").strip()
+        plugin = next((item for item in load_plugin_catalog() if item.get("plugin_id") == plugin_id), None)
+        if plugin is None:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, f"Unknown plugin_id: {plugin_id}")
+        setup = plugin.get("setup", {})
+        if not isinstance(setup, dict):
+            setup = {}
+        required_env = [str(item) for item in setup.get("required_env", []) if str(item)] if isinstance(setup.get("required_env", []), list) else []
+        optional_env = [str(item) for item in setup.get("optional_env", []) if str(item)] if isinstance(setup.get("optional_env", []), list) else []
+        required_binaries = (
+            [str(item) for item in setup.get("required_binaries", []) if str(item)]
+            if isinstance(setup.get("required_binaries", []), list)
+            else []
+        )
+        missing_env = [name for name in required_env if not os.environ.get(name)]
+        configured_optional_env = [name for name in optional_env if os.environ.get(name)]
+        missing_bins = [name for name in required_binaries if _which(name) is None]
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Read setup plan for {plugin_id}.",
+            {
+                "plugin": plugin,
+                "setup_status": {
+                    "missing_env": missing_env,
+                    "configured_optional_env": configured_optional_env,
+                    "missing_binaries": missing_bins,
+                    "ready": not missing_env and not missing_bins,
+                },
+                "secret_handling": "Store only env var names or external secret refs in Humungousaur setup state. Do not store raw secret values.",
+            },
+        )
+
+
 class DeclaredPluginTool(Tool):
     def __init__(self, manifest: PluginManifest, declaration: PluginToolDeclaration) -> None:
         self.manifest_name = manifest.name
@@ -167,6 +264,8 @@ class DeclaredPluginTool(Tool):
 
 def default_plugin_tools(config: AgentConfig | None = None, existing_tool_names: set[str] | None = None) -> dict[str, Tool]:
     tools: dict[str, Tool] = {
+        "plugin_catalog": PluginCatalogTool(),
+        "plugin_setup_plan": PluginSetupPlanTool(),
         "plugin_manifests": PluginManifestsTool(),
         "plugin_manifest": PluginManifestTool(),
     }
@@ -190,6 +289,17 @@ def plugin_manifest_roots(config: AgentConfig) -> list[Path]:
         normalized.workspace / ".umang" / "plugins",
         normalized.data_dir / "plugins",
     ]
+
+
+def load_plugin_catalog() -> list[dict[str, Any]]:
+    try:
+        payload = json.loads(PLUGIN_CATALOG_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    plugins = payload.get("plugins") if isinstance(payload, dict) else None
+    if not isinstance(plugins, list):
+        return []
+    return [plugin for plugin in plugins if isinstance(plugin, dict)]
 
 
 def discover_plugin_manifests(config: AgentConfig) -> list[PluginManifest]:
@@ -352,3 +462,28 @@ def _valid_plugin_name(value: str) -> bool:
 
 def _valid_tool_name(value: str) -> bool:
     return bool(value) and len(value) <= 120 and all(char in PLUGIN_TOOL_NAME_CHARS for char in value)
+
+
+def _plugin_catalog_summary(plugin: dict[str, Any], *, include_contracts: bool) -> dict[str, Any]:
+    payload = {
+        "plugin_id": plugin.get("plugin_id", ""),
+        "display_name": plugin.get("display_name", ""),
+        "kind": plugin.get("kind", ""),
+        "status": plugin.get("status", ""),
+        "owned_by": plugin.get("owned_by", ""),
+        "runtime_adapter": plugin.get("runtime_adapter", ""),
+        "channels": plugin.get("channels", []),
+        "providers": plugin.get("providers", []),
+        "tools": plugin.get("tools", []),
+        "skills": plugin.get("skills", []),
+    }
+    if include_contracts:
+        payload["setup"] = plugin.get("setup", {})
+        payload["contracts"] = plugin.get("contracts", {})
+    return payload
+
+
+def _which(name: str) -> str | None:
+    from shutil import which
+
+    return which(name)

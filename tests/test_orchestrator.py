@@ -91,6 +91,12 @@ class OrchestratorTests(unittest.TestCase):
     def test_planning_context_includes_recent_memory_and_browser_sessions(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)
+            skill_dir = workspace / "skills" / "demo-skill"
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text(
+                "---\nname: demo-skill\ndescription: Demo workspace skill.\n---\n# Demo\n",
+                encoding="utf-8",
+            )
             config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", planner_provider="explicit").normalized()
             orchestrator = AgentOrchestrator(config)
             orchestrator.memory.append("user_memory", {"kind": "preference", "text": "context needle"})
@@ -110,6 +116,9 @@ class OrchestratorTests(unittest.TestCase):
             self.assertEqual(context["user_profile"]["preferences"][0]["text"], "context needle")
             self.assertEqual(context["browser_sessions"][0]["session_id"], session["session_id"])
             self.assertEqual(context["screen_captures"]["count"], 0)
+            self.assertEqual(context["available_workspace_skills"][0]["name"], "demo-skill")
+            self.assertIn("channels.slack", {plugin["plugin_id"] for plugin in context["capability_plugins"]})
+            self.assertIn("slack", {channel["channel_id"] for channel in context["gateway_channels"]})
             self.assertIn("system", context)
             self.assertIn("active_window", context)
 

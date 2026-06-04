@@ -257,9 +257,10 @@ public sealed partial class MainWindow : Window
         ChannelSecretBox.Password = "";
         ChannelNotesBox.Text = setup.Notes;
         SetComboByTag(ConversationTypeBox, setup.ConversationType);
+        _ = RefreshSelectedChannelStatusAsync(channel.ChannelId);
     }
 
-    private void SaveChannelButton_Click(object sender, RoutedEventArgs e)
+    private async void SaveChannelButton_Click(object sender, RoutedEventArgs e)
     {
         if (ChannelList.SelectedItem is not ChannelInfo channel)
         {
@@ -275,7 +276,17 @@ public sealed partial class MainWindow : Window
         setup.SecretConfigured = setup.SecretConfigured || !string.IsNullOrWhiteSpace(ChannelSecretBox.Password);
         setup.Notes = ChannelNotesBox.Text.Trim();
         _settingsStore.Save(_settings);
-        ShowNotice($"{channel.DisplayName} setup saved.", InfoBarSeverity.Success);
+        try
+        {
+            await _api.SaveChannelSetupAsync(channel, setup);
+            await RefreshSelectedChannelStatusAsync(channel.ChannelId);
+            ShowNotice($"{channel.DisplayName} setup saved.", InfoBarSeverity.Success);
+        }
+        catch (Exception exc)
+        {
+            ChannelStatusText.Text = exc.Message;
+            ShowNotice("Local setup saved, but backend setup sync failed.", InfoBarSeverity.Warning);
+        }
     }
 
     private async void TestChannelButton_Click(object sender, RoutedEventArgs e)
@@ -421,6 +432,34 @@ public sealed partial class MainWindow : Window
                 || tool.CapabilityGroup.Contains(query, StringComparison.OrdinalIgnoreCase)
                 || tool.Description.Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
         ToolList.ItemsSource = tools;
+    }
+
+    private async Task RefreshSelectedChannelStatusAsync(string channelId)
+    {
+        try
+        {
+            var status = await _api.GetChannelStatusAsync(channelId);
+            var channel = status["channels"]?.AsArray().FirstOrDefault()?.AsObject();
+            if (channel is null)
+            {
+                ChannelStatusText.Text = "Backend setup status unavailable.";
+                return;
+            }
+
+            var readyForSend = channel["ready_for_send"]?.GetValue<bool>() == true;
+            var readyForInbound = channel["ready_for_inbound"]?.GetValue<bool>() == true;
+            var missing = channel["missing_send_env"]?.AsArray()
+                .Select(item => item?.GetValue<string>())
+                .Where(item => !string.IsNullOrWhiteSpace(item))
+                .ToList() ?? [];
+            ChannelStatusText.Text = missing.Count == 0
+                ? $"Backend setup: send {(readyForSend ? "ready" : "prepared only")}; inbound {(readyForInbound ? "enabled" : "not enabled")}."
+                : $"Backend setup: missing {string.Join(", ", missing)}; prepared outbox is available.";
+        }
+        catch (Exception exc)
+        {
+            ChannelStatusText.Text = exc.Message;
+        }
     }
 
     private ChannelSetup SetupFor(string channelId)

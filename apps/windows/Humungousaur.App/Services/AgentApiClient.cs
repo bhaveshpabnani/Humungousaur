@@ -30,6 +30,39 @@ public sealed class AgentApiClient
         return await GetAsync<List<ChannelInfo>>("channels") ?? [];
     }
 
+    public Task<JsonObject> GetChannelStatusAsync(string channelId)
+    {
+        return GetJsonObjectAsync($"channels/status?channel_id={Uri.EscapeDataString(channelId)}");
+    }
+
+    public Task<JsonObject> GetChannelDoctorAsync(string channelId)
+    {
+        return GetJsonObjectAsync($"channels/doctor?channel_id={Uri.EscapeDataString(channelId)}");
+    }
+
+    public Task<JsonObject> SaveChannelSetupAsync(ChannelInfo channel, ChannelSetup setup)
+    {
+        var payload = new JsonObject
+        {
+            ["channel_id"] = channel.ChannelId,
+            ["enabled"] = setup.Enabled,
+            ["conversation_defaults"] = new JsonObject
+            {
+                ["conversation_id"] = setup.ConversationId,
+                ["conversation_type"] = setup.ConversationType,
+            },
+            ["secret_refs"] = new JsonObject(),
+            ["secret_configured"] = new JsonObject(),
+            ["notes"] = setup.Notes,
+        };
+        if (!string.IsNullOrWhiteSpace(setup.SecretName))
+        {
+            payload["secret_refs"]!["primary"] = setup.SecretName;
+            payload["secret_configured"]!["primary"] = setup.SecretConfigured;
+        }
+        return PostJsonObjectAsync("channels/setup", payload);
+    }
+
     public async Task<ToolCatalog> GetToolsAsync()
     {
         return await GetAsync<ToolCatalog>("tools") ?? new ToolCatalog();

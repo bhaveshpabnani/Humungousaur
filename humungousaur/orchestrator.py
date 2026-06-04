@@ -25,6 +25,9 @@ from humungousaur.tools.browser_tools import BrowserSessionStore
 from humungousaur.tools.file_tools import summarize_text
 from humungousaur.tools.os_tools import active_window_snapshot, list_screenshot_captures
 from humungousaur.tools.system_tools import collect_system_status
+from humungousaur.integrations.channels import load_channel_catalog
+from humungousaur.tools.plugin_tools import load_plugin_catalog
+from humungousaur.tools.skill_tools import discover_workspace_skills
 
 
 class AgentOrchestrator:
@@ -264,6 +267,9 @@ class AgentOrchestrator:
             "user_profile": compact_user_profile(build_user_profile(self.memory, limit=100), per_section=3),
             "cognition": self._cognitive_context(),
             "browser_sessions": self._browser_context(),
+            "available_workspace_skills": self._workspace_skill_context(),
+            "capability_plugins": self._plugin_capability_context(),
+            "gateway_channels": self._channel_capability_context(),
             "safety": {
                 "retrieved_context_is_untrusted": True,
                 "high_risk_actions_need_approval": True,
@@ -302,6 +308,59 @@ class AgentOrchestrator:
                 "updated_at": session["updated_at"],
             }
             for session in sessions
+        ]
+
+    def _workspace_skill_context(self) -> list[dict[str, object]]:
+        try:
+            skills = discover_workspace_skills(self.config)[:16]
+        except Exception:
+            return []
+        return [
+            {
+                "skill_id": skill.skill_id,
+                "name": skill.name,
+                "description": skill.description[:240],
+                "relative_path": skill.relative_path,
+            }
+            for skill in skills
+        ]
+
+    def _plugin_capability_context(self) -> list[dict[str, object]]:
+        try:
+            plugins = load_plugin_catalog()[:24]
+        except Exception:
+            return []
+        return [
+            {
+                "plugin_id": plugin.get("plugin_id", ""),
+                "kind": plugin.get("kind", ""),
+                "status": plugin.get("status", ""),
+                "channels": plugin.get("channels", [])[:8] if isinstance(plugin.get("channels"), list) else [],
+                "tools": plugin.get("tools", [])[:8] if isinstance(plugin.get("tools"), list) else [],
+                "skills": plugin.get("skills", [])[:8] if isinstance(plugin.get("skills"), list) else [],
+            }
+            for plugin in plugins
+        ]
+
+    def _channel_capability_context(self) -> list[dict[str, object]]:
+        try:
+            channels = load_channel_catalog()[:24]
+        except Exception:
+            return []
+        return [
+            {
+                "channel_id": channel.get("channel_id", ""),
+                "display_name": channel.get("display_name", channel.get("name", "")),
+                "setup_kind": channel.get("setup_kind", ""),
+                "direct_send": bool(
+                    isinstance(channel.get("delivery", {}), dict)
+                    and isinstance(channel.get("delivery", {}).get("official_send", {}), dict)
+                    and channel.get("delivery", {}).get("official_send", {}).get("implemented", False)
+                ),
+                "ambient": bool(isinstance(channel.get("policies", {}), dict) and channel.get("policies", {}).get("ambient_room_events_supported", False)),
+                "bot_loop": bool(isinstance(channel.get("policies", {}), dict) and channel.get("policies", {}).get("bot_loop_protection_supported", False)),
+            }
+            for channel in channels
         ]
 
     def _recent_memory_context(self) -> list[dict[str, object]]:
