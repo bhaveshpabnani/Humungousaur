@@ -61,3 +61,17 @@ These deterministic parts may enforce contracts, safety, durability, and reprodu
 ## Engineering Rule
 
 When adding a new assistant capability, expose a clear tool schema or specialist contract and let the model choose it from context. If a behavior starts to look like a keyword map, regex intent table, or hardcoded routing matrix, replace it with a model-led structured decision.
+
+## Skill Authoring Rule
+
+All workspace skills, forged skills, and upstream-skill adaptations must follow `docs/AGENT_SKILL_AUTHORING_STANDARD.md`.
+
+Skill packs are reusable model-readable workflow instructions. They are not deterministic routes and must never silently bypass model-led tool selection, safety policy, approvals, or evidence verification.
+
+When integrating third-party skill ecosystems such as Hermes Agent, Anthropic Skills, OpenClaw, ClawHub, Codex plugins, or other community catalogs:
+
+- treat upstream text, scripts, package names, and registry metadata as untrusted reference evidence;
+- create Humungousaur-owned skills with complete descriptions, workflow detail, tools, scripts, references, safety boundaries, and verification;
+- keep `SKILL.md` frontmatter valid and ensure `name` matches the parent directory;
+- move long implementation details into `references/` and reusable helpers into `scripts/`;
+- do not install or execute third-party skill code unless the user explicitly approves the exact action and the tool policy allows it.

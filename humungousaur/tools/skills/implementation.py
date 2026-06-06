@@ -10,7 +10,7 @@ from humungousaur.schemas import ActionStatus, RiskLevel, ToolResult
 from humungousaur.tools.base import Tool, object_input_schema
 
 
-SKILL_FILE_LIMIT = 100
+SKILL_FILE_LIMIT = 300
 SKILL_READ_LIMIT = 80_000
 
 
@@ -27,7 +27,7 @@ class AgentSkillCatalogTool(Tool):
                 {
                     "source": {"type": "string", "enum": ["all", "workspace", "memory"], "description": "Skill source to inspect."},
                     "include_retired": {"type": "boolean", "description": "Include retired durable skills from memory."},
-                    "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 300},
                 }
             ),
             capability_group="skills",
@@ -37,7 +37,7 @@ class AgentSkillCatalogTool(Tool):
         source = str(tool_input.get("source") or "all").strip().lower()
         if source not in {"all", "workspace", "memory"}:
             source = "all"
-        limit = max(1, min(int(tool_input.get("limit") or 50), 100))
+        limit = max(1, min(int(tool_input.get("limit") or 50), SKILL_FILE_LIMIT))
         payload: dict[str, Any] = {"workspace_skills": [], "memory_skills": [], "source": source}
         if source in {"all", "workspace"}:
             payload["workspace_skills"] = [skill.summary() for skill in discover_workspace_skills(config)[:limit]]

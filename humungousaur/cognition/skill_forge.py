@@ -164,7 +164,7 @@ class SkillForge:
         skill_dir = _unique_dir(root, slug)
         skill_dir.mkdir(parents=True, exist_ok=False)
         path = skill_dir / "SKILL.md"
-        path.write_text(_render_skill_markdown(proposal), encoding="utf-8")
+        path.write_text(_render_skill_markdown(proposal, skill_name=slug), encoding="utf-8")
         imported: SkillRecord | None = None
         if import_memory:
             imported = SkillStore(self.config.skill_library_path).upsert(
@@ -242,6 +242,7 @@ def _skill_forge_prompt(
     return (
         "Author one reusable SKILL.md instruction pack for a persistent local personal assistant.\n"
         "Return JSON only. Do not execute tools.\n"
+        "The written skill must follow docs/AGENT_SKILL_AUTHORING_STANDARD.md: valid YAML frontmatter, lowercase hyphenated name matching the directory, concrete description, progressive disclosure, tool mapping, safety boundaries, verification, failure modes, and references.\n"
         "Global intelligence rule: do not use pattern-based, regex-based, keyword-list-based, hardcoded-constant-based, deterministic natural-language handling, static routing, or handcrafted cases for skill choice, task interpretation, delegation, memory, or response strategy.\n"
         "Use model reasoning over the supplied task request, evidence, available tools, and observed gaps.\n"
         "Create a skill only when it captures a reusable workflow that is likely to help future tasks.\n"
@@ -310,11 +311,12 @@ def _parse_proposal(raw: str) -> SkillForgeProposal:
     )
 
 
-def _render_skill_markdown(proposal: SkillForgeProposal) -> str:
+def _render_skill_markdown(proposal: SkillForgeProposal, *, skill_name: str) -> str:
+    description = _clean(proposal.description or proposal.purpose, limit=1_024)
     lines = [
         "---",
-        f"name: {proposal.name}",
-        f"description: {proposal.description or proposal.purpose}",
+        f"name: {skill_name}",
+        f"description: {description}",
         "---",
         "",
         f"# {proposal.name}",
