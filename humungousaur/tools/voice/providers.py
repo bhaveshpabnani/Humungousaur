@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import platform
 import subprocess
+import sys
 from typing import Any
 import urllib.error
 import urllib.parse
@@ -174,6 +175,69 @@ def deepgram_transcribe_file(
     )
 
 
+def local_whisper_status() -> dict[str, Any]:
+    model_path = _local_whisper_model_path()
+    return {
+        "configured": model_path.exists(),
+        "provider": "faster_whisper",
+        "model": os.environ.get("HUMUNGOUSAUR_LOCAL_WHISPER_MODEL") or os.environ.get("LOCAL_WHISPER_MODEL") or "tiny.en",
+        "model_path": str(model_path) if model_path.exists() else "",
+        "device": os.environ.get("HUMUNGOUSAUR_LOCAL_WHISPER_DEVICE") or os.environ.get("LOCAL_WHISPER_DEVICE") or "cpu",
+        "compute_type": os.environ.get("HUMUNGOUSAUR_LOCAL_WHISPER_COMPUTE_TYPE") or os.environ.get("LOCAL_WHISPER_COMPUTE_TYPE") or "int8",
+    }
+
+
+def local_whisper_transcribe_file(
+    audio_path: Path,
+    *,
+    model: str = "",
+    language: str = "",
+    timeout_seconds: float = 120.0,
+) -> SpeechTranscription:
+    del timeout_seconds
+    resolved = audio_path.expanduser().resolve()
+    if not resolved.exists() or not resolved.is_file():
+        raise SpeechProviderError(f"Audio file does not exist: {resolved}")
+    if resolved.stat().st_size <= 0:
+        raise SpeechProviderError("Audio file is empty.")
+    model_name = model or os.environ.get("HUMUNGOUSAUR_LOCAL_WHISPER_MODEL") or os.environ.get("LOCAL_WHISPER_MODEL") or "tiny.en"
+    model_path = _local_whisper_model_path(model_name)
+    if not model_path.exists():
+        raise SpeechProviderError(
+            "Local Whisper model is not available. "
+            "Set HUMUNGOUSAUR_LOCAL_WHISPER_MODEL_DIR or run the voice-wakeup bootstrap once."
+        )
+    whisper_model_class = _faster_whisper_model_class()
+    device = os.environ.get("HUMUNGOUSAUR_LOCAL_WHISPER_DEVICE") or os.environ.get("LOCAL_WHISPER_DEVICE") or "cpu"
+    compute_type = os.environ.get("HUMUNGOUSAUR_LOCAL_WHISPER_COMPUTE_TYPE") or os.environ.get("LOCAL_WHISPER_COMPUTE_TYPE") or "int8"
+    try:
+        whisper_model = whisper_model_class(str(model_path), device=device, compute_type=compute_type)
+        segments, info = whisper_model.transcribe(
+            str(resolved),
+            language=language or None,
+            vad_filter=True,
+            beam_size=1,
+        )
+        text_parts = [segment.text.strip() for segment in segments if getattr(segment, "text", "").strip()]
+    except Exception as exc:
+        raise SpeechProviderError(f"Local Whisper STT failed: {exc}") from exc
+    transcript = " ".join(text_parts).strip()
+    confidence = getattr(info, "language_probability", None)
+    try:
+        parsed_confidence = float(confidence) if confidence is not None else None
+    except (TypeError, ValueError):
+        parsed_confidence = None
+    detected_language = language or str(getattr(info, "language", "") or "")
+    return SpeechTranscription(
+        provider="local-whisper",
+        transcript=transcript,
+        confidence=parsed_confidence,
+        language=detected_language,
+        model=model_name,
+        raw_shape={"type": "faster_whisper", "model_path": str(model_path), "device": device, "compute_type": compute_type},
+    )
+
+
 def elevenlabs_synthesize_to_file(
     text: str,
     output_dir: Path,
@@ -319,6 +383,34 @@ def _elevenlabs_api_key(primary_env: str) -> str | None:
         or os.environ.get("ELEVAN_LABS_API_KEY")
         or os.environ.get("ELEVANLABS_API_KEY")
     )
+
+
+def _local_whisper_model_path(model: str | None = None) -> Path:
+    configured = os.environ.get("HUMUNGOUSAUR_LOCAL_WHISPER_MODEL_DIR") or os.environ.get("LOCAL_WHISPER_MODEL_DIR")
+    if configured:
+        return Path(configured).expanduser().resolve()
+    model_name = model or os.environ.get("HUMUNGOUSAUR_LOCAL_WHISPER_MODEL") or os.environ.get("LOCAL_WHISPER_MODEL") or "tiny.en"
+    repo_dir = f"Systran--faster-whisper-{model_name}"
+    return (Path.home() / "Desktop" / "Umang" / "voice-wakeup" / "artifacts" / "models" / repo_dir).resolve()
+
+
+def _faster_whisper_model_class():
+    try:
+        from faster_whisper import WhisperModel
+
+        return WhisperModel
+    except ImportError:
+        site_packages = Path.home() / "Desktop" / "Umang" / "voice-wakeup" / ".venv" / "Lib" / "site-packages"
+        if site_packages.exists():
+            sys.path.append(str(site_packages))
+        try:
+            from faster_whisper import WhisperModel
+
+            return WhisperModel
+        except ImportError as exc:
+            raise SpeechProviderError(
+                "faster-whisper is not installed in this environment and the voice-wakeup venv was not usable."
+            ) from exc
 
 
 def play_audio_file(path: Path, *, timeout_seconds: float = 60.0) -> dict[str, str]:

@@ -106,7 +106,7 @@ class OpenAIResponsesClient(ModelClient):
             detail = redact_secrets(exc.read().decode("utf-8", errors="replace"))
             message = self._extract_error_message(detail)
             raise ModelClientError(f"OpenAI Responses API failed: HTTP {exc.code}: {message}") from exc
-        except (urllib.error.URLError, http.client.HTTPException) as exc:
+        except (urllib.error.URLError, http.client.HTTPException, TimeoutError) as exc:
             raise ModelClientError(f"OpenAI Responses API request failed: {exc}") from exc
 
         text = self._extract_output_text(body)
@@ -125,7 +125,7 @@ class OpenAIResponsesClient(ModelClient):
                     time.sleep(_retry_after_seconds(exc))
                     continue
                 raise
-            except (urllib.error.URLError, http.client.HTTPException) as exc:
+            except (urllib.error.URLError, http.client.HTTPException, TimeoutError) as exc:
                 last_exc = exc
         assert last_exc is not None
         raise last_exc
@@ -188,9 +188,9 @@ class OpenAICompatibleChatClient(ModelClient):
                 retry_detail = redact_secrets(retry_exc.read().decode("utf-8", errors="replace"))
                 message = self._extract_error_message(retry_detail)
                 raise ModelClientError(f"{self.name} API failed: HTTP {retry_exc.code}: {message}") from retry_exc
-            except (urllib.error.URLError, http.client.HTTPException) as retry_exc:
+            except (urllib.error.URLError, http.client.HTTPException, TimeoutError) as retry_exc:
                 raise ModelClientError(f"{self.name} API request failed: {retry_exc}") from retry_exc
-        except (urllib.error.URLError, http.client.HTTPException) as exc:
+        except (urllib.error.URLError, http.client.HTTPException, TimeoutError) as exc:
             raise ModelClientError(f"{self.name} API request failed: {exc}") from exc
 
         text = self._extract_output_text(body)
@@ -242,7 +242,7 @@ class OpenAICompatibleChatClient(ModelClient):
                     return json.loads(response.read().decode("utf-8"))
             except urllib.error.HTTPError:
                 raise
-            except (urllib.error.URLError, http.client.HTTPException) as exc:
+            except (urllib.error.URLError, http.client.HTTPException, TimeoutError) as exc:
                 last_exc = exc
         assert last_exc is not None
         raise last_exc

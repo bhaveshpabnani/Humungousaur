@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from humungousaur.config import AgentConfig
 from humungousaur.orchestrator import AgentOrchestrator
+from humungousaur.planning.model_factory import auto_model_provider
 from humungousaur.planning.model_clients import OpenAICompatibleChatClient
 
 
@@ -98,14 +99,31 @@ class ModelOrchestratorTests(unittest.TestCase):
                 model_provider="ollama",
             )
 
-            with patch.dict("os.environ", {}, clear=True):
+            with (
+                patch.dict("os.environ", {}, clear=True),
+                patch("humungousaur.planning.local_models.list_ollama_models", return_value=[]),
+            ):
                 client = AgentOrchestrator(config)._build_model_client()
 
             self.assertIsInstance(client, OpenAICompatibleChatClient)
             assert isinstance(client, OpenAICompatibleChatClient)
             self.assertEqual(client.base_url, "http://127.0.0.1:11434/v1")
             self.assertEqual(client.api_key_env, "OLLAMA_API_KEY")
-            self.assertEqual(client.model, "llama3.1")
+            self.assertEqual(client.model, "llama3.2:3b")
+
+    def test_auto_provider_prefers_available_ollama_for_local_first(self) -> None:
+        with (
+            patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test", "GROQ_API_KEY": "gsk-test"}, clear=True),
+            patch("humungousaur.planning.model_factory.ollama_available", return_value=True),
+        ):
+            self.assertEqual(auto_model_provider(), "ollama")
+
+    def test_auto_provider_can_be_forced_cloud_first(self) -> None:
+        with (
+            patch.dict("os.environ", {"HUMUNGOUSAUR_CLOUD_FIRST": "1", "OPENAI_API_KEY": "sk-test"}, clear=True),
+            patch("humungousaur.planning.model_factory.ollama_available", return_value=True),
+        ):
+            self.assertEqual(auto_model_provider(), "openai-responses")
 
 
 if __name__ == "__main__":

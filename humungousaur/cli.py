@@ -253,6 +253,7 @@ def main() -> None:
         model_name=getattr(args, "model", "gpt-5-mini"),
         model_base_url=getattr(args, "model_base_url", None),
         model_api_key_env=getattr(args, "model_api_key_env", None),
+        model_timeout_seconds=getattr(args, "model_timeout_seconds", 45.0),
     ).normalized()
 
     if args.command == "run":
@@ -596,3 +597,13 @@ def _add_planner_args(parser: argparse.ArgumentParser) -> None:
         default=None,
         help="Environment variable that contains the model API key",
     )
+    parser.add_argument(
+        "--model-timeout-seconds",
+        type=float,
+        default=45.0,
+        help="Timeout for each model request",
+    )
+
+
+if __name__ == "__main__":
+    main()

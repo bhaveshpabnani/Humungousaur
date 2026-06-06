@@ -4,6 +4,7 @@ import os
 
 from humungousaur.config import AgentConfig
 
+from .local_models import ollama_available, recommended_ollama_model
 from .model_clients import ModelClient, OpenAICompatibleChatClient, OpenAIResponsesClient
 
 
@@ -44,7 +45,7 @@ def build_model_client(config: AgentConfig) -> ModelClient:
         )
     if provider == "ollama":
         return OpenAICompatibleChatClient(
-            model=model_name(config, "OLLAMA_MODEL", "llama3.1"),
+            model=model_name(config, "OLLAMA_MODEL", recommended_ollama_model()),
             api_key_env=config.model_api_key_env or "OLLAMA_API_KEY",
             base_url=config.model_base_url or os.environ.get("OLLAMA_BASE_URL") or os.environ.get("LOCAL_LLM_BASE_URL", "http://127.0.0.1:11434/v1"),
             timeout_seconds=config.model_timeout_seconds,
@@ -62,6 +63,13 @@ def build_model_client(config: AgentConfig) -> ModelClient:
 
 
 def auto_model_provider() -> str:
+    if os.environ.get("HUMUNGOUSAUR_CLOUD_FIRST", "").strip().lower() in {"1", "true", "yes"}:
+        if os.environ.get("OPENAI_API_KEY"):
+            return "openai-responses"
+        if os.environ.get("GROQ_API_KEY"):
+            return "groq"
+    if ollama_available():
+        return "ollama"
     if os.environ.get("OPENAI_API_KEY"):
         return "openai-responses"
     if os.environ.get("GROQ_API_KEY"):

@@ -27,7 +27,7 @@ def transcript_from_activation(path: Path, config: AgentConfig | None = None) ->
         result = VoiceTranscribeTool().execute(
             {
                 "audio_path": str(audio_path),
-                "provider": str(payload.get("stt_provider") or "deepgram"),
+                "provider": str(payload.get("stt_provider") or "local-whisper"),
                 "model": str(payload.get("stt_model") or ""),
                 "language": str(payload.get("language") or ""),
                 "smart_format": bool(payload.get("smart_format", True)),

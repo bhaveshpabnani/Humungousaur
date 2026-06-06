@@ -8,7 +8,7 @@ import urllib.error
 from humungousaur.config import AgentConfig
 from humungousaur.schemas import ActionStatus
 from humungousaur.tools.voice_tools import VoiceProviderStatusTool, VoiceResponsePrepareTool, VoiceSpeakTool, VoiceTranscribeTool
-from humungousaur.tools.voice.providers import SpeechProviderError, SpeechSynthesis
+from humungousaur.tools.voice.providers import SpeechProviderError, SpeechSynthesis, SpeechTranscription
 
 
 class VoiceProviderTests(unittest.TestCase):
@@ -20,6 +20,7 @@ class VoiceProviderTests(unittest.TestCase):
 
         self.assertEqual(result.status, ActionStatus.SUCCEEDED)
         self.assertTrue(result.output["stt"]["deepgram"]["configured"])
+        self.assertIn("local-whisper", result.output["stt"])
         self.assertTrue(result.output["tts"]["elevenlabs"]["configured"])
         self.assertNotIn("dg-secret", json.dumps(result.output))
         self.assertNotIn("el-secret", json.dumps(result.output))
@@ -50,13 +51,37 @@ class VoiceProviderTests(unittest.TestCase):
                 patch.dict("os.environ", {"DEEPGRAM_API_KEY": "dg-test"}, clear=False),
                 patch("urllib.request.urlopen", return_value=response) as urlopen,
             ):
-                result = VoiceTranscribeTool().execute({"audio_path": str(audio), "reason": "test"}, config)
+                result = VoiceTranscribeTool().execute({"audio_path": str(audio), "provider": "deepgram", "reason": "test"}, config)
 
         self.assertEqual(result.status, ActionStatus.SUCCEEDED)
         self.assertEqual(result.output["transcript"], "hello from deepgram")
         request = urlopen.call_args.args[0]
         self.assertEqual(request.full_url, "https://api.deepgram.com/v1/listen?smart_format=true")
         self.assertEqual(request.headers["Authorization"], "Token dg-test")
+
+    def test_voice_transcribe_defaults_to_local_whisper(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            audio = workspace / "sample.wav"
+            audio.write_bytes(b"RIFF....WAVEfmt ")
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts").normalized()
+            with patch(
+                "humungousaur.tools.voice.implementation.local_whisper_transcribe_file",
+                return_value=SpeechTranscription(
+                    provider="local-whisper",
+                    transcript="hello locally",
+                    confidence=0.8,
+                    language="en",
+                    model="tiny.en",
+                    raw_shape={"type": "faster_whisper"},
+                ),
+            ) as transcribe:
+                result = VoiceTranscribeTool().execute({"audio_path": str(audio), "reason": "test"}, config)
+
+        self.assertEqual(result.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(result.output["provider"], "local-whisper")
+        self.assertEqual(result.output["transcript"], "hello locally")
+        self.assertTrue(transcribe.called)
 
     def test_voice_response_prepare_elevenlabs_writes_audio_artifact(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

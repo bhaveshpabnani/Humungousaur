@@ -41,15 +41,18 @@ def main() -> int:
     parser.add_argument("--data-dir", type=Path, default=Path("artifacts/complete-smoke"))
     parser.add_argument("--live-groq", action="store_true", help="Use Groq for live model-led planner/tool JSON checks")
     parser.add_argument("--live-openai", action="store_true", help="Use OpenAI for live model-led planner/tool JSON checks")
+    parser.add_argument("--live-ollama", action="store_true", help="Use local Ollama for live model-led planner/tool JSON checks")
     parser.add_argument("--live-voice", action="store_true", help="Use ElevenLabs TTS plus Deepgram STT for activation audio")
+    parser.add_argument("--local-voice", action="store_true", help="Use Windows SAPI TTS plus local Whisper STT for activation audio")
     parser.add_argument("--voice-id", default="", help="Optional ElevenLabs voice id")
+    parser.add_argument("--model-timeout-seconds", type=float, default=45.0, help="Timeout for each live model request")
     parser.add_argument("--live-browser", action="store_true", help="Launch Playwright headless browser if installed")
     parser.add_argument("--real-screen", action="store_true", help="Capture an actual screenshot artifact after policy approval")
     args = parser.parse_args()
 
     workspace = args.workspace.expanduser().resolve()
     load_workspace_environment(workspace)
-    config = AgentConfig(workspace=workspace, data_dir=args.data_dir, planner_provider="explicit").normalized()
+    config = AgentConfig(workspace=workspace, data_dir=args.data_dir, planner_provider="explicit", model_timeout_seconds=args.model_timeout_seconds).normalized()
     tools = default_tools(config)
     executor = Executor(tools, PolicyEngine())
     results: dict[str, Any] = {
@@ -101,13 +104,16 @@ def main() -> int:
     record_tool(record, "voice", "voice_provider_status", tools["voice_provider_status"].execute({}, config))
     _run_core_agent_and_stimuli(record, config)
     _run_voice_wakeup_inline(record, config)
-    if args.live_voice:
-        model_provider = "groq" if args.live_groq else "openai-responses" if args.live_openai else "auto"
-        _run_live_voice_audio_activation(record, config, voice_id=args.voice_id, model_provider=model_provider)
+    if args.live_voice or args.local_voice:
+        model_provider = "ollama" if args.live_ollama else "groq" if args.live_groq else "openai-responses" if args.live_openai else "auto"
+        voice_mode = "local" if args.local_voice else "cloud"
+        _run_live_voice_audio_activation(record, config, voice_id=args.voice_id, model_provider=model_provider, voice_mode=voice_mode)
     if args.live_groq:
         _run_live_model(record, workspace, args.data_dir, "groq")
     if args.live_openai:
         _run_live_model(record, workspace, args.data_dir, "openai-responses")
+    if args.live_ollama:
+        _run_live_model(record, workspace, args.data_dir, "ollama")
 
     with local_web_app() as url:
         _run_static_browser(record, config, executor, url)
@@ -193,66 +199,83 @@ def _run_voice_wakeup_inline(record, config: AgentConfig) -> None:
     record("voice_wakeup", "activation_inline_transcript_to_voice_response", result.run is not None and result.voice_result is not None, _compact_harness(result))
 
 
-def _run_live_voice_audio_activation(record, config: AgentConfig, *, voice_id: str, model_provider: str) -> None:
+def _run_live_voice_audio_activation(record, config: AgentConfig, *, voice_id: str, model_provider: str, voice_mode: str) -> None:
     tools = default_tools(config)
-    tts = tools["voice_speak"].execute(
-        {
-            "text": "Check local system status using the available system status tool.",
-            "reason": "Generate voice-wakeup activation audio for complete smoke.",
-            "provider": "elevenlabs",
-            "voice_id": voice_id,
-            "allow_voice_lookup": not bool(voice_id),
-            "playback": False,
-        },
-        config,
-    )
-    if tts.status != ActionStatus.SUCCEEDED:
+    if voice_mode == "local":
         fallback = tools["voice_response_prepare"].execute(
             {
                 "text": "Check local system status using the available system status tool.",
-                "reason": "Fallback local Windows SAPI activation audio for complete smoke.",
+                "reason": "Generate local Windows SAPI activation audio for complete smoke.",
                 "tts_provider": "system",
             },
             config,
         )
-        provider_error = tts.output.get("provider_error", {}) if isinstance(tts.output, dict) else {}
-        provider_blocked = provider_error.get("category") in {"provider_account", "provider_entitlement", "provider_quota"}
-        record(
-            "voice_live",
-            "elevenlabs_activation_audio",
-            provider_blocked,
-            {
-                "status": tts.status.value,
-                "summary": tts.summary,
-                "error": tts.error,
-                "output": tts.output,
-                "accepted_as_provider_block": provider_blocked,
-            },
-        )
-        record_tool(record, "voice_live", "system_tts_fallback_activation_audio", fallback)
+        record_tool(record, "voice_live", "system_tts_activation_audio", fallback)
         if fallback.status != ActionStatus.SUCCEEDED:
             return
         audio_path = fallback.output.get("audio", {}).get("audio_path", "")
+        stt_provider = "local-whisper"
     else:
-        record_tool(record, "voice_live", "elevenlabs_activation_audio", tts)
-        audio_path = tts.output.get("audio", {}).get("audio_path", "")
+        tts = tools["voice_speak"].execute(
+            {
+                "text": "Check local system status using the available system status tool.",
+                "reason": "Generate voice-wakeup activation audio for complete smoke.",
+                "provider": "elevenlabs",
+                "voice_id": voice_id,
+                "allow_voice_lookup": not bool(voice_id),
+                "playback": False,
+            },
+            config,
+        )
+        if tts.status != ActionStatus.SUCCEEDED:
+            fallback = tools["voice_response_prepare"].execute(
+                {
+                    "text": "Check local system status using the available system status tool.",
+                    "reason": "Fallback local Windows SAPI activation audio for complete smoke.",
+                    "tts_provider": "system",
+                },
+                config,
+            )
+            provider_error = tts.output.get("provider_error", {}) if isinstance(tts.output, dict) else {}
+            provider_blocked = provider_error.get("category") in {"provider_account", "provider_entitlement", "provider_quota"}
+            record(
+                "voice_live",
+                "elevenlabs_activation_audio",
+                provider_blocked,
+                {
+                    "status": tts.status.value,
+                    "summary": tts.summary,
+                    "error": tts.error,
+                    "output": tts.output,
+                    "accepted_as_provider_block": provider_blocked,
+                },
+            )
+            record_tool(record, "voice_live", "system_tts_fallback_activation_audio", fallback)
+            if fallback.status != ActionStatus.SUCCEEDED:
+                return
+            audio_path = fallback.output.get("audio", {}).get("audio_path", "")
+        else:
+            record_tool(record, "voice_live", "elevenlabs_activation_audio", tts)
+            audio_path = tts.output.get("audio", {}).get("audio_path", "")
+        stt_provider = "deepgram"
 
     stt = tools["voice_transcribe"].execute(
-        {"audio_path": str(audio_path), "provider": "deepgram", "reason": "Transcribe generated activation audio."},
+        {"audio_path": str(audio_path), "provider": stt_provider, "reason": "Transcribe generated activation audio."},
         config,
     )
-    record_tool(record, "voice_live", "deepgram_activation_stt", stt, allow_skipped=False)
+    record_tool(record, "voice_live", f"{stt_provider}_activation_stt", stt, allow_skipped=False)
     if stt.status != ActionStatus.SUCCEEDED:
         return
 
     activation = config.data_dir / "complete-smoke-activation-audio.json"
-    activation.write_text(json.dumps({"audio_path": str(audio_path), "stt_provider": "deepgram"}, ensure_ascii=False), encoding="utf-8")
+    activation.write_text(json.dumps({"audio_path": str(audio_path), "stt_provider": stt_provider}, ensure_ascii=False), encoding="utf-8")
     run_config = replace(config, planner_provider="model", model_provider=model_provider).normalized()
+    tts_provider = "system" if voice_mode == "local" else "elevenlabs"
     result = handle_activation(
         activation,
         run_config,
         response_mode="voice_prepare",
-        tts_provider="elevenlabs",
+        tts_provider=tts_provider,
         fallback_tts_provider="system",
         voice_id=voice_id,
     )

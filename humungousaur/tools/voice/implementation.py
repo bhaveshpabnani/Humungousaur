@@ -18,6 +18,8 @@ from humungousaur.tools.voice.providers import (
     classify_provider_error,
     deepgram_transcribe_file,
     elevenlabs_synthesize_to_file,
+    local_whisper_status,
+    local_whisper_transcribe_file,
     play_audio_file,
     windows_sapi_synthesize_to_file,
 )
@@ -25,7 +27,7 @@ from humungousaur.tools.voice.providers import (
 
 VOICE_RESPONSE_MAX_CHARS = 20_000
 VOICE_SPEAK_MAX_CHARS = 4_000
-VOICE_TRANSCRIBE_PROVIDERS = {"deepgram"}
+VOICE_TRANSCRIBE_PROVIDERS = {"deepgram", "local-whisper"}
 VOICE_PREPARE_PROVIDERS = {"artifact", "elevenlabs", "system"}
 VOICE_SPEAK_PROVIDERS = {"system", "elevenlabs"}
 
@@ -50,7 +52,8 @@ class VoiceProviderStatusTool(Tool):
                     "configured": bool(os.environ.get("DEEPGRAM_API_KEY")),
                     "base_url": os.environ.get("DEEPGRAM_BASE_URL", "https://api.deepgram.com"),
                     "model_env_configured": bool(os.environ.get("DEEPGRAM_MODEL")),
-                }
+                },
+                "local-whisper": local_whisper_status(),
             },
             "tts": {
                 "elevenlabs": {
@@ -75,6 +78,8 @@ class VoiceProviderStatusTool(Tool):
         ready = []
         if payload["stt"]["deepgram"]["configured"]:
             ready.append("deepgram_stt")
+        if payload["stt"]["local-whisper"]["configured"]:
+            ready.append("local_whisper_stt")
         if payload["tts"]["elevenlabs"]["configured"]:
             ready.append("elevenlabs_tts")
         if payload["tts"]["system"]["configured"]:
@@ -113,7 +118,9 @@ class VoiceTranscribeTool(Tool):
         )
 
     def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
-        provider = str(tool_input.get("provider") or "deepgram").strip().lower()
+        import os
+
+        provider = str(tool_input.get("provider") or os.environ.get("HUMUNGOUSAUR_STT_PROVIDER") or os.environ.get("VOICE_STT_PROVIDER") or "local-whisper").strip().lower()
         if provider not in VOICE_TRANSCRIBE_PROVIDERS:
             return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, f"Unsupported STT provider: {provider}")
         audio_path, error = _resolve_read_path(config, str(tool_input.get("audio_path", "")))
@@ -135,14 +142,22 @@ class VoiceTranscribeTool(Tool):
                 {**output, "transcription_not_requested": True},
             )
         try:
-            transcription = deepgram_transcribe_file(
-                audio_path,
-                model=str(tool_input.get("model") or ""),
-                language=str(tool_input.get("language") or ""),
-                smart_format=bool(tool_input.get("smart_format", True)),
-                mime_type=str(tool_input.get("mime_type") or ""),
-                timeout_seconds=float(config.model_timeout_seconds or 60.0),
-            )
+            if provider == "deepgram":
+                transcription = deepgram_transcribe_file(
+                    audio_path,
+                    model=str(tool_input.get("model") or ""),
+                    language=str(tool_input.get("language") or ""),
+                    smart_format=bool(tool_input.get("smart_format", True)),
+                    mime_type=str(tool_input.get("mime_type") or ""),
+                    timeout_seconds=float(config.model_timeout_seconds or 60.0),
+                )
+            else:
+                transcription = local_whisper_transcribe_file(
+                    audio_path,
+                    model=str(tool_input.get("model") or ""),
+                    language=str(tool_input.get("language") or ""),
+                    timeout_seconds=float(config.model_timeout_seconds or 120.0),
+                )
         except SpeechProviderError as exc:
             output["provider_error"] = classify_provider_error(str(exc))
             return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Speech-to-text provider failed.", output, str(exc))
@@ -159,7 +174,7 @@ class VoiceTranscribeTool(Tool):
             self.name,
             ActionStatus.SUCCEEDED,
             self.risk_level,
-            "Transcribed audio through Deepgram.",
+            f"Transcribed audio through {provider}.",
             payload,
         )
 
