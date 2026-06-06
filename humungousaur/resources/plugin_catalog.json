@@ -11,7 +11,7 @@
       "runtime_adapter": "humungousaur.channel_adapters.slack",
       "channels": ["slack"],
       "providers": [],
-      "tools": ["channel_catalog", "channel_manifest", "channel_message_prepare", "channel_message_send", "channel_doctor"],
+      "tools": ["channel_catalog", "channel_manifest", "channel_setup_status", "channel_listener_status", "channel_listener_tick", "channel_webhook_ingest", "channel_message_prepare", "channel_message_send", "channel_doctor"],
       "skills": ["slack-operations", "channel-operations"],
       "setup": {
         "required_env": ["SLACK_BOT_TOKEN"],
@@ -36,7 +36,7 @@
       "runtime_adapter": "humungousaur.channel_adapters.whatsapp",
       "channels": ["whatsapp"],
       "providers": [],
-      "tools": ["channel_catalog", "channel_manifest", "channel_message_prepare", "channel_message_send", "channel_doctor"],
+      "tools": ["channel_catalog", "channel_manifest", "channel_setup_status", "channel_listener_status", "channel_webhook_ingest", "channel_message_prepare", "channel_message_send", "channel_doctor"],
       "skills": ["whatsapp-operations", "wacli-operations", "channel-operations"],
       "setup": {
         "required_env": ["WHATSAPP_ACCESS_TOKEN", "WHATSAPP_PHONE_NUMBER_ID"],
@@ -61,7 +61,7 @@
       "runtime_adapter": "humungousaur.channel_adapters.telegram",
       "channels": ["telegram"],
       "providers": [],
-      "tools": ["channel_catalog", "channel_manifest", "channel_message_prepare", "channel_message_send", "channel_doctor"],
+      "tools": ["channel_catalog", "channel_manifest", "channel_setup_status", "channel_listener_status", "channel_listener_tick", "channel_webhook_ingest", "channel_message_prepare", "channel_message_send", "channel_doctor"],
       "skills": ["telegram-operations", "channel-operations"],
       "setup": {
         "required_env": ["TELEGRAM_BOT_TOKEN"],
@@ -86,7 +86,7 @@
       "runtime_adapter": "humungousaur.channel_adapters.discord",
       "channels": ["discord"],
       "providers": [],
-      "tools": ["channel_catalog", "channel_manifest", "channel_message_prepare", "channel_message_send", "channel_doctor"],
+      "tools": ["channel_catalog", "channel_manifest", "channel_setup_status", "channel_listener_status", "channel_webhook_ingest", "channel_message_prepare", "channel_message_send", "channel_doctor"],
       "skills": ["discord-operations", "channel-operations"],
       "setup": {
         "required_env": ["DISCORD_BOT_TOKEN"],
@@ -111,7 +111,7 @@
       "runtime_adapter": "humungousaur.channel_adapters.sms",
       "channels": ["sms"],
       "providers": ["twilio"],
-      "tools": ["channel_message_send", "channel_doctor"],
+      "tools": ["channel_setup_status", "channel_listener_status", "channel_webhook_ingest", "channel_message_send", "channel_doctor"],
       "skills": ["channel-operations"],
       "setup": {
         "required_env": ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER"],
@@ -133,7 +133,7 @@
       "runtime_adapter": "humungousaur.channel_adapters.enterprise_chat",
       "channels": ["googlechat", "msteams", "mattermost", "matrix", "nextcloud_talk", "feishu"],
       "providers": ["google", "microsoft"],
-      "tools": ["channel_catalog", "channel_manifest", "channel_message_prepare", "channel_doctor"],
+      "tools": ["channel_catalog", "channel_manifest", "channel_setup_status", "channel_listener_status", "channel_webhook_ingest", "channel_message_prepare", "channel_doctor"],
       "skills": ["channel-operations"],
       "setup": {
         "required_env": [],

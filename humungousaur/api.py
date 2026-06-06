@@ -13,6 +13,11 @@ from humungousaur.config import AgentConfig
 from humungousaur.cognition.loop import AutonomousLoopRunner, autonomous_loop_result_to_dict, autonomous_status
 from humungousaur.cognition.queue import RuntimeEventQueue
 from humungousaur.cognition.triggers import TriggerStore, stimulus_from_input
+from humungousaur.integrations.channel_listeners import (
+    channel_listener_status,
+    channel_listener_tick,
+    process_channel_webhook,
+)
 from humungousaur.integrations.channels import (
     channel_doctor,
     channel_setup_status,
@@ -266,6 +271,23 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                 if path == "/channels/outbox":
                     self._send_json({"messages": list_outbox(effective_config(), limit=_int_arg(query, "limit", 20))})
                     return
+                if path == "/channels/listeners":
+                    self._send_json(channel_listener_status(effective_config(), channel_id=_str_arg(query, "channel_id") or None))
+                    return
+                webhook_channel_id = _channel_webhook_route(path)
+                if webhook_channel_id is not None:
+                    challenge = _str_arg(query, "hub.challenge") or _str_arg(query, "challenge")
+                    if webhook_channel_id == "whatsapp" and challenge:
+                        self._send_text(challenge)
+                        return
+                    self._send_json(
+                        {
+                            "channel_id": webhook_channel_id,
+                            "webhook_path": f"/channels/webhook/{webhook_channel_id}",
+                            "status": "ready_for_post_events",
+                        }
+                    )
+                    return
                 if path == "/memory":
                     self._send_json(EventStore(effective_config().memory_db_path).tail(limit=_int_arg(query, "limit", 10)))
                     return
@@ -344,6 +366,30 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                         run_config,
                         response_mode=payload.get("response_mode"),
                         approve_high_risk=bool(payload.get("approve_high_risk", False)),
+                    )
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/channels/listeners/tick":
+                    run_config = request_config(effective_config(), payload)
+                    result = channel_listener_tick(
+                        run_config,
+                        channel_id=str(payload.get("channel_id") or "") or None,
+                        limit=_payload_int(payload, "limit", 20),
+                        prepare_replies=_payload_bool(payload, "prepare_replies", True),
+                        approve_high_risk=bool(payload.get("approve_high_risk", False)),
+                    )
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                webhook_channel_id = _channel_webhook_route(path)
+                if webhook_channel_id is not None:
+                    run_config = request_config(effective_config(), payload)
+                    result = process_channel_webhook(
+                        run_config,
+                        channel_id=webhook_channel_id,
+                        payload=payload,
+                        prepare_reply=_payload_bool(payload, "prepare_reply", True),
+                        approve_high_risk=bool(payload.get("approve_high_risk", False)),
+                        response_mode=payload.get("response_mode"),
                     )
                     self._send_json(result, HTTPStatus.CREATED)
                     return
@@ -528,6 +574,15 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
             self.end_headers()
             self.wfile.write(body)
 
+        def _send_text(self, payload: str, status: HTTPStatus = HTTPStatus.OK) -> None:
+            body = payload.encode("utf-8")
+            self.send_response(status.value)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Access-Control-Allow-Origin", "http://127.0.0.1")
+            self.end_headers()
+            self.wfile.write(body)
+
         def _send_dashboard_asset(self, path: str) -> None:
             relative = "index.html" if path == "/" else path.removeprefix("/dashboard/")
             asset_path = (DASHBOARD_DIR / relative).resolve()
@@ -675,6 +730,13 @@ def _run_route(path: str) -> tuple[str, str] | None:
 def _browser_session_route(path: str) -> str | None:
     parts = [part for part in path.split("/") if part]
     if len(parts) == 3 and parts[0] == "browser" and parts[1] == "sessions":
+        return parts[2]
+    return None
+
+
+def _channel_webhook_route(path: str) -> str | None:
+    parts = [part for part in path.split("/") if part]
+    if len(parts) == 3 and parts[0] == "channels" and parts[1] == "webhook":
         return parts[2]
     return None
 

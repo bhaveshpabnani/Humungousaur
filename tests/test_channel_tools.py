@@ -4,16 +4,19 @@ import unittest
 from pathlib import Path
 
 from humungousaur.config import AgentConfig
+from humungousaur.integrations.channel_listeners import channel_listener_status, process_channel_webhook
 from humungousaur.integrations.channels import channel_setup_status, handle_channel_inbound
 from humungousaur.schemas import ActionStatus
 from humungousaur.tools.channel_tools import (
     ChannelCatalogTool,
     ChannelDoctorTool,
     ChannelManifestTool,
+    ChannelListenerStatusTool,
     ChannelMessagePrepareTool,
     ChannelOutboxTool,
     ChannelSetupSaveTool,
     ChannelSetupStatusTool,
+    ChannelWebhookIngestTool,
 )
 
 
@@ -167,6 +170,76 @@ class ChannelToolTests(unittest.TestCase):
         self.assertTrue(result["stimulus"]["metadata"]["ambient"])
         self.assertIsNone(result["prepared_reply"])
         self.assertEqual(result["harness"]["decision"]["decision"], "observe")
+
+    def test_channel_listener_status_reflects_enabled_channels_and_webhook_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts", planner_provider="explicit").normalized()
+            ChannelSetupSaveTool().execute(
+                {
+                    "channel_id": "slack",
+                    "enabled": True,
+                    "conversation_defaults": {"conversation_id": "C123", "conversation_type": "channel"},
+                    "secret_refs": {"bot_token": "SLACK_BOT_TOKEN", "signing_secret": "SLACK_SIGNING_SECRET"},
+                },
+                config,
+            )
+
+            status = channel_listener_status(config, channel_id="slack")
+            tool_status = ChannelListenerStatusTool().execute({"channel_id": "slack"}, config)
+
+        listener = status["listeners"][0]
+        self.assertTrue(listener["enabled"])
+        self.assertEqual(listener["channel_id"], "slack")
+        self.assertEqual(listener["webhook_path"], "/channels/webhook/slack")
+        self.assertIn("slack_events_webhook", listener["listener_mode"])
+        self.assertEqual(tool_status.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(tool_status.output["listeners"][0]["channel_id"], "slack")
+
+    def test_channel_webhook_ingest_normalizes_slack_event_and_prepares_reply(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            (workspace / "README.md").write_text("# Slack Listener\n\nNative ingress.", encoding="utf-8")
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", planner_provider="explicit").normalized()
+
+            result = process_channel_webhook(
+                config,
+                channel_id="slack",
+                payload={
+                    "event_id": "Ev1",
+                    "event": {
+                        "type": "message",
+                        "channel": "C123",
+                        "channel_type": "im",
+                        "user": "U123",
+                        "text": 'read_file {"path":"README.md"}',
+                        "client_msg_id": "m-1",
+                    },
+                },
+            )
+            outbox = ChannelOutboxTool().execute({"limit": 5}, config)
+            tool_result = ChannelWebhookIngestTool().execute(
+                {
+                    "channel_id": "telegram",
+                    "payload": {
+                        "update_id": 10,
+                        "message": {
+                            "message_id": 20,
+                            "chat": {"id": "42", "type": "private"},
+                            "from": {"id": "7", "is_bot": False},
+                            "text": "hello",
+                        },
+                    },
+                    "reason": "test webhook ingestion",
+                },
+                config,
+            )
+
+        self.assertTrue(result["accepted"])
+        self.assertEqual(result["message_count"], 1)
+        self.assertIsNotNone(result["results"][0]["prepared_reply"])
+        self.assertEqual(outbox.output["messages"][0]["channel_id"], "slack")
+        self.assertEqual(tool_result.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(tool_result.output["message_count"], 1)
 
 
 if __name__ == "__main__":

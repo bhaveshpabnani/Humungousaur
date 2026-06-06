@@ -40,12 +40,26 @@ public sealed class AgentApiClient
         return GetJsonObjectAsync($"channels/doctor?channel_id={Uri.EscapeDataString(channelId)}");
     }
 
+    public Task<JsonObject> GetChannelListenersAsync(string channelId)
+    {
+        return GetJsonObjectAsync($"channels/listeners?channel_id={Uri.EscapeDataString(channelId)}");
+    }
+
+    public Task<JsonObject> TickChannelListenerAsync(ChannelInfo channel, AppSettings settings)
+    {
+        var payload = RuntimePayload(settings);
+        payload["channel_id"] = channel.ChannelId;
+        payload["limit"] = 10;
+        payload["prepare_replies"] = true;
+        return PostJsonObjectAsync("channels/listeners/tick", payload);
+    }
+
     public Task<JsonObject> SaveChannelSetupAsync(ChannelInfo channel, ChannelSetup setup)
     {
         var payload = new JsonObject
         {
             ["channel_id"] = channel.ChannelId,
-            ["enabled"] = setup.Enabled,
+            ["enabled"] = setup.Enabled && setup.ListenEnabled,
             ["conversation_defaults"] = new JsonObject
             {
                 ["conversation_id"] = setup.ConversationId,

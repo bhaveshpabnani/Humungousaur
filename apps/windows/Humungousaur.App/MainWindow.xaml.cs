@@ -252,6 +252,7 @@ public sealed partial class MainWindow : Window
         ChannelTitleText.Text = channel.DisplayName;
         ChannelCapabilityText.Text = $"{channel.Transport}; text {(channel.SupportsText ? "yes" : "no")}; media {(channel.SupportsMedia ? "yes" : "no")}; reactions {(channel.SupportsReactions ? "yes" : "no")}";
         ChannelEnabledSwitch.IsOn = setup.Enabled;
+        ChannelListenSwitch.IsOn = setup.ListenEnabled;
         ConversationIdBox.Text = setup.ConversationId;
         SecretNameBox.Text = setup.SecretName;
         ChannelSecretBox.Password = "";
@@ -270,6 +271,7 @@ public sealed partial class MainWindow : Window
 
         var setup = SetupFor(channel.ChannelId);
         setup.Enabled = ChannelEnabledSwitch.IsOn;
+        setup.ListenEnabled = ChannelListenSwitch.IsOn;
         setup.ConversationId = ConversationIdBox.Text.Trim();
         setup.ConversationType = ComboTag(ConversationTypeBox, "dm");
         setup.SecretName = SecretNameBox.Text.Trim();
@@ -313,6 +315,39 @@ public sealed partial class MainWindow : Window
     }
 
     private async void RefreshOutboxButton_Click(object sender, RoutedEventArgs e) => await RefreshOutboxAsync();
+
+    private async void RefreshListenersButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (ChannelList.SelectedItem is ChannelInfo channel)
+        {
+            await RefreshSelectedChannelStatusAsync(channel.ChannelId);
+        }
+    }
+
+    private async void TickChannelButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (ChannelList.SelectedItem is not ChannelInfo channel)
+        {
+            ShowNotice("Select a channel first.", InfoBarSeverity.Warning);
+            return;
+        }
+
+        try
+        {
+            ReadSettingsFromUi();
+            var result = await _api.TickChannelListenerAsync(channel, _settings);
+            var processed = result["processed_count"]?.GetValue<int>() ?? 0;
+            ChannelListenerText.Text = $"Listener tick processed {processed} event(s).";
+            ShowNotice($"Listener tick processed {processed} event(s).", InfoBarSeverity.Success);
+            await RefreshOutboxAsync();
+            await RefreshSelectedChannelStatusAsync(channel.ChannelId);
+        }
+        catch (Exception exc)
+        {
+            ChannelListenerText.Text = exc.Message;
+            ShowNotice("Listener tick failed.", InfoBarSeverity.Error);
+        }
+    }
 
     private void SaveVoiceButton_Click(object sender, RoutedEventArgs e)
     {
@@ -455,10 +490,40 @@ public sealed partial class MainWindow : Window
             ChannelStatusText.Text = missing.Count == 0
                 ? $"Backend setup: send {(readyForSend ? "ready" : "prepared only")}; inbound {(readyForInbound ? "enabled" : "not enabled")}."
                 : $"Backend setup: missing {string.Join(", ", missing)}; prepared outbox is available.";
+            await RefreshSelectedChannelListenerAsync(channelId);
         }
         catch (Exception exc)
         {
             ChannelStatusText.Text = exc.Message;
+        }
+    }
+
+    private async Task RefreshSelectedChannelListenerAsync(string channelId)
+    {
+        try
+        {
+            var status = await _api.GetChannelListenersAsync(channelId);
+            var listener = status["listeners"]?.AsArray().FirstOrDefault()?.AsObject();
+            if (listener is null)
+            {
+                ChannelListenerText.Text = "Listener status unavailable.";
+                return;
+            }
+
+            var ready = listener["ready"]?.GetValue<bool>() == true;
+            var mode = listener["listener_mode"]?.GetValue<string>() ?? "listener";
+            var webhookPath = listener["webhook_path"]?.GetValue<string>() ?? "";
+            var missingEnv = listener["missing_env"]?.AsArray()
+                .Select(item => item?.GetValue<string>())
+                .Where(item => !string.IsNullOrWhiteSpace(item))
+                .ToList() ?? [];
+            ChannelListenerText.Text = missingEnv.Count == 0
+                ? $"Listener: {(ready ? "ready" : "waiting")} via {mode}; webhook {webhookPath}."
+                : $"Listener: missing {string.Join(", ", missingEnv)}; webhook {webhookPath}.";
+        }
+        catch (Exception exc)
+        {
+            ChannelListenerText.Text = exc.Message;
         }
     }
 

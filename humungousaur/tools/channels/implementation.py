@@ -3,6 +3,11 @@ from __future__ import annotations
 from typing import Any
 
 from humungousaur.config import AgentConfig
+from humungousaur.integrations.channel_listeners import (
+    channel_listener_status,
+    channel_listener_tick,
+    process_channel_webhook,
+)
 from humungousaur.integrations.channels import (
     channel_doctor,
     channel_setup_requirements,
@@ -324,6 +329,113 @@ class ChannelOutboxTool(Tool):
         )
 
 
+class ChannelListenerStatusTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="channel_listener_status",
+            description=(
+                "Report native inbound listener readiness for enabled channels. "
+                "Telegram can poll directly; Slack, Discord, WhatsApp, Teams, SMS, Google Chat, and WebChat use native webhook ingress."
+            ),
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema({"channel_id": {"type": "string", "description": "Optional exact channel id."}}),
+            capability_group="channels",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        status = channel_listener_status(config, channel_id=str(tool_input.get("channel_id") or "") or None)
+        ready = [item for item in status["listeners"] if item.get("ready", False)]
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"{len(ready)} channel listener(s) ready.",
+            status,
+        )
+
+
+class ChannelListenerTickTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="channel_listener_tick",
+            description=(
+                "Poll native listener-capable channels once and route accepted inbound messages into the interaction harness. "
+                "Currently this performs Telegram long-polling and reports webhook-ready state for other configured channels."
+            ),
+            risk_level=RiskLevel.HIGH,
+            requires_approval=True,
+            input_schema=object_input_schema(
+                {
+                    "channel_id": {"type": "string", "description": "Optional exact channel id to tick."},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+                    "prepare_replies": {"type": "boolean"},
+                    "reason": {"type": "string", "description": "Why inbound channel listeners should be polled."},
+                },
+                required=["reason"],
+            ),
+            capability_group="channels",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        if config.dry_run:
+            return ToolResult(self.name, ActionStatus.SKIPPED, self.risk_level, "Dry run: would tick channel listeners.", dict(tool_input))
+        result = channel_listener_tick(
+            config,
+            channel_id=str(tool_input.get("channel_id") or "") or None,
+            limit=max(1, min(int(tool_input.get("limit") or 20), 100)),
+            prepare_replies=bool(tool_input.get("prepare_replies", True)),
+            approve_high_risk=False,
+        )
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Processed {result['processed_count']} inbound channel event(s).",
+            result,
+        )
+
+
+class ChannelWebhookIngestTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="channel_webhook_ingest",
+            description=(
+                "Normalize one provider webhook payload and route inbound channel messages into the interaction harness. "
+                "Use for trusted local webhook forwarding from Slack, Discord, WhatsApp, SMS, Teams, Google Chat, Telegram, or WebChat."
+            ),
+            risk_level=RiskLevel.HIGH,
+            requires_approval=True,
+            input_schema=object_input_schema(
+                {
+                    "channel_id": {"type": "string", "description": "Exact channel id."},
+                    "payload": {"type": "object", "description": "Structured provider webhook payload."},
+                    "prepare_reply": {"type": "boolean"},
+                    "reason": {"type": "string", "description": "Why this webhook payload should be processed."},
+                },
+                required=["channel_id", "payload", "reason"],
+            ),
+            capability_group="channels",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        payload = tool_input.get("payload", {})
+        if not isinstance(payload, dict):
+            payload = {}
+        result = process_channel_webhook(
+            config,
+            channel_id=str(tool_input.get("channel_id") or ""),
+            payload=payload,
+            prepare_reply=bool(tool_input.get("prepare_reply", True)),
+        )
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Processed {result.get('message_count', 0)} webhook message(s).",
+            result,
+        )
+
+
 def default_channel_tools() -> dict[str, Tool]:
     tools: list[Tool] = [
         ChannelCatalogTool(),
@@ -335,6 +447,9 @@ def default_channel_tools() -> dict[str, Tool]:
         ChannelMessagePrepareTool(),
         ChannelMessageSendTool(),
         ChannelOutboxTool(),
+        ChannelListenerStatusTool(),
+        ChannelListenerTickTool(),
+        ChannelWebhookIngestTool(),
     ]
     return {tool.name: tool for tool in tools}
 

@@ -19,6 +19,7 @@ public sealed class ChannelSetup
 {
     public string ChannelId { get; set; } = "";
     public bool Enabled { get; set; }
+    public bool ListenEnabled { get; set; } = true;
     public string ConversationId { get; set; } = "";
     public string ConversationType { get; set; } = "dm";
     public string SecretName { get; set; } = "";

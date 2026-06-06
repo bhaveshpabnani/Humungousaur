@@ -115,6 +115,17 @@ class APITests(unittest.TestCase):
                     },
                 )
                 self.assertTrue(saved_setup["setup"]["enabled"])
+                listener_status = api_get(base_url, "/channels/listeners?channel_id=slack")
+                self.assertEqual(listener_status["listeners"][0]["channel_id"], "slack")
+                self.assertTrue(listener_status["listeners"][0]["enabled"])
+                self.assertEqual(listener_status["listeners"][0]["webhook_path"], "/channels/webhook/slack")
+                listener_tick = api_post(
+                    base_url,
+                    "/channels/listeners/tick",
+                    {"channel_id": "slack", "limit": 1, "prepare_replies": True, "planner": "explicit"},
+                )
+                self.assertEqual(listener_tick["processed_count"], 0)
+                self.assertEqual(api_get_text(base_url, "/channels/webhook/whatsapp?hub.challenge=verify-123"), "verify-123")
 
                 permissions = api_get(base_url, "/permissions")
                 self.assertEqual(permissions["workspace"], str(workspace.resolve()))
@@ -202,9 +213,29 @@ class APITests(unittest.TestCase):
                 self.assertEqual(channel["stimulus"]["source"], "channel_message")
                 self.assertIsNotNone(channel["prepared_reply"])
                 self.assertEqual(api_get(base_url, "/channels/outbox")["messages"][0]["channel_id"], "slack")
+                webhook = api_post(
+                    base_url,
+                    "/channels/webhook/slack",
+                    {
+                        "event_id": "Ev1",
+                        "event": {
+                            "type": "message",
+                            "channel": "C123",
+                            "channel_type": "im",
+                            "user": "U123",
+                            "text": 'read_file {"path":"README.md"}',
+                            "client_msg_id": "m-webhook",
+                        },
+                        "planner": "explicit",
+                    },
+                )
+                self.assertTrue(webhook["accepted"])
+                self.assertEqual(webhook["message_count"], 1)
+                self.assertIsNotNone(webhook["results"][0]["prepared_reply"])
 
-                plans = api_get(base_url, "/plans?limit=1")
-                self.assertEqual(plans[0]["run_id"], channel["harness"]["run"]["run_id"])
+                plans = api_get(base_url, "/plans?limit=3")
+                self.assertIn(channel["harness"]["run"]["run_id"], {plan["run_id"] for plan in plans})
+                self.assertIn(webhook["results"][0]["harness"]["run"]["run_id"], {plan["run_id"] for plan in plans})
                 self.assertEqual(plans[0]["used_provider"], "explicit")
 
                 memory = api_get(base_url, "/memory?limit=20")
@@ -386,7 +417,7 @@ class APITests(unittest.TestCase):
                 board = api_get(base_url, "/multi-agent/board")
 
             self.assertEqual(forged["status"], "succeeded")
-            self.assertEqual(packs["packs"][0]["name"], "Coordination smoke")
+            self.assertEqual(packs["packs"][0]["name"], "coordination-smoke")
             self.assertEqual(daemon_config["status"], "succeeded")
             self.assertTrue(daemon["profile"]["enabled"])
             self.assertEqual(tick["status"], "succeeded")

@@ -13,6 +13,7 @@ Use this skill when the task involves onboarding, diagnosing, or sending through
 2. Call `channel_manifest` for the exact selected channel.
 3. Call `channel_setup_requirements` to read required env vars, fields, direct-send support, and policy defaults.
 4. Call `channel_doctor` before sending or declaring setup complete.
+5. Call `channel_listener_status` before declaring the agent is listening.
 
 ## Setup State
 
@@ -34,8 +35,10 @@ For a non-destructive smoke:
 1. Prepare a message with `channel_message_prepare`.
 2. Inspect `channel_outbox`.
 3. For inbound harness smoke, pass an inbound channel message with explicit `requires_response:true`.
-4. Confirm a prepared reply exists only for non-ambient request messages.
-5. For external send smoke, use `channel_message_send` only with approval and a test recipient or room.
+4. For webhook smoke, use `channel_webhook_ingest` with a structured provider payload.
+5. For Telegram listener smoke, use `channel_listener_tick` after enabling the channel and configuring `TELEGRAM_BOT_TOKEN`.
+6. Confirm a prepared reply exists only for non-ambient request messages.
+7. For external send smoke, use `channel_message_send` only with approval and a test recipient or room.
 
 ## Group And Ambient Behavior
 
@@ -61,3 +64,4 @@ If the inbound payload says the sender is a bot:
 - Prepared outbox means "ready for trusted runtime", not sent.
 - Direct send means the Humungousaur adapter called an official API and got a success response.
 - Bridge-required channels stay prepared until a trusted local runtime is connected.
+- Listener ready means the channel is enabled and either local polling or webhook ingress is available; it does not mean a public tunnel has been configured.
