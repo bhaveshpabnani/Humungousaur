@@ -15,6 +15,8 @@ Reference sources inspected locally:
 - Keep skills useful for daily personal assistance, local computer control, communication, productivity, coding, research, documents, memory, automation, multimodal creation, and safe operations.
 - Exclude or defer narrow crypto/trading, spammy marketing automation, dubious jailbreak/red-team-only skills, and platform-specific integrations that cannot be safely represented without a trusted adapter.
 - Prefer owned skills that map to existing Humungousaur tools first; add scripts/references only when they make execution safer or clearer.
+- Every required tool, script, adapter, or runtime helper must be implemented natively in Humungousaur or exposed through an existing trusted Humungousaur tool.
+- Do not depend on Hermes Agent, Anthropic Skills, OpenClaw, ClawHub, Codex plugins, or other upstream skill code as the implementation. Use those sources only as reference evidence.
 - Skills must not become regex or keyword routes. They are model-readable workflow knowledge.
 
 ## Shortlisted Skill Packs

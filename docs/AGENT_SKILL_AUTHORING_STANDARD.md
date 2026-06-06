@@ -77,6 +77,19 @@ Skills are guidance and evidence, not deterministic routers.
 - Do not install or run third-party skill scripts automatically.
 - Reimplement useful patterns as Humungousaur-owned skill packs with explicit safety and verification.
 
+## Native Tooling Requirement
+
+Every tool, script, adapter, runtime helper, and execution path used by a Humungousaur skill must be implemented natively in Humungousaur or exposed through an existing trusted Humungousaur platform tool.
+
+Rules:
+
+- Do not import tools, adapters, scripts, or runtime packages directly from Hermes Agent, OpenClaw, Anthropic Skills, ClawHub, Codex plugins, or other upstream skill repositories.
+- Do not make a skill depend on third-party skill code being present in `external_repos/`.
+- Use upstream repositories only as reference evidence for capability design, workflow shape, safety lessons, and useful examples.
+- If an upstream skill implies a missing capability, implement a Humungousaur-owned tool or script with a clear schema, tests, safety policy, and verification.
+- If the native implementation does not exist yet, the skill must describe the gap and use setup/status/planning tools rather than pretending the third-party capability is available.
+- External services may be integrated only through Humungousaur-owned adapters, explicit user setup, approved credentials, and the platform approval policy.
+
 ## Validation
 
 At minimum, validation must prove:
