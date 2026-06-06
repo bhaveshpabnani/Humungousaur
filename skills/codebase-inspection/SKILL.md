@@ -27,6 +27,12 @@ Use for unfamiliar repos, architecture summaries, "where is this implemented", d
 - `run_shell_command`
 - `tool_search`
 - `write_note`
+- `agent_skill_script_catalog`
+- `agent_skill_script_run`
+
+## Native Scripts
+
+- `scripts/inspect_repo.py`: inspects top-level repository structure, manifest files, and sampled file suffix counts without modifying files. Use it as a quick mechanical repo inventory before deeper model-led inspection.
 
 ## Workflow
 

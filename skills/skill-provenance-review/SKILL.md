@@ -25,6 +25,12 @@ Use before adapting community skills, adding scripts/assets, reviewing external 
 - `search_workspace`
 - `dependency-security-check`
 - `agent-api-integration`
+- `agent_skill_script_catalog`
+- `agent_skill_script_run`
+
+## Native Scripts
+
+- `scripts/inspect_skill_pack.py`: inspects one local skill directory for `SKILL.md`, frontmatter, scripts, references, assets, and native-boundary language. Use it as evidence before adapting or approving a skill pack.
 
 ## Workflow
 

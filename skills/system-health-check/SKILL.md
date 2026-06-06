@@ -29,6 +29,12 @@ Use before end-to-end smoke tests, local model/voice/channel/browser setup, app 
 - `activity_policy`
 - `tool_search`
 - `capability_surface`
+- `agent_skill_script_catalog`
+- `agent_skill_script_run`
+
+## Native Scripts
+
+- `scripts/check_readiness.py`: collects workspace, data directory, Python runtime, skill count, and redacted environment-presence facts. Use through `agent_skill_script_run` when a compact local readiness snapshot is useful.
 
 ## Workflow
 

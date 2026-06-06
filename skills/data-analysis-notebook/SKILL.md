@@ -26,6 +26,12 @@ Use for data exploration, CSV/JSON analysis, calculations, simulations, small pl
 - `python_interpreter_artifact`
 - `read_file`
 - `write_note`
+- `agent_skill_script_catalog`
+- `agent_skill_script_run`
+
+## Native Scripts
+
+- `scripts/profile_csv.py`: profiles a CSV file with columns, sampled rows, missing counts, and simple numeric ranges using the Python standard library.
 
 ## Workflow
 

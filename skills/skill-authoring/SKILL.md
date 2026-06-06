@@ -25,6 +25,9 @@ Use when creating new skills, improving existing skills, integrating upstream sk
 
 - `agent_skill_catalog`
 - `agent_skill_read`
+- `agent_skill_script_catalog`
+- `agent_skill_script_read`
+- `agent_skill_script_run`
 - `skill_forge_draft`
 - `skill_forge_packs`
 - `cognitive_skill_evolve`
@@ -42,7 +45,8 @@ Use when creating new skills, improving existing skills, integrating upstream sk
 6. Create valid frontmatter: lowercase hyphenated `name`, description under 1024 chars, optional compatibility/license/metadata.
 7. Include purpose, when-to-use, evidence, tool map, workflow, safety, verification, failure modes, and references.
 8. Add `scripts/`, `references/`, or `assets/` only when they improve execution or progressive disclosure and are Humungousaur-owned.
-9. Run the workspace skill format test.
+9. For each native script, add first-line metadata, enforce allowed root boundaries, accept the standard JSON envelope, emit bounded JSON output when possible, and list it under `Native Scripts`.
+10. Run the workspace skill format and skill-tool tests.
 
 ## Safety And Boundaries
 
@@ -54,7 +58,9 @@ Use when creating new skills, improving existing skills, integrating upstream sk
 ## Verification
 
 - Run `tests/test_workspace_skill_format.py`.
+- Run `tests/test_skill_tools.py` after adding scripts.
 - Confirm `agent_skill_catalog` discovers the new skill.
+- Confirm `agent_skill_script_catalog` discovers native scripts and `agent_skill_script_run` can run an approved smoke case.
 - Check names match parent directories.
 
 ## Failure Modes

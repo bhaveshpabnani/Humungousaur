@@ -26,6 +26,12 @@ Use when reading env/config/logs, debugging providers, handling clipboard/screen
 - `os_clipboard_read`
 - `screen_captures`
 - `message-approval-policy`
+- `agent_skill_script_catalog`
+- `agent_skill_script_run`
+
+## Native Scripts
+
+- `scripts/redact_text.py`: mechanically redacts likely tokens, private keys, and credential assignments from supplied text. This is a redaction helper, not semantic intent routing.
 
 ## Workflow
 

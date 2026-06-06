@@ -90,6 +90,27 @@ Rules:
 - If the native implementation does not exist yet, the skill must describe the gap and use setup/status/planning tools rather than pretending the third-party capability is available.
 - External services may be integrated only through Humungousaur-owned adapters, explicit user setup, approved credentials, and the platform approval policy.
 
+## Native Capability Scripts
+
+Skills may include executable helpers under `scripts/` when a workflow needs a concrete mechanical capability. Scripts are discovered through `agent_skill_script_catalog`, inspected through `agent_skill_script_read`, and executed through the approval-gated `agent_skill_script_run` tool.
+
+Rules:
+
+- Put scripts under `skills/<skill-name>/scripts/`.
+- Prefer Python standard-library scripts unless a native dependency is already part of the platform.
+- Add a first-line metadata comment:
+
+```python
+# humungousaur-skill-script: {"name":"script-name","description":"What this script does.","input_schema":{"type":"object","additionalProperties":true}}
+```
+
+- Scripts receive a JSON envelope on stdin with `input`, `workspace`, `data_dir`, `allowed_read_roots`, and `allowed_write_roots`.
+- Scripts must emit bounded stdout and should emit a JSON object when possible.
+- Scripts must enforce read/write root boundaries before reading or writing user files.
+- Scripts are mechanical helpers. They must not become deterministic intent routers or broad semantic decision engines.
+- Add the script to the owning `SKILL.md` under a `Native Scripts` section and list `agent_skill_script_catalog` / `agent_skill_script_run` in the tool map.
+- Use `docs/SKILL_CAPABILITY_REFERENCE_MATRIX.md` when translating Hermes, OpenClaw, Codex, Anthropic, or other upstream examples into native Humungousaur tools and scripts.
+
 ## Validation
 
 At minimum, validation must prove:

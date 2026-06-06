@@ -26,6 +26,12 @@ Use for project wikis, personal knowledge bases, research collections, docs inde
 - `memory_search`
 - `research_webpages`
 - `doc-coauthoring`
+- `agent_skill_script_catalog`
+- `agent_skill_script_run`
+
+## Native Scripts
+
+- `scripts/build_markdown_index.py`: builds a JSON index of markdown files with titles, relative paths, and link counts. Use it for a mechanical inventory before model-led knowledge-base organization.
 
 ## Workflow
 
