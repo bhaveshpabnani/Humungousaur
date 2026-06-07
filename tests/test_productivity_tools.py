@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,8 +8,11 @@ from humungousaur.orchestrator import AgentOrchestrator
 from humungousaur.schemas import ActionStatus, RiskLevel, ToolResult
 from humungousaur.tools import default_tools
 from humungousaur.tools.productivity import (
+    AirtableOperationPrepareTool,
+    ApiOperationInspectTool,
     EmailDraftPrepareTool,
     GmailDraftPrepareTool,
+    NotionOperationPrepareTool,
     XlsxWorkbookCreateTool,
     XlsxWorkbookInspectTool,
 )
@@ -102,6 +106,72 @@ class ProductivityToolTests(unittest.TestCase):
             self.assertEqual(inspected.status, ActionStatus.SUCCEEDED)
             self.assertIn({"cell": "B4", "formula": "=B2-B3"}, inspected.output["sheets"][0]["formulas"])
 
+    def test_notion_operation_prepare_writes_inspectable_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
+
+            prepared = NotionOperationPrepareTool().execute(
+                {
+                    "operation": "create_page",
+                    "database_id": "db-smoke",
+                    "title": "Humungousaur Notion Smoke",
+                    "properties": {"Status": {"select": {"name": "Draft"}}},
+                    "blocks": [{"object": "block", "type": "paragraph", "paragraph": {"rich_text": [{"text": {"content": "Prepared locally."}}]}}],
+                    "reason": "Verify Notion operation packet creation.",
+                },
+                config,
+            )
+            inspected = ApiOperationInspectTool().execute({"path": prepared.output["path"]}, config)
+            packet = json.loads(Path(prepared.output["path"]).read_text(encoding="utf-8"))
+
+            self.assertEqual(prepared.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(prepared.output["provider"], "notion")
+            self.assertTrue(prepared.output["approval_required"])
+            self.assertEqual(inspected.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(inspected.output["operation"], "create_page")
+            self.assertEqual(packet["live_execution_status"], "not_executed")
+
+    def test_airtable_operation_prepare_validates_upsert_and_inspects(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
+
+            prepared = AirtableOperationPrepareTool().execute(
+                {
+                    "operation": "upsert_records",
+                    "base_id": "appSmoke",
+                    "table_name": "Tasks",
+                    "upsert_key_fields": ["Task ID"],
+                    "records": [{"fields": {"Task ID": "T-1", "Status": "Ready"}}],
+                    "reason": "Verify Airtable operation packet creation.",
+                },
+                config,
+            )
+            inspected = ApiOperationInspectTool().execute({"path": prepared.output["path"]}, config)
+
+            self.assertEqual(prepared.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(prepared.output["provider"], "airtable")
+            self.assertEqual(prepared.output["method"], "PATCH")
+            self.assertTrue(prepared.output["approval_required"])
+            self.assertEqual(inspected.output["payload_shape"]["keys"], ["performUpsert", "records"])
+
+    def test_airtable_operation_prepare_rejects_update_without_record_id(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
+
+            result = AirtableOperationPrepareTool().execute(
+                {
+                    "operation": "update_records",
+                    "base_id": "appSmoke",
+                    "table_name": "Tasks",
+                    "records": [{"fields": {"Status": "Ready"}}],
+                    "reason": "Verify Airtable validation.",
+                },
+                config,
+            )
+
+            self.assertEqual(result.status, ActionStatus.FAILED)
+            self.assertIn("require id", result.summary)
+
     def test_productivity_tools_are_in_global_catalog(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
@@ -111,6 +181,9 @@ class ProductivityToolTests(unittest.TestCase):
             self.assertIn("email_draft_prepare", tools)
             self.assertIn("xlsx_workbook_create", tools)
             self.assertIn("xlsx_workbook_inspect", tools)
+            self.assertIn("notion_operation_prepare", tools)
+            self.assertIn("airtable_operation_prepare", tools)
+            self.assertIn("api_operation_inspect", tools)
             self.assertEqual(tools["gmail_draft_prepare"].capability_group, "productivity")
 
     def test_productivity_final_response_preserves_exact_paths(self) -> None:

@@ -17,6 +17,9 @@ EMAIL_DRAFT_MAX_RECIPIENTS = 50
 EMAIL_DRAFT_MAX_BODY_CHARS = 50_000
 XLSX_MAX_ROWS = 5_000
 XLSX_MAX_COLUMNS = 100
+API_OPERATION_MAX_RECORDS = 100
+API_OPERATION_MAX_BLOCKS = 500
+API_OPERATION_BODY_CHARS = 120_000
 
 
 class EmailDraftPrepareTool(Tool):
@@ -212,12 +215,182 @@ class XlsxWorkbookInspectTool(Tool):
         )
 
 
+class NotionOperationPrepareTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="notion_operation_prepare",
+            description=(
+                "Prepare a Notion API operation artifact for page/database workflows with validated target IDs, payload preview, "
+                "approval state, and endpoint metadata. This does not call Notion."
+            ),
+            risk_level=RiskLevel.MEDIUM,
+            input_schema=object_input_schema(
+                {
+                    "operation": {
+                        "type": "string",
+                        "enum": ["create_page", "update_page", "append_blocks", "query_database", "update_database_schema"],
+                    },
+                    "page_id": {"type": "string"},
+                    "database_id": {"type": "string"},
+                    "parent_page_id": {"type": "string"},
+                    "title": {"type": "string"},
+                    "properties": {"type": "object"},
+                    "blocks": {"type": "array", "items": {"type": "object"}},
+                    "filter": {"type": "object"},
+                    "sorts": {"type": "array", "items": {"type": "object"}},
+                    "schema": {"type": "object", "description": "Database property schema changes for update_database_schema."},
+                    "notion_version": {"type": "string"},
+                    "filename": {"type": "string"},
+                    "reason": {"type": "string"},
+                },
+                required=["operation", "reason"],
+            ),
+            capability_group="productivity",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        normalized = config.normalized()
+        operation = str(tool_input.get("operation") or "").strip()
+        reason = str(tool_input.get("reason") or "").strip()
+        if not operation or not reason:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Notion operation and reason are required.")
+        try:
+            endpoint = _notion_endpoint(operation, tool_input)
+            payload = _notion_payload(operation, tool_input)
+            _enforce_operation_size(payload)
+        except ValueError as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, str(exc), error=str(exc))
+        packet = _api_operation_packet(
+            provider="notion",
+            operation=operation,
+            endpoint=endpoint,
+            method=_notion_method(operation),
+            payload=payload,
+            reason=reason,
+            approval_required=operation != "query_database",
+            secret_refs={"api_key": "NOTION_API_KEY"},
+            metadata={
+                "notion_version": str(tool_input.get("notion_version") or "2022-06-28").strip(),
+                "target": _notion_target(tool_input),
+            },
+        )
+        path = _api_operation_path(normalized, provider="notion", filename=str(tool_input.get("filename") or ""))
+        return _write_api_operation(self.name, self.risk_level, config, path, packet)
+
+
+class AirtableOperationPrepareTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="airtable_operation_prepare",
+            description=(
+                "Prepare an Airtable API operation artifact for record list/create/update/upsert/delete workflows with schema, "
+                "payload preview, approval state, and endpoint metadata. This does not call Airtable."
+            ),
+            risk_level=RiskLevel.MEDIUM,
+            input_schema=object_input_schema(
+                {
+                    "operation": {"type": "string", "enum": ["list_records", "create_records", "update_records", "upsert_records", "delete_records"]},
+                    "base_id": {"type": "string"},
+                    "table_name": {"type": "string"},
+                    "table_id": {"type": "string"},
+                    "records": {"type": "array", "items": {"type": "object"}},
+                    "record_ids": {"type": "array", "items": {"type": "string"}},
+                    "fields": {"type": "array", "items": {"type": "string"}},
+                    "filter_formula": {"type": "string"},
+                    "sort": {"type": "array", "items": {"type": "object"}},
+                    "upsert_key_fields": {"type": "array", "items": {"type": "string"}},
+                    "schema": {"type": "object", "description": "Expected table fields and types used for validation/planning."},
+                    "filename": {"type": "string"},
+                    "reason": {"type": "string"},
+                },
+                required=["operation", "base_id", "reason"],
+            ),
+            capability_group="productivity",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        normalized = config.normalized()
+        operation = str(tool_input.get("operation") or "").strip()
+        base_id = str(tool_input.get("base_id") or "").strip()
+        reason = str(tool_input.get("reason") or "").strip()
+        table = str(tool_input.get("table_id") or tool_input.get("table_name") or "").strip()
+        if not operation or not base_id or not reason:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Airtable operation, base_id, and reason are required.")
+        if not table:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Airtable table_id or table_name is required.")
+        try:
+            endpoint = _airtable_endpoint(base_id, table)
+            payload = _airtable_payload(operation, tool_input)
+            _enforce_operation_size(payload)
+        except ValueError as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, str(exc), error=str(exc))
+        packet = _api_operation_packet(
+            provider="airtable",
+            operation=operation,
+            endpoint=endpoint,
+            method=_airtable_method(operation),
+            payload=payload,
+            reason=reason,
+            approval_required=operation != "list_records",
+            secret_refs={"api_key": "AIRTABLE_API_KEY"},
+            metadata={"base_id": base_id, "table": table, "schema": _json_object(tool_input.get("schema"))},
+        )
+        path = _api_operation_path(normalized, provider="airtable", filename=str(tool_input.get("filename") or ""))
+        return _write_api_operation(self.name, self.risk_level, config, path, packet)
+
+
+class ApiOperationInspectTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="api_operation_inspect",
+            description="Inspect a prepared Notion, Airtable, or productivity API operation artifact without executing it.",
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema({"path": {"type": "string", "description": "Allowed operation artifact JSON path."}}, required=["path"]),
+            capability_group="productivity",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        normalized = config.normalized()
+        path = _resolve_api_operation_path(normalized, str(tool_input.get("path") or ""))
+        if not _is_within(path, normalized.allowed_read_roots + normalized.allowed_write_roots):
+            return ToolResult(self.name, ActionStatus.BLOCKED, self.risk_level, "API operation path is outside allowed roots.")
+        if not path.exists() or path.suffix.lower() != ".json":
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "API operation artifact does not exist.")
+        try:
+            packet = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "API operation artifact is invalid JSON.", error=str(exc))
+        if not isinstance(packet, dict):
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "API operation artifact must be a JSON object.")
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Inspected {packet.get('provider', 'api')} operation artifact.",
+            {
+                "path": str(path),
+                "operation_id": packet.get("operation_id", ""),
+                "provider": packet.get("provider", ""),
+                "operation": packet.get("operation", ""),
+                "method": packet.get("method", ""),
+                "endpoint": packet.get("endpoint", ""),
+                "approval_required": bool(packet.get("approval_required", True)),
+                "live_execution_status": packet.get("live_execution_status", ""),
+                "payload_shape": _payload_shape(packet.get("payload")),
+                "source": "api_operation_inspect",
+            },
+        )
+
+
 def default_productivity_tools() -> dict[str, Tool]:
     tools: list[Tool] = [
         EmailDraftPrepareTool(),
         GmailDraftPrepareTool(),
         XlsxWorkbookCreateTool(),
         XlsxWorkbookInspectTool(),
+        NotionOperationPrepareTool(),
+        AirtableOperationPrepareTool(),
+        ApiOperationInspectTool(),
     ]
     return {tool.name: tool for tool in tools}
 
@@ -371,6 +544,254 @@ def _xlsx_cell_value(value: Any) -> Any:
         if "value" in value:
             return value.get("value")
     return value
+
+
+def _notion_endpoint(operation: str, tool_input: dict[str, Any]) -> str:
+    if operation == "create_page":
+        if not str(tool_input.get("database_id") or tool_input.get("parent_page_id") or "").strip():
+            raise ValueError("create_page requires database_id or parent_page_id.")
+        return "https://api.notion.com/v1/pages"
+    if operation == "update_page":
+        page_id = str(tool_input.get("page_id") or "").strip()
+        if not page_id:
+            raise ValueError("update_page requires page_id.")
+        return f"https://api.notion.com/v1/pages/{page_id}"
+    if operation == "append_blocks":
+        page_id = str(tool_input.get("page_id") or "").strip()
+        if not page_id:
+            raise ValueError("append_blocks requires page_id.")
+        return f"https://api.notion.com/v1/blocks/{page_id}/children"
+    if operation == "query_database":
+        database_id = str(tool_input.get("database_id") or "").strip()
+        if not database_id:
+            raise ValueError("query_database requires database_id.")
+        return f"https://api.notion.com/v1/databases/{database_id}/query"
+    if operation == "update_database_schema":
+        database_id = str(tool_input.get("database_id") or "").strip()
+        if not database_id:
+            raise ValueError("update_database_schema requires database_id.")
+        return f"https://api.notion.com/v1/databases/{database_id}"
+    raise ValueError(f"Unsupported Notion operation: {operation}")
+
+
+def _notion_method(operation: str) -> str:
+    if operation in {"update_page", "update_database_schema"}:
+        return "PATCH"
+    return "POST"
+
+
+def _notion_payload(operation: str, tool_input: dict[str, Any]) -> dict[str, Any]:
+    properties = _json_object(tool_input.get("properties"))
+    blocks = _json_list(tool_input.get("blocks"), limit=API_OPERATION_MAX_BLOCKS)
+    if operation == "create_page":
+        parent = {"database_id": str(tool_input.get("database_id") or "").strip()} if tool_input.get("database_id") else {"page_id": str(tool_input.get("parent_page_id") or "").strip()}
+        payload = {"parent": parent, "properties": properties}
+        if tool_input.get("title") and "title" not in payload["properties"]:
+            payload["properties"]["title"] = {"title": [{"text": {"content": str(tool_input.get("title")).strip()}}]}
+        if blocks:
+            payload["children"] = blocks
+        return payload
+    if operation == "update_page":
+        if not properties:
+            raise ValueError("update_page requires properties.")
+        return {"properties": properties}
+    if operation == "append_blocks":
+        if not blocks:
+            raise ValueError("append_blocks requires blocks.")
+        return {"children": blocks}
+    if operation == "query_database":
+        payload: dict[str, Any] = {}
+        if isinstance(tool_input.get("filter"), dict):
+            payload["filter"] = tool_input["filter"]
+        sorts = _json_list(tool_input.get("sorts"), limit=20)
+        if sorts:
+            payload["sorts"] = sorts
+        return payload
+    if operation == "update_database_schema":
+        schema = _json_object(tool_input.get("schema"))
+        if not schema:
+            raise ValueError("update_database_schema requires schema.")
+        return {"properties": schema}
+    raise ValueError(f"Unsupported Notion operation: {operation}")
+
+
+def _notion_target(tool_input: dict[str, Any]) -> dict[str, str]:
+    return {
+        "page_id": str(tool_input.get("page_id") or "").strip(),
+        "database_id": str(tool_input.get("database_id") or "").strip(),
+        "parent_page_id": str(tool_input.get("parent_page_id") or "").strip(),
+    }
+
+
+def _airtable_endpoint(base_id: str, table: str) -> str:
+    return f"https://api.airtable.com/v0/{base_id}/{table}"
+
+
+def _airtable_method(operation: str) -> str:
+    if operation == "list_records":
+        return "GET"
+    if operation in {"update_records", "upsert_records"}:
+        return "PATCH"
+    if operation == "delete_records":
+        return "DELETE"
+    return "POST"
+
+
+def _airtable_payload(operation: str, tool_input: dict[str, Any]) -> dict[str, Any]:
+    records = _json_list(tool_input.get("records"), limit=API_OPERATION_MAX_RECORDS)
+    record_ids = _string_list(tool_input.get("record_ids"), limit=API_OPERATION_MAX_RECORDS)
+    if operation == "list_records":
+        payload: dict[str, Any] = {}
+        fields = _string_list(tool_input.get("fields"), limit=100)
+        if fields:
+            payload["fields"] = fields
+        if tool_input.get("filter_formula"):
+            payload["filterByFormula"] = str(tool_input.get("filter_formula")).strip()
+        sort = _json_list(tool_input.get("sort"), limit=20)
+        if sort:
+            payload["sort"] = sort
+        return payload
+    if operation == "create_records":
+        if not records:
+            raise ValueError("create_records requires records.")
+        return {"records": [_airtable_record(record, require_id=False) for record in records]}
+    if operation == "update_records":
+        if not records:
+            raise ValueError("update_records requires records with id and fields.")
+        return {"records": [_airtable_record(record, require_id=True) for record in records]}
+    if operation == "upsert_records":
+        key_fields = _string_list(tool_input.get("upsert_key_fields"), limit=20)
+        if not records or not key_fields:
+            raise ValueError("upsert_records requires records and upsert_key_fields.")
+        return {"performUpsert": {"fieldsToMergeOn": key_fields}, "records": [_airtable_record(record, require_id=False) for record in records]}
+    if operation == "delete_records":
+        if not record_ids:
+            raise ValueError("delete_records requires record_ids.")
+        return {"records": record_ids}
+    raise ValueError(f"Unsupported Airtable operation: {operation}")
+
+
+def _airtable_record(record: Any, *, require_id: bool) -> dict[str, Any]:
+    if not isinstance(record, dict):
+        raise ValueError("Airtable records must be objects.")
+    record_id = str(record.get("id") or "").strip()
+    fields = record.get("fields")
+    if fields is None:
+        fields = {key: value for key, value in record.items() if key != "id"}
+    if require_id and not record_id:
+        raise ValueError("Airtable update records require id.")
+    if not isinstance(fields, dict) or not fields:
+        raise ValueError("Airtable records require fields.")
+    payload = {"fields": fields}
+    if record_id:
+        payload["id"] = record_id
+    return payload
+
+
+def _api_operation_packet(
+    *,
+    provider: str,
+    operation: str,
+    endpoint: str,
+    method: str,
+    payload: dict[str, Any],
+    reason: str,
+    approval_required: bool,
+    secret_refs: dict[str, str],
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "operation_id": f"{provider}-operation-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{uuid4().hex[:8]}",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "provider": provider,
+        "operation": operation,
+        "method": method,
+        "endpoint": endpoint,
+        "payload": payload,
+        "metadata": metadata,
+        "reason": reason,
+        "secret_refs": secret_refs,
+        "approval_required": approval_required,
+        "live_execution_status": "not_executed",
+        "safety_note": "Prepared artifact only. No external API call was made and no remote data was mutated.",
+    }
+
+
+def _api_operation_path(config: AgentConfig, *, provider: str, filename: str) -> Path:
+    safe = _safe_filename(filename or f"{provider}-operation-{uuid4().hex[:8]}.json", ".json")
+    return (config.data_dir / "api_operations" / provider / safe).resolve()
+
+
+def _write_api_operation(tool_name: str, risk_level: RiskLevel, config: AgentConfig, path: Path, packet: dict[str, Any]) -> ToolResult:
+    normalized = config.normalized()
+    if not _is_within(path, normalized.allowed_write_roots):
+        return ToolResult(tool_name, ActionStatus.BLOCKED, risk_level, "API operation path is outside allowed write roots.")
+    if config.dry_run:
+        return ToolResult(tool_name, ActionStatus.SKIPPED, risk_level, f"Dry run: would prepare {packet['provider']} operation.", {"path": str(path), "operation": packet})
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(packet, indent=2, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+    return ToolResult(
+        tool_name,
+        ActionStatus.SUCCEEDED,
+        risk_level,
+        f"Prepared {packet['provider']} {packet['operation']} operation artifact.",
+        {
+            "path": str(path),
+            "operation_id": packet["operation_id"],
+            "provider": packet["provider"],
+            "operation": packet["operation"],
+            "method": packet["method"],
+            "endpoint": packet["endpoint"],
+            "approval_required": packet["approval_required"],
+            "live_execution_status": packet["live_execution_status"],
+            "source": f"{packet['provider']}_operation_prepare",
+        },
+    )
+
+
+def _resolve_api_operation_path(config: AgentConfig, raw_path: str) -> Path:
+    path = Path(raw_path).expanduser()
+    if not path.is_absolute():
+        path = config.workspace / path
+        if not path.exists():
+            data_path = config.data_dir / raw_path
+            if data_path.exists():
+                path = data_path
+            else:
+                path = config.data_dir / "api_operations" / Path(raw_path).name
+    return path.resolve()
+
+
+def _enforce_operation_size(payload: dict[str, Any]) -> None:
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    if len(encoded) > API_OPERATION_BODY_CHARS:
+        raise ValueError("Prepared API payload exceeds safety limit.")
+
+
+def _json_object(value: Any) -> dict[str, Any]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _json_list(value: Any, *, limit: int) -> list[Any]:
+    if not isinstance(value, list):
+        return []
+    return value[: max(0, limit)]
+
+
+def _string_list(value: Any, *, limit: int) -> list[str]:
+    if isinstance(value, str):
+        return [value.strip()] if value.strip() else []
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value[:limit] if str(item).strip()]
+
+
+def _payload_shape(payload: Any) -> dict[str, Any]:
+    if isinstance(payload, dict):
+        return {"type": "object", "keys": sorted(payload.keys())[:30]}
+    if isinstance(payload, list):
+        return {"type": "array", "length": len(payload)}
+    return {"type": type(payload).__name__}
 
 
 def _is_within(path: Path, roots: tuple[Path, ...]) -> bool:

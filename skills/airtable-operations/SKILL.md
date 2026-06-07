@@ -22,24 +22,27 @@ Use for Airtable bases, record lookup, filters, updates, upserts, sync planning,
 
 - `tool_search`
 - `capability_surface`
+- `airtable_operation_prepare`
+- `api_operation_inspect`
 - `agent-api-integration`
 - `python_interpreter`
 - `write_note`
 
 ## Workflow
 
-1. Check whether a native Airtable adapter exists.
-2. Define the table schema and operation contract.
-3. For missing adapters, create an implementation plan or draft payloads.
-4. For reads/writes through future adapters, validate fields and filters.
+1. Determine the explicit Airtable operation: list, create, update, upsert, or delete records.
+2. Define the table schema, base ID, table ID/name, filters, records, and upsert key fields.
+3. Use `airtable_operation_prepare` to create a local operation artifact with endpoint, method, payload, approval requirement, and `not_executed` status.
+4. Use `api_operation_inspect` before reporting the artifact or handing it to a future live adapter.
 5. Require approval before mutating records.
-6. Verify affected record IDs and fields.
+6. Verify affected record IDs and fields through a future approved live adapter; a prepared artifact is not a live change.
 
 ## Native Implementation Boundaries
 
 - Do not import Hermes Airtable scripts.
 - Implement Airtable as Humungousaur-owned tools with tests.
 - Keep tokens in secret storage.
+- The current native adapter prepares and inspects operation artifacts; live Airtable mutation must be added as a separate approval-gated tool.
 
 ## Safety And Approval
 
@@ -49,8 +52,8 @@ Use for Airtable bases, record lookup, filters, updates, upserts, sync planning,
 
 ## Verification
 
+- Prepared operations need saved path plus `api_operation_inspect` evidence.
 - Record changes need IDs and response evidence.
-- Draft payloads are not live changes.
 - Missing adapter status should be explicit.
 
 ## Failure Modes

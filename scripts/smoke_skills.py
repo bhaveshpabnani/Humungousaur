@@ -139,6 +139,34 @@ def _smoke_productivity(record, tools: dict[str, Any], config: AgentConfig) -> N
     formula_ok = _ok(inspect) and any(item.get("formula") == "=B2-B3" for item in inspect.output["sheets"][0]["formulas"])
     record("productivity", "xlsx_workbook_create", _ok(xlsx), _tool_payload(xlsx))
     record("productivity", "xlsx_workbook_inspect", formula_ok, _tool_payload(inspect))
+    notion = tools["notion_operation_prepare"].execute(
+        {
+            "operation": "create_page",
+            "database_id": "db-skill-smoke",
+            "title": "Humungousaur Skill Smoke",
+            "properties": {"Status": {"select": {"name": "Draft"}}},
+            "blocks": [{"object": "block", "type": "paragraph", "paragraph": {"rich_text": [{"text": {"content": "Prepared locally by skill smoke."}}]}}],
+            "reason": "Verify native Notion operation preparation.",
+        },
+        config,
+    )
+    notion_inspect = tools["api_operation_inspect"].execute({"path": notion.output.get("path", "")}, config) if _ok(notion) else notion
+    airtable = tools["airtable_operation_prepare"].execute(
+        {
+            "operation": "upsert_records",
+            "base_id": "appSkillSmoke",
+            "table_name": "Tasks",
+            "upsert_key_fields": ["Task ID"],
+            "records": [{"fields": {"Task ID": "skill-smoke", "Status": "Ready"}}],
+            "reason": "Verify native Airtable operation preparation.",
+        },
+        config,
+    )
+    airtable_inspect = tools["api_operation_inspect"].execute({"path": airtable.output.get("path", "")}, config) if _ok(airtable) else airtable
+    record("productivity", "notion_operation_prepare", _ok(notion) and notion.output.get("live_execution_status") == "not_executed", _tool_payload(notion))
+    record("productivity", "notion_operation_inspect", _ok(notion_inspect) and notion_inspect.output.get("provider") == "notion", _tool_payload(notion_inspect))
+    record("productivity", "airtable_operation_prepare", _ok(airtable) and airtable.output.get("live_execution_status") == "not_executed", _tool_payload(airtable))
+    record("productivity", "airtable_operation_inspect", _ok(airtable_inspect) and airtable_inspect.output.get("provider") == "airtable", _tool_payload(airtable_inspect))
 
 
 def _smoke_pdf(record, tools: dict[str, Any], config: AgentConfig) -> None:
