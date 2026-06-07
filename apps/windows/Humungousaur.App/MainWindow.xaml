@@ -240,6 +240,7 @@
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
                         <Border CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="16">
@@ -251,6 +252,31 @@
                             </StackPanel>
                         </Border>
                         <Border Grid.Row="1" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="16">
+                            <Grid ColumnSpacing="14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="Onboarding" FontWeight="SemiBold" />
+                                    <TextBlock x:Name="ChannelRequirementText" TextWrapping="WrapWholeWords" Opacity="0.76" />
+                                    <ScrollViewer MaxHeight="132">
+                                        <TextBlock x:Name="ChannelSetupStepsText" TextWrapping="WrapWholeWords" />
+                                    </ScrollViewer>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Spacing="8">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="Doctor" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                        <Button Content="Run doctor" Click="RunChannelDoctorButton_Click" />
+                                    </StackPanel>
+                                    <TextBlock x:Name="ChannelPolicyText" TextWrapping="WrapWholeWords" Opacity="0.76" />
+                                    <ScrollViewer MaxHeight="132">
+                                        <TextBlock x:Name="ChannelDoctorText" TextWrapping="WrapWholeWords" />
+                                    </ScrollViewer>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                        <Border Grid.Row="2" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="16">
                             <Grid RowSpacing="10" ColumnSpacing="10">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
@@ -295,7 +321,7 @@
                                 </StackPanel>
                             </Grid>
                         </Border>
-                        <Border Grid.Row="2" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="16">
+                        <Border Grid.Row="3" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="16">
                             <StackPanel Spacing="8">
                                 <TextBlock Text="Prepared Replies" FontWeight="SemiBold" />
                                 <ListView x:Name="OutboxList" SelectionMode="None" />

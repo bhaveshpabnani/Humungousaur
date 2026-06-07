@@ -8,7 +8,7 @@ Smoke test each skill task one by one, identify skills that are only prompt/proc
 
 ## Current Status
 
-- Repository state reviewed after the desktop channel-operations integration slice.
+- Repository state reviewed during the desktop channel-onboarding integration slice.
 - Current workspace skill count: `132`.
 - Current tool-domain folders: `33`.
 - Latest full skill smoke result: `424` sections, `0` failures.
@@ -43,6 +43,7 @@ These slices have been implemented, smoke-tested, regression-tested, committed, 
 | `6d13f22` | Security review artifacts | Native dependency inventory, secret-scan report, prompt-injection review, and approval-policy review artifacts. |
 | `e35444f` | GitHub and CI workflow artifacts | Native GitHub issue packets, PR packets, CI failure reports, repo-state reports, artifact inspection, skill docs, and smoke coverage without requiring live GitHub credentials. |
 | current slice | Desktop channel-operations integration | Windows app allowlist/group allowlist onboarding, outbound channel message preparation, approval-gated send flow, API channel-message routes, and API regression coverage. |
+| current slice | Desktop channel onboarding | Backend channel setup requirements endpoint plus Windows app provider-specific required secrets, setup steps, delivery/policy/runtime summaries, and setup doctor results. |
 
 ## Current Native Capability Areas
 
@@ -61,7 +62,7 @@ Humungousaur now has native tool domains for:
 - Cognition, memory curation, persona evolution, automations, and multi-agent coordination
 - Creative writing, songwriting, and revision artifacts
 - Design systems and theme packs
-- Desktop app channel setup, allowlists, runtime settings, voice settings, and outbound channel operations
+- Desktop app channel setup requirements, setup doctor, allowlists, runtime settings, voice settings, and outbound channel operations
 - External integration status surfaces
 - Files, PDFs, OCR, and shell/file utilities
 - GitHub issue/PR/CI/repo-state workflow artifacts
@@ -184,7 +185,7 @@ Needed work:
 
 ### 8. Desktop App End-To-End
 
-Current status: the Windows app exposes runtime start/stop, provider/model settings, voice settings, channel setup, channel allowlists, listener status, inbound preview, prepared outbound messages, and approval-gated channel sends. Remaining work is full live validation and richer daily-use panels.
+Current status: the Windows app exposes runtime start/stop, provider/model settings, voice settings, provider-aware channel setup requirements, channel setup doctor, channel allowlists, listener status, inbound preview, prepared outbound messages, and approval-gated channel sends. Remaining work is full live validation and richer daily-use panels.
 
 Needed work:
 
@@ -195,7 +196,7 @@ Needed work:
 
 ### 9. Live Channel Integrations
 
-Current status: channel manifests, setup/status, listener status, webhook ingest, inbound preview, prepared outbox, allowlists, and approval-gated outbound send are wired through the backend and Windows app. Live provider-specific onboarding and execution need more depth.
+Current status: channel manifests, setup requirements, setup/status, setup doctor, listener status, webhook ingest, inbound preview, prepared outbox, allowlists, and approval-gated outbound send are wired through the backend and Windows app. Live provider-specific execution still needs credentialed smoke.
 
 Needed work:
 

@@ -17,6 +17,9 @@ public sealed class ChannelInfo
     [JsonPropertyName("plugin_kind")]
     public string PluginKind { get; set; } = "";
 
+    [JsonPropertyName("setup_kind")]
+    public string SetupKind { get; set; } = "";
+
     [JsonPropertyName("conversation_types")]
     public List<string> ConversationTypes { get; set; } = [];
 
@@ -31,6 +34,15 @@ public sealed class ChannelInfo
 
     [JsonPropertyName("setup")]
     public JsonObject? Setup { get; set; }
+
+    [JsonPropertyName("delivery")]
+    public JsonObject? Delivery { get; set; }
+
+    [JsonPropertyName("policies")]
+    public JsonObject? Policies { get; set; }
+
+    [JsonPropertyName("runtime")]
+    public JsonObject? Runtime { get; set; }
 }
 
 public sealed class ToolCatalog

@@ -22,6 +22,7 @@ from humungousaur.integrations.channel_listeners import (
 )
 from humungousaur.integrations.channels import (
     channel_doctor,
+    channel_setup_requirements,
     channel_setup_status,
     handle_channel_inbound,
     list_outbox,
@@ -272,6 +273,13 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                 if path == "/channels/status":
                     self._send_json(channel_setup_status(effective_config(), channel_id=_str_arg(query, "channel_id") or None))
                     return
+                if path == "/channels/requirements":
+                    channel_id = _str_arg(query, "channel_id")
+                    if not channel_id:
+                        self._send_error(HTTPStatus.BAD_REQUEST, "Field 'channel_id' is required.")
+                        return
+                    self._send_json(channel_setup_requirements(channel_id))
+                    return
                 if path == "/channels/doctor":
                     self._send_json(channel_doctor(effective_config(), channel_id=_str_arg(query, "channel_id") or None))
                     return
@@ -385,6 +393,13 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                 if path == "/channels/status":
                     run_config = request_config(effective_config(), payload)
                     self._send_json(channel_setup_status(run_config, channel_id=str(payload.get("channel_id") or "") or None), HTTPStatus.CREATED)
+                    return
+                if path == "/channels/requirements":
+                    channel_id = str(payload.get("channel_id", "")).strip()
+                    if not channel_id:
+                        self._send_error(HTTPStatus.BAD_REQUEST, "Field 'channel_id' is required.")
+                        return
+                    self._send_json(channel_setup_requirements(channel_id), HTTPStatus.CREATED)
                     return
                 if path == "/channels/doctor":
                     run_config = request_config(effective_config(), payload)

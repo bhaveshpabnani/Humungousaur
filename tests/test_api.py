@@ -121,6 +121,10 @@ class APITests(unittest.TestCase):
                 self.assertEqual(next(channel for channel in channels if channel["channel_id"] == "slack")["setup"]["auth_type"], "slack_app")
                 channel_status = api_get(base_url, "/channels/status?channel_id=slack")
                 self.assertIn("SLACK_BOT_TOKEN", channel_status["channels"][0]["missing_send_env"])
+                channel_requirements = api_get(base_url, "/channels/requirements?channel_id=slack")
+                self.assertEqual(channel_requirements["channel_id"], "slack")
+                self.assertIn("SLACK_BOT_TOKEN", channel_requirements["setup"]["required_secrets"])
+                self.assertEqual(channel_requirements["delivery"]["official_send"]["mode"], "slack_chat_post_message")
                 channel_status_with_app_secret = api_post(
                     base_url,
                     "/channels/status",
@@ -140,6 +144,8 @@ class APITests(unittest.TestCase):
                     },
                 )
                 self.assertTrue(saved_setup["setup"]["enabled"])
+                posted_requirements = api_post(base_url, "/channels/requirements", {"channel_id": "telegram"})
+                self.assertEqual(posted_requirements["setup"]["auth_type"], "bot_token")
                 listener_status = api_get(base_url, "/channels/listeners?channel_id=slack")
                 self.assertEqual(listener_status["listeners"][0]["channel_id"], "slack")
                 self.assertTrue(listener_status["listeners"][0]["enabled"])

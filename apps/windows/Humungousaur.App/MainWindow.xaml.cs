@@ -250,6 +250,9 @@ public sealed partial class MainWindow : Window
         }
 
         var setup = SetupFor(channel.ChannelId);
+        ApplyChannelSetupDefaults(channel, setup);
+        RenderChannelRequirements(channel);
+        ChannelDoctorText.Text = "Run doctor after saving setup or entering runtime secrets.";
         ChannelTitleText.Text = channel.DisplayName;
         ChannelCapabilityText.Text = $"{channel.Transport}; text {(channel.SupportsText ? "yes" : "no")}; media {(channel.SupportsMedia ? "yes" : "no")}; reactions {(channel.SupportsReactions ? "yes" : "no")}";
         ChannelEnabledSwitch.IsOn = setup.Enabled;
@@ -263,6 +266,7 @@ public sealed partial class MainWindow : Window
         ChannelOutboundTextBox.Text = "";
         ChannelNotesBox.Text = setup.Notes;
         SetComboByTag(ConversationTypeBox, setup.ConversationType);
+        _ = RefreshSelectedChannelRequirementsAsync(channel);
         _ = RefreshSelectedChannelStatusAsync(channel.ChannelId);
     }
 
@@ -332,6 +336,29 @@ public sealed partial class MainWindow : Window
         if (ChannelList.SelectedItem is ChannelInfo channel)
         {
             await RefreshSelectedChannelStatusAsync(channel.ChannelId);
+        }
+    }
+
+    private async void RunChannelDoctorButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (ChannelList.SelectedItem is not ChannelInfo channel)
+        {
+            ShowNotice("Select a channel first.", InfoBarSeverity.Warning);
+            return;
+        }
+
+        try
+        {
+            ReadSettingsFromUi();
+            var doctor = await _api.GetChannelDoctorAsync(channel.ChannelId, _settings);
+            ChannelDoctorText.Text = FormatDoctorFindings(doctor);
+            var warnings = doctor["findings"]?.AsArray().Count(item => item?["severity"]?.GetValue<string>() == "warning") ?? 0;
+            ShowNotice(warnings == 0 ? $"{channel.DisplayName} doctor is clean." : $"{channel.DisplayName} doctor found {warnings} warning(s).", warnings == 0 ? InfoBarSeverity.Success : InfoBarSeverity.Warning);
+        }
+        catch (Exception exc)
+        {
+            ChannelDoctorText.Text = exc.Message;
+            ShowNotice("Channel doctor failed.", InfoBarSeverity.Error);
         }
     }
 
@@ -604,6 +631,21 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private async Task RefreshSelectedChannelRequirementsAsync(ChannelInfo channel)
+    {
+        try
+        {
+            var requirements = await _api.GetChannelRequirementsAsync(channel.ChannelId);
+            ChannelRequirementText.Text = FormatRequirementSummary(requirements);
+            ChannelSetupStepsText.Text = FormatSetupSteps(requirements["setup"] as JsonObject);
+            ChannelPolicyText.Text = FormatPolicySummary(requirements["policies"] as JsonObject, requirements["delivery"] as JsonObject, requirements["runtime"] as JsonObject);
+        }
+        catch (Exception exc)
+        {
+            AddProcessLine(exc.Message);
+        }
+    }
+
     private ChannelSetup SetupFor(string channelId)
     {
         var setup = _settings.Channels.FirstOrDefault(item => item.ChannelId == channelId);
@@ -615,6 +657,146 @@ public sealed partial class MainWindow : Window
         setup = new ChannelSetup { ChannelId = channelId };
         _settings.Channels.Add(setup);
         return setup;
+    }
+
+    private static void ApplyChannelSetupDefaults(ChannelInfo channel, ChannelSetup setup)
+    {
+        var requiredSecrets = JsonArrayStrings(channel.Setup, "required_secrets");
+        var optionalSecrets = JsonArrayStrings(channel.Setup, "optional_secrets");
+        var allSecrets = requiredSecrets.Concat(optionalSecrets).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (string.IsNullOrWhiteSpace(setup.SecretName) && requiredSecrets.Count == 1)
+        {
+            setup.SecretName = requiredSecrets[0];
+        }
+        foreach (var secret in allSecrets)
+        {
+            if (!setup.SecretValues.ContainsKey(secret) && !string.Equals(setup.SecretName, secret, StringComparison.OrdinalIgnoreCase))
+            {
+                setup.SecretValues[secret] = "";
+            }
+        }
+        if (string.IsNullOrWhiteSpace(setup.ConversationType))
+        {
+            setup.ConversationType = channel.ConversationTypes.FirstOrDefault() ?? "dm";
+        }
+    }
+
+    private void RenderChannelRequirements(ChannelInfo channel)
+    {
+        var requirements = new JsonObject
+        {
+            ["channel_id"] = channel.ChannelId,
+            ["display_name"] = channel.DisplayName,
+            ["setup_kind"] = channel.SetupKind,
+            ["runtime_adapter"] = channel.Runtime?["owned_by"]?.GetValue<string>() ?? "",
+            ["setup"] = channel.Setup?.DeepClone(),
+            ["delivery"] = channel.Delivery?.DeepClone(),
+            ["policies"] = channel.Policies?.DeepClone(),
+            ["runtime"] = channel.Runtime?.DeepClone(),
+        };
+        ChannelRequirementText.Text = FormatRequirementSummary(requirements);
+        ChannelSetupStepsText.Text = FormatSetupSteps(channel.Setup);
+        ChannelPolicyText.Text = FormatPolicySummary(channel.Policies, channel.Delivery, channel.Runtime);
+    }
+
+    private static string FormatRequirementSummary(JsonObject requirements)
+    {
+        var setup = requirements["setup"] as JsonObject;
+        var delivery = requirements["delivery"] as JsonObject;
+        var requiredSecrets = JsonArrayStrings(setup, "required_secrets");
+        var optionalSecrets = JsonArrayStrings(setup, "optional_secrets");
+        var requiredFields = JsonArrayStrings(setup, "required_fields");
+        var officialSend = delivery?["official_send"] as JsonObject;
+        var sendMode = officialSend?["mode"]?.GetValue<string>() ?? "prepared_outbox";
+        var implemented = officialSend?["implemented"]?.GetValue<bool>() == true ? "direct send available" : "prepared outbox only";
+        return string.Join(Environment.NewLine, new[]
+        {
+            $"Setup: {requirements["setup_kind"]?.GetValue<string>() ?? "channel"}",
+            $"Required fields: {FormatInline(requiredFields)}",
+            $"Required secrets: {FormatInline(requiredSecrets)}",
+            $"Optional secrets: {FormatInline(optionalSecrets)}",
+            $"Send mode: {sendMode} ({implemented})",
+        });
+    }
+
+    private static string FormatSetupSteps(JsonObject? setup)
+    {
+        var steps = JsonArrayStrings(setup, "steps");
+        var notes = JsonArrayStrings(setup, "notes");
+        var lines = new List<string>();
+        lines.AddRange(steps.Select((step, index) => $"{index + 1}. {step}"));
+        if (notes.Count > 0)
+        {
+            lines.Add("");
+            lines.Add("Notes:");
+            lines.AddRange(notes.Select(note => $"- {note}"));
+        }
+        return lines.Count == 0 ? "No setup steps are published for this channel yet." : string.Join(Environment.NewLine, lines);
+    }
+
+    private static string FormatPolicySummary(JsonObject? policies, JsonObject? delivery, JsonObject? runtime)
+    {
+        var officialSend = delivery?["official_send"] as JsonObject;
+        var lines = new[]
+        {
+            $"DM policy: {JsonString(policies, "dm_policy", "not specified")}",
+            $"Group policy: {JsonString(policies, "group_policy", "not specified")}",
+            $"Mention required: {JsonBool(policies, "mention_required_by_default")}",
+            $"Ambient room context: {JsonBool(policies, "ambient_room_events_supported")}",
+            $"Bot-loop protection: {JsonBool(policies, "bot_loop_protection_supported")}",
+            $"Native threads: {JsonBool(delivery, "native_threads")}",
+            $"Approval reactions: {JsonBool(delivery, "approval_reactions")}",
+            $"Listener required: {JsonBool(runtime, "listener_required_for_inbound")}",
+            $"Runtime state: {JsonString(runtime, "state_dir_hint", "none")}",
+            $"Official target: {JsonString(officialSend, "target", "conversation_id")}",
+        };
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private static string FormatDoctorFindings(JsonObject doctor)
+    {
+        var findings = doctor["findings"]?.AsArray();
+        if (findings is null || findings.Count == 0)
+        {
+            return "No doctor findings returned.";
+        }
+        return string.Join(
+            Environment.NewLine,
+            findings.Select(item =>
+            {
+                var finding = item?.AsObject();
+                return finding is null
+                    ? ""
+                    : $"- {finding["channel_id"]?.GetValue<string>() ?? "channel"} [{finding["severity"]?.GetValue<string>() ?? "info"}]: {finding["message"]?.GetValue<string>() ?? ""}";
+            }).Where(line => !string.IsNullOrWhiteSpace(line)));
+    }
+
+    private static List<string> JsonArrayStrings(JsonObject? node, string key)
+    {
+        if (node?[key] is not JsonArray array)
+        {
+            return [];
+        }
+        return array
+            .Select(item => item?.GetValue<string>() ?? "")
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static string JsonString(JsonObject? node, string key, string fallback)
+    {
+        return node?[key]?.GetValue<string>() ?? fallback;
+    }
+
+    private static string JsonBool(JsonObject? node, string key)
+    {
+        return node?[key]?.GetValue<bool>() == true ? "yes" : "no";
+    }
+
+    private static string FormatInline(IReadOnlyCollection<string> values)
+    {
+        return values.Count == 0 ? "none" : string.Join(", ", values);
     }
 
     private void ApplySettingsToUi()

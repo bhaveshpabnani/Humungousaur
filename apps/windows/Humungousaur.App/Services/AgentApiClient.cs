@@ -45,6 +45,11 @@ public sealed class AgentApiClient
         return PostJsonObjectAsync("channels/doctor", payload);
     }
 
+    public Task<JsonObject> GetChannelRequirementsAsync(string channelId)
+    {
+        return GetJsonObjectAsync($"channels/requirements?channel_id={Uri.EscapeDataString(channelId)}");
+    }
+
     public Task<JsonObject> GetChannelListenersAsync(string channelId, AppSettings settings)
     {
         var payload = RuntimePayload(settings);
