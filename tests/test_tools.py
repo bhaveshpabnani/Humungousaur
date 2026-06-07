@@ -18,8 +18,11 @@ from humungousaur.tools.codex_tools import (
     CodexSkillSyncTool,
 )
 from humungousaur.tools.file_tools import (
+    ExtractPDFPagesTool,
     ListFilesTool,
     ListPDFsTool,
+    MergePDFsTool,
+    OCRProviderStatusTool,
     ReadFileTool,
     ReadPDFTool,
     SearchWorkspaceTool,
@@ -79,6 +82,9 @@ class ToolTests(unittest.TestCase):
             ["read_only", "workspace_write", "trusted_dev", "blocked"],
         )
         self.assertEqual(tools["run_shell_command"].capability_group, "shell")
+        self.assertEqual(tools["pdf_merge"].capability_group, "files")
+        self.assertEqual(tools["pdf_extract_pages"].capability_group, "files")
+        self.assertEqual(tools["ocr_provider_status"].capability_group, "files")
         self.assertEqual(tools["python_interpreter"].input_schema["required"], ["code", "reason"])
         self.assertEqual(tools["python_interpreter"].input_schema["properties"]["import_mode"]["enum"], ["stdlib", "allowlist", "all"])
         self.assertEqual(tools["python_interpreter"].input_schema["properties"]["allowed_imports"]["items"]["type"], "string")
@@ -401,6 +407,51 @@ class ToolTests(unittest.TestCase):
             self.assertIn("PDF roadmap needle", read.output["text"])
             self.assertEqual(summarized.status, ActionStatus.SUCCEEDED)
             self.assertIn("safe local assistant", summarized.output["summaries"][0]["summary"])
+
+    @unittest.skipUnless(pdf_dependencies_available(), "PDF test dependencies are unavailable")
+    def test_pdf_merge_and_extract_pages_create_native_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            write_pdf(workspace / "part-a.pdf", "Alpha PDF page")
+            write_pdf(workspace / "part-b.pdf", "Beta PDF page")
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts").normalized()
+
+            merged = MergePDFsTool().execute(
+                {
+                    "paths": ["part-a.pdf", "part-b.pdf"],
+                    "filename": "combined.pdf",
+                    "reason": "Verify native PDF merge.",
+                },
+                config,
+            )
+            extracted = ExtractPDFPagesTool().execute(
+                {
+                    "path": merged.output["path"],
+                    "start_page": 2,
+                    "end_page": 2,
+                    "filename": "beta-only.pdf",
+                    "reason": "Verify native PDF page extraction.",
+                },
+                config,
+            )
+            read = ReadPDFTool().execute({"path": extracted.output["path"]}, config)
+
+            self.assertEqual(merged.status, ActionStatus.SUCCEEDED)
+            self.assertTrue(Path(merged.output["path"]).exists())
+            self.assertEqual(merged.output["input_count"], 2)
+            self.assertEqual(extracted.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(extracted.output["page_count"], 1)
+            self.assertIn("Beta PDF page", read.output["text"])
+
+    def test_ocr_provider_status_reports_without_cloud_use(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
+
+            result = OCRProviderStatusTool().execute({}, config)
+
+        self.assertEqual(result.status, ActionStatus.SUCCEEDED)
+        self.assertFalse(result.output["cloud_ocr_used"])
+        self.assertIn("providers", result.output)
 
     @unittest.skipUnless(pdf_dependencies_available(), "PDF test dependencies are unavailable")
     def test_pdf_tools_respect_allowed_roots(self) -> None:

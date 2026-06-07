@@ -24,6 +24,7 @@ Use when the user asks what is on screen, needs visual UI evidence, wants screen
 - `screenshot_capture`
 - `screen_captures`
 - `screen_capture_delete`
+- `ocr_provider_status`
 - `os_windows`
 - `os_observe_ui`
 - `browser_live_screenshot`
@@ -34,7 +35,7 @@ Use when the user asks what is on screen, needs visual UI evidence, wants screen
 1. Prefer UIA/browser observations when text structure is available.
 2. Capture a screenshot only when visual evidence is needed and approved.
 3. Review visible state and note uncertainty.
-4. Use OCR only through a native available tool; otherwise state that OCR is missing.
+4. Use `ocr_provider_status` before OCR claims; run OCR only when a native extraction adapter is actually available.
 5. Delete sensitive captures when they are no longer needed.
 6. Connect visual findings to the task outcome.
 

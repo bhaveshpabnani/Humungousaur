@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import importlib.util
 import os
 import re
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -39,6 +41,8 @@ TEXT_SUFFIXES = {
 PDF_SUFFIX = ".pdf"
 PDF_MAX_PAGES = 10
 PDF_TEXT_LIMIT_CHARS = 12_000
+PDF_MAX_MERGE_FILES = 20
+PDF_MAX_EXTRACT_PAGES = 50
 ALLOWED_SHELL_COMMANDS = ("python", "python.exe")
 BLOCKED_INLINE_SHELL_TOKENS = ("-c", "/c")
 SHELL_COMMAND_PROFILES = ("read_only", "workspace_write", "trusted_dev", "blocked")
@@ -178,6 +182,34 @@ def _extract_pdf_text(path: Path, max_pages: int = PDF_MAX_PAGES, max_chars: int
     if len(text) > max_chars:
         text = text[:max_chars].rstrip()
     return {"text": text, "pages_read": pages_read, "total_pages": total_pages}
+
+
+def _resolve_write_pdf_path(config: AgentConfig, raw_filename: str | None, default_name: str) -> Path:
+    filename = Path(str(raw_filename or default_name)).name.strip() or default_name
+    if not filename.lower().endswith(PDF_SUFFIX):
+        filename += PDF_SUFFIX
+    safe_stem = "".join(char if char.isalnum() or char in ("-", "_", ".") else "-" for char in Path(filename).stem).strip(".-")
+    filename = f"{safe_stem or Path(default_name).stem}{PDF_SUFFIX}"
+    return (config.data_dir / "pdfs" / filename).resolve()
+
+
+def _resolve_pdf_read_file(config: AgentConfig, raw_path: str | None) -> Path:
+    path = _resolve_read_path(config, raw_path)
+    if not _is_within(path, config.allowed_read_roots):
+        raise ValueError("PDF path is outside allowed roots.")
+    if not path.exists() or not path.is_file():
+        raise ValueError(f"PDF file does not exist: {path}")
+    if path.suffix.lower() != PDF_SUFFIX:
+        raise ValueError("Path is not a PDF file.")
+    if path.stat().st_size > config.max_file_bytes:
+        raise ValueError("PDF exceeds configured read limit.")
+    return path
+
+
+def _page_indices(start_page: int, end_page: int, total_pages: int) -> list[int]:
+    start = max(1, start_page)
+    end = min(max(start, end_page), total_pages)
+    return list(range(start - 1, end))
 
 
 def summarize_text(text: str, max_sentences: int = 6) -> str:
@@ -508,6 +540,195 @@ class SummarizePDFsTool(Tool):
         )
 
 
+class MergePDFsTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="pdf_merge",
+            description=(
+                "Merge multiple allowed local PDF files into one new PDF artifact under data_dir/pdfs. "
+                "Uses Humungousaur-owned local PDF handling and does not send files to cloud OCR or upstream scripts."
+            ),
+            risk_level=RiskLevel.MEDIUM,
+            input_schema=object_input_schema(
+                {
+                    "paths": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": PDF_MAX_MERGE_FILES},
+                    "filename": {"type": "string", "description": "Output PDF filename under data_dir/pdfs."},
+                    "reason": {"type": "string", "description": "Why these PDFs should be merged."},
+                },
+                required=["paths", "reason"],
+            ),
+            capability_group="files",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        try:
+            from pypdf import PdfReader, PdfWriter
+        except Exception as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "pypdf is required for native PDF merge.", error=str(exc))
+        normalized = config.normalized()
+        raw_paths = tool_input.get("paths", [])
+        if not isinstance(raw_paths, list) or len(raw_paths) < 2:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "At least two PDF paths are required.")
+        if len(raw_paths) > PDF_MAX_MERGE_FILES:
+            return ToolResult(self.name, ActionStatus.BLOCKED, self.risk_level, "PDF merge file count exceeds safety limit.")
+        try:
+            paths = [_resolve_pdf_read_file(normalized, str(raw_path)) for raw_path in raw_paths]
+        except ValueError as exc:
+            return ToolResult(self.name, ActionStatus.BLOCKED, self.risk_level, str(exc))
+        output_path = _resolve_write_pdf_path(normalized, tool_input.get("filename"), "merged.pdf")
+        if not _is_within(output_path, normalized.allowed_write_roots):
+            return ToolResult(self.name, ActionStatus.BLOCKED, self.risk_level, "Merged PDF path is outside allowed write roots.")
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                f"Dry run: would merge {len(paths)} PDFs.",
+                {"path": str(output_path), "input_paths": [_relative(path, normalized) for path in paths]},
+            )
+        writer = PdfWriter()
+        page_counts = []
+        try:
+            for path in paths:
+                reader = PdfReader(str(path))
+                page_counts.append({"path": _relative(path, normalized), "pages": len(reader.pages)})
+                for page in reader.pages:
+                    writer.add_page(page)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            with output_path.open("wb") as handle:
+                writer.write(handle)
+        except Exception as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "PDF merge failed.", error=str(exc))
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Merged {len(paths)} PDFs into {output_path}.",
+            {"path": str(output_path), "input_count": len(paths), "inputs": page_counts, "source": "pdf_merge"},
+        )
+
+
+class ExtractPDFPagesTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="pdf_extract_pages",
+            description="Extract a bounded page range from one allowed local PDF into a new PDF artifact under data_dir/pdfs.",
+            risk_level=RiskLevel.MEDIUM,
+            input_schema=object_input_schema(
+                {
+                    "path": {"type": "string", "description": "Allowed source PDF file path."},
+                    "start_page": {"type": "integer", "minimum": 1},
+                    "end_page": {"type": "integer", "minimum": 1},
+                    "filename": {"type": "string", "description": "Output PDF filename under data_dir/pdfs."},
+                    "reason": {"type": "string", "description": "Why this page range should be extracted."},
+                },
+                required=["path", "start_page", "end_page", "reason"],
+            ),
+            capability_group="files",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        try:
+            from pypdf import PdfReader, PdfWriter
+        except Exception as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "pypdf is required for native PDF page extraction.", error=str(exc))
+        normalized = config.normalized()
+        try:
+            source = _resolve_pdf_read_file(normalized, str(tool_input.get("path") or ""))
+            start_page = int(tool_input.get("start_page") or 1)
+            end_page = int(tool_input.get("end_page") or start_page)
+        except (TypeError, ValueError) as exc:
+            return ToolResult(self.name, ActionStatus.BLOCKED, self.risk_level, str(exc))
+        output_path = _resolve_write_pdf_path(normalized, tool_input.get("filename"), "extracted-pages.pdf")
+        if not _is_within(output_path, normalized.allowed_write_roots):
+            return ToolResult(self.name, ActionStatus.BLOCKED, self.risk_level, "Extracted PDF path is outside allowed write roots.")
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would extract PDF pages.",
+                {"path": str(output_path), "source_path": _relative(source, normalized), "start_page": start_page, "end_page": end_page},
+            )
+        try:
+            reader = PdfReader(str(source))
+            indices = _page_indices(start_page, end_page, len(reader.pages))
+            if len(indices) > PDF_MAX_EXTRACT_PAGES:
+                return ToolResult(self.name, ActionStatus.BLOCKED, self.risk_level, "PDF extract page count exceeds safety limit.")
+            writer = PdfWriter()
+            for index in indices:
+                writer.add_page(reader.pages[index])
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            with output_path.open("wb") as handle:
+                writer.write(handle)
+        except Exception as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "PDF page extraction failed.", error=str(exc))
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Extracted {len(indices)} PDF page(s) to {output_path}.",
+            {
+                "path": str(output_path),
+                "source_path": _relative(source, normalized),
+                "start_page": start_page,
+                "end_page": end_page,
+                "page_count": len(indices),
+                "source": "pdf_extract_pages",
+            },
+        )
+
+
+class OCRProviderStatusTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="ocr_provider_status",
+            description=(
+                "Report local OCR provider availability without sending images or documents anywhere. "
+                "Use before claiming OCR can run."
+            ),
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema({}),
+            capability_group="files",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        del tool_input, config
+        providers = [
+            {
+                "provider": "tesseract",
+                "binary_available": bool(shutil.which("tesseract")),
+                "python_package_available": bool(importlib.util.find_spec("pytesseract")),
+                "mode": "local_binary",
+            },
+            {
+                "provider": "easyocr",
+                "binary_available": False,
+                "python_package_available": bool(importlib.util.find_spec("easyocr")),
+                "mode": "local_python",
+            },
+            {
+                "provider": "pillow_image_support",
+                "binary_available": False,
+                "python_package_available": bool(importlib.util.find_spec("PIL")),
+                "mode": "local_image_preprocessing",
+            },
+        ]
+        ready = any(item["provider"] == "tesseract" and item["binary_available"] and item["python_package_available"] for item in providers)
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            "Checked local OCR provider availability.",
+            {
+                "ready_for_local_ocr": ready,
+                "providers": providers,
+                "cloud_ocr_used": False,
+                "source": "ocr_provider_status",
+            },
+        )
+
+
 class WriteNoteTool(Tool):
     def __init__(self) -> None:
         super().__init__(
@@ -667,6 +888,9 @@ def default_tools() -> dict[str, Tool]:
         ListPDFsTool(),
         ReadPDFTool(),
         SummarizePDFsTool(),
+        MergePDFsTool(),
+        ExtractPDFPagesTool(),
+        OCRProviderStatusTool(),
         WriteNoteTool(),
         ShellCommandTool(),
     ]

@@ -21,6 +21,7 @@ Use for scans, images of documents, receipts, screenshots, forms, and PDFs where
 ## Tool Map
 
 - `read_pdf`
+- `ocr_provider_status`
 - `screenshot_capture`
 - `screen_captures`
 - `python_interpreter`
@@ -30,8 +31,8 @@ Use for scans, images of documents, receipts, screenshots, forms, and PDFs where
 ## Workflow
 
 1. Try native text extraction when the input is a PDF.
-2. Check for native OCR capability before claiming OCR.
-3. If OCR is missing, describe the adapter/tool needed or use approved interpreter packages if available.
+2. Run `ocr_provider_status` before claiming OCR.
+3. If OCR providers are missing, describe the exact local setup needed or use approved interpreter packages if available.
 4. Extract fields with confidence/uncertainty labels.
 5. Preserve source page/image references.
 6. Verify critical numbers manually where possible.
@@ -39,7 +40,7 @@ Use for scans, images of documents, receipts, screenshots, forms, and PDFs where
 ## Native Implementation Boundaries
 
 - Do not import Hermes OCR or upstream document scripts directly.
-- OCR adapters must be Humungousaur-owned and tested.
+- OCR adapters must be Humungousaur-owned and tested; readiness checks do not equal extraction.
 - Upstream OCR workflows are reference only.
 
 ## Safety And Approval
@@ -50,7 +51,7 @@ Use for scans, images of documents, receipts, screenshots, forms, and PDFs where
 
 ## Verification
 
-- Distinguish native text extraction from OCR.
+- Distinguish native text extraction, OCR readiness, and OCR extraction.
 - Report confidence and uncertain fields.
 - Confirm output notes/artifacts.
 

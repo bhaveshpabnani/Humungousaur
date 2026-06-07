@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 from pathlib import Path
 import re
@@ -95,6 +96,7 @@ def main() -> int:
         )
 
     _smoke_productivity(record, tools, config)
+    _smoke_pdf(record, tools, config)
     _smoke_office(record, tools, config)
     _smoke_analysis(record, tools, config)
     _smoke_writing(record, tools, config)
@@ -135,6 +137,41 @@ def _smoke_productivity(record, tools: dict[str, Any], config: AgentConfig) -> N
     formula_ok = _ok(inspect) and any(item.get("formula") == "=B2-B3" for item in inspect.output["sheets"][0]["formulas"])
     record("productivity", "xlsx_workbook_create", _ok(xlsx), _tool_payload(xlsx))
     record("productivity", "xlsx_workbook_inspect", formula_ok, _tool_payload(inspect))
+
+
+def _smoke_pdf(record, tools: dict[str, Any], config: AgentConfig) -> None:
+    ocr = tools["ocr_provider_status"].execute({}, config)
+    record("pdf", "ocr_provider_status", _ok(ocr) and ocr.output.get("cloud_ocr_used") is False, _tool_payload(ocr))
+    if not _pdf_dependencies_available():
+        record("pdf", "pdf_dependencies_available", True, {"status": "skipped_optional_dependency_missing", "missing": ["pypdf", "reportlab"], "reason": "Native PDF merge/extract smoke needs the pdf optional dependency group."})
+        return
+    fixtures = config.data_dir / "script-fixtures"
+    first = fixtures / "pdf-first.pdf"
+    second = fixtures / "pdf-second.pdf"
+    _write_pdf_fixture(first, "First PDF skill smoke page.")
+    _write_pdf_fixture(second, "Second PDF skill smoke page.")
+    merged = tools["pdf_merge"].execute(
+        {
+            "paths": [str(first), str(second)],
+            "filename": "skill-smoke-merged.pdf",
+            "reason": "Verify native PDF merge capability.",
+        },
+        config,
+    )
+    extracted = tools["pdf_extract_pages"].execute(
+        {
+            "path": merged.output.get("path", ""),
+            "start_page": 2,
+            "end_page": 2,
+            "filename": "skill-smoke-extracted.pdf",
+            "reason": "Verify native PDF page extraction capability.",
+        },
+        config,
+    ) if _ok(merged) else merged
+    read = tools["read_pdf"].execute({"path": extracted.output.get("path", ""), "max_pages": 1}, config) if _ok(extracted) else extracted
+    record("pdf", "pdf_merge", _ok(merged) and merged.output.get("input_count") == 2, _tool_payload(merged))
+    record("pdf", "pdf_extract_pages", _ok(extracted) and extracted.output.get("page_count") == 1, _tool_payload(extracted))
+    record("pdf", "read_extracted_pdf", _ok(read) and "Second PDF skill smoke page" in read.output.get("text", ""), _tool_payload(read))
 
 
 def _smoke_office(record, tools: dict[str, Any], config: AgentConfig) -> None:
@@ -268,6 +305,21 @@ def _prepare_script_fixtures(config: AgentConfig) -> None:
     (fixtures / "sales.csv").write_text("month,revenue,cost\nJan,100,40\nFeb,125,50\nMar,150,\n", encoding="utf-8")
     (fixtures / "note-a.md").write_text("# Note A\n\nLinks to [[Note B]] and [web](https://example.com).\n", encoding="utf-8")
     (fixtures / "note-b.md").write_text("# Note B\n\nBacklink target.\n", encoding="utf-8")
+
+
+def _pdf_dependencies_available() -> bool:
+    return bool(importlib.util.find_spec("pypdf") and importlib.util.find_spec("reportlab"))
+
+
+def _write_pdf_fixture(path: Path, text: str) -> None:
+    from reportlab.pdfgen import canvas
+
+    document = canvas.Canvas(str(path))
+    y = 760
+    for line in text.splitlines() or [text]:
+        document.drawString(72, y, line)
+        y -= 18
+    document.save()
 
 
 def _script_smoke_input(name: str, config: AgentConfig) -> dict[str, Any]:

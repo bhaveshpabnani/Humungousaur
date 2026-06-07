@@ -12,6 +12,8 @@ dependencies = []
 
 [project.optional-dependencies]
 browser = ["playwright>=1.60,<2"]
+pdf = ["pypdf>=5,<7", "reportlab>=4,<5"]
+ocr = ["pillow>=10,<12", "pytesseract>=0.3.13,<0.4"]
 
 [project.scripts]
 humungousaur = "humungousaur.cli:main"
