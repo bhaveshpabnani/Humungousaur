@@ -238,6 +238,42 @@ class APITests(unittest.TestCase):
                 self.assertEqual(channel["stimulus"]["source"], "channel_message")
                 self.assertIsNotNone(channel["prepared_reply"])
                 self.assertEqual(api_get(base_url, "/channels/outbox")["messages"][0]["channel_id"], "slack")
+                prepared_channel_message = api_post(
+                    base_url,
+                    "/channels/message/prepare",
+                    {
+                        "channel_id": "slack",
+                        "conversation_id": "C123",
+                        "text": "Prepared from API.",
+                        "reason": "API channel prepare smoke.",
+                    },
+                )
+                self.assertEqual(prepared_channel_message["message"]["status"], "prepared_not_sent")
+                self.assertEqual(prepared_channel_message["message"]["channel_id"], "slack")
+                send_without_approval = api_post_error(
+                    base_url,
+                    "/channels/message/send",
+                    {
+                        "channel_id": "slack",
+                        "conversation_id": "C123",
+                        "text": "Do not send without approval.",
+                        "reason": "API channel send approval gate smoke.",
+                    },
+                )
+                self.assertEqual(send_without_approval["status"], 403)
+                dry_run_send = api_post(
+                    base_url,
+                    "/channels/message/send",
+                    {
+                        "channel_id": "slack",
+                        "conversation_id": "C123",
+                        "text": "Dry-run approved send.",
+                        "reason": "API channel send dry-run smoke.",
+                        "approve_high_risk": True,
+                        "dry_run": True,
+                    },
+                )
+                self.assertEqual(dry_run_send["message"]["status"], "dry_run_not_sent")
                 webhook = api_post(
                     base_url,
                     "/channels/webhook/slack",

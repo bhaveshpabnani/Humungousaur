@@ -100,8 +100,10 @@ public sealed class AppSettingsStore
                 ConversationType = channel.ConversationType,
                 SecretName = channel.SecretName,
                 SecretValue = Protect(channel.SecretValue),
-                SecretValues = channel.SecretValues.ToDictionary(item => item.Key, item => Protect(item.Value)),
+                SecretValues = (channel.SecretValues ?? new Dictionary<string, string>()).ToDictionary(item => item.Key, item => Protect(item.Value)),
                 SecretConfigured = channel.SecretConfigured,
+                Allowlist = (channel.Allowlist ?? new List<string>()).ToList(),
+                GroupAllowlist = (channel.GroupAllowlist ?? new List<string>()).ToList(),
                 Notes = channel.Notes,
             }).ToList(),
         };
@@ -115,7 +117,9 @@ public sealed class AppSettingsStore
         foreach (var channel in settings.Channels)
         {
             channel.SecretValue = Unprotect(channel.SecretValue);
-            channel.SecretValues = channel.SecretValues.ToDictionary(item => item.Key, item => Unprotect(item.Value));
+            channel.SecretValues = (channel.SecretValues ?? new Dictionary<string, string>()).ToDictionary(item => item.Key, item => Unprotect(item.Value));
+            channel.Allowlist ??= new List<string>();
+            channel.GroupAllowlist ??= new List<string>();
             channel.SecretConfigured = channel.SecretConfigured || !string.IsNullOrWhiteSpace(channel.SecretValue) || channel.SecretValues.Count > 0;
         }
     }

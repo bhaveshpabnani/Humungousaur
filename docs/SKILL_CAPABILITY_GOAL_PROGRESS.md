@@ -8,7 +8,7 @@ Smoke test each skill task one by one, identify skills that are only prompt/proc
 
 ## Current Status
 
-- Repository state reviewed after the GitHub and CI workflow artifact slice.
+- Repository state reviewed after the desktop channel-operations integration slice.
 - Current workspace skill count: `132`.
 - Current tool-domain folders: `33`.
 - Latest full skill smoke result: `424` sections, `0` failures.
@@ -41,7 +41,8 @@ These slices have been implemented, smoke-tested, regression-tested, committed, 
 | `49e8598` | Network and DNS safety diagnostics | Native bounded DNS lookup, HTTP endpoint check, and single-port TCP connectivity probe tools. |
 | `51b4d32` | Creative writing and songwriting artifacts | Native creative brief, song structure, and creative revision packet artifacts with originality guardrails. |
 | `6d13f22` | Security review artifacts | Native dependency inventory, secret-scan report, prompt-injection review, and approval-policy review artifacts. |
-| current slice | GitHub and CI workflow artifacts | Native GitHub issue packets, PR packets, CI failure reports, repo-state reports, artifact inspection, skill docs, and smoke coverage without requiring live GitHub credentials. |
+| `e35444f` | GitHub and CI workflow artifacts | Native GitHub issue packets, PR packets, CI failure reports, repo-state reports, artifact inspection, skill docs, and smoke coverage without requiring live GitHub credentials. |
+| current slice | Desktop channel-operations integration | Windows app allowlist/group allowlist onboarding, outbound channel message preparation, approval-gated send flow, API channel-message routes, and API regression coverage. |
 
 ## Current Native Capability Areas
 
@@ -60,6 +61,7 @@ Humungousaur now has native tool domains for:
 - Cognition, memory curation, persona evolution, automations, and multi-agent coordination
 - Creative writing, songwriting, and revision artifacts
 - Design systems and theme packs
+- Desktop app channel setup, allowlists, runtime settings, voice settings, and outbound channel operations
 - External integration status surfaces
 - Files, PDFs, OCR, and shell/file utilities
 - GitHub issue/PR/CI/repo-state workflow artifacts
@@ -95,7 +97,7 @@ The recurring verification pattern for each completed slice has been:
 Latest verified results:
 
 - Full skill smoke: `424` sections, `0` failures.
-- Full regression after GitHub and CI workflow slice: `390 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
+- Full regression after desktop channel-operations slice: `390 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
 - The warnings are from `openpyxl` datetime deprecation during XLSX tests, not from the new skill slices.
 
 ## Still To Do
@@ -182,20 +184,18 @@ Needed work:
 
 ### 8. Desktop App End-To-End
 
-Current weak signal: backend/tools are much stronger than the full Windows app experience.
+Current status: the Windows app exposes runtime start/stop, provider/model settings, voice settings, channel setup, channel allowlists, listener status, inbound preview, prepared outbound messages, and approval-gated channel sends. Remaining work is full live validation and richer daily-use panels.
 
 Needed work:
 
-- App-level settings for provider/model/API keys and channel onboarding.
 - Runtime start/stop/status from the app.
 - Voice wakeup/STT/agent/TTS end-to-end through the app.
 - Tool execution visibility and approval UX.
-- Channel onboarding for Telegram, Slack, Discord, WhatsApp, SMS, webchat, and other important channels.
 - Full app smoke with chat message, voice message, channel message, OS/browser task, and response.
 
 ### 9. Live Channel Integrations
 
-Current weak signal: channel manifests and message packets exist, but live provider-specific onboarding and execution need more depth.
+Current status: channel manifests, setup/status, listener status, webhook ingest, inbound preview, prepared outbox, allowlists, and approval-gated outbound send are wired through the backend and Windows app. Live provider-specific onboarding and execution need more depth.
 
 Needed work:
 

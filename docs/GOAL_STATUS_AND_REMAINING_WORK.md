@@ -17,12 +17,12 @@ The core standard for this goal is:
 ## Current Repository Status
 
 - Branch: `main`.
-- Last fully pushed capability commit before this slice: `6d13f22 Add native security review artifacts`.
+- Last fully pushed capability commit before this slice: `e35444f Add native GitHub workflow artifacts`.
 - Latest documented full skill smoke: `424` sections, `0` failures.
 - Latest documented full regression: `390 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
 - Current tool-domain folders observed: `33`.
 - Current skills observed: more than `130`.
-- Current working tree note: GitHub/CI workflow artifacts have been implemented and tested in this slice; final commit/push status should be checked with `git status` and `git log`.
+- Current working tree note: desktop channel operations have been implemented and tested in this slice; final commit/push status should be checked with `git status` and `git log`.
 
 ## Done And Pushed
 
@@ -53,7 +53,8 @@ These areas have native implementation, skill wiring, smoke/regression coverage,
 | Network diagnostics | Done | DNS lookup, HTTP endpoint check, and single-port TCP probe tools. |
 | Creative writing and songwriting | Done | Creative brief, song structure, and revision packet artifacts with originality guardrails. |
 | Security review artifacts | Done | Dependency inventory, secret-scan report, prompt-injection review, and approval-policy review artifacts. |
-| GitHub and CI workflow artifacts | Done locally, pending final push check | Native GitHub issue packets, PR packets, CI failure reports, repo-state reports, artifact inspection, skill docs, and smoke coverage without requiring live GitHub credentials. |
+| GitHub and CI workflow artifacts | Done | Native GitHub issue packets, PR packets, CI failure reports, repo-state reports, artifact inspection, skill docs, and smoke coverage without requiring live GitHub credentials. |
+| Desktop channel operations | Done locally in this slice | Windows app allowlist/group allowlist onboarding, outbound channel message preparation, approval-gated send flow, API channel-message routes, and API regression coverage. |
 | Workflow support tools | Done | Diff, JSON-only task, typed approval workflow, output compaction, tool search/catalog, and canvas/A2UI style surfaces are represented as native capability areas. |
 | Voice provider surfaces | Done as tool surfaces | Voice provider status, transcription, response preparation, speech, response listing, Deepgram, ElevenLabs, Windows SAPI, and local Whisper provider paths are represented. |
 | OS and browser control surfaces | Done as native surfaces | Browser, screen, keyboard, mouse, window, app, clipboard, and virtual desktop tool surfaces exist. |
@@ -65,11 +66,11 @@ These areas have code and skills, but they are not yet finished as daily-use, li
 
 | Area | Current State | Still Needed |
 | --- | --- | --- |
-| Desktop Windows app | App structure exists under `apps/`, and earlier work added desktop-facing configuration concepts. | Verify every runtime setting can be configured in-app, run the WinUI app, validate chat, provider selection, channel onboarding, approvals, voice, and runtime start/stop from the app. |
+| Desktop Windows app | App structure exists under `apps/`; runtime settings, provider/model settings, voice settings, channel setup, channel allowlists, listener status, inbound preview, prepared outbound messages, and approval-gated sends are now represented in the app. | Run the WinUI app end to end, validate live chat, provider selection, channel onboarding, approvals, voice, and runtime start/stop from the app. |
 | Voice wakeup to spoken response | Native voice tools exist, and local/provider STT/TTS surfaces are wired. | Run continuous wake word, STT, agent turn, tool execution, TTS, and playback in one live Windows flow. |
 | OpenAI/Groq/Ollama provider path | Provider clients and smoke flows exist; OpenAI is currently the practical default for live smoke. | Reconfirm configured desktop settings, local Ollama model health, context-window fit, fallback policy, and live model-specific failures. |
 | Local speech models | Local Whisper/faster-whisper paths reference the separate `voice-wakeup` assets. | Confirm installed local model paths, test actual transcription on current machine, add local TTS if the installed assets include it. |
-| Channels | Native channel catalog, setup/status, webhook ingest, listener tick, outbox, and message preparation exist. | Complete live onboarding and live receive/send smoke for Telegram, Slack, Discord, WhatsApp, SMS, WebChat, and other important channels. |
+| Channels | Native channel catalog, setup/status, webhook ingest, listener tick, outbox, message preparation, allowlists, and approval-gated send routes exist, and the Windows app can operate them. | Complete live onboarding and live receive/send smoke for Telegram, Slack, Discord, WhatsApp, SMS, WebChat, and other important channels. |
 | Google Workspace | Safe operation packets exist. | Add OAuth onboarding, token storage/refresh, approval-gated execution, and live Gmail/Calendar/Drive/Docs/Sheets smoke. |
 | Browser/computer use | Native browser and OS/computer tools exist. | Run complex browser and Windows UI tasks end to end from natural user requests, with visual verification and recovery behavior. |
 | Open Interpreter-style capability | Code execution and interpreter-style artifacts exist. | Expand sandbox policy, richer long-running process control, artifact capture, and user approval for risky execution. |
@@ -83,11 +84,12 @@ These areas have code and skills, but they are not yet finished as daily-use, li
 - Add missing task-specific smoke for each high-value skill.
 - Flag skills whose tool maps pass but whose workflow is still too abstract.
 
-### 2. Complete Desktop App Configuration
+### 2. Complete Desktop App End-To-End Validation
 
-- Provider, model, API key, channel, voice, runtime, and approval settings should be configurable from the Windows app.
+- Provider, model, API key, channel, voice, runtime, and approval settings should remain configurable from the Windows app.
 - `.env` should remain internal or fallback configuration, not the normal user-facing setup surface.
-- Add runtime health panels and tool execution visibility.
+- Add richer tool execution visibility.
+- Run live app smoke against the local API.
 
 ### 3. Run Full Daily Assistant End-To-End Smoke
 

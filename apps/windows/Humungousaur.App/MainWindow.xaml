@@ -258,6 +258,9 @@
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -278,9 +281,14 @@
                                 <PasswordBox x:Name="ChannelSecretBox" Grid.Row="2" Header="Token or pairing note" PlaceholderText="Kept out of saved settings" />
                                 <TextBox x:Name="ChannelNotesBox" Grid.Row="2" Grid.Column="1" Header="Setup notes" />
                                 <TextBox x:Name="ChannelSecretsBox" Grid.Row="3" Grid.ColumnSpan="2" Header="Channel secrets" AcceptsReturn="True" MinHeight="74" PlaceholderText="SLACK_BOT_TOKEN=xoxb-...&#x0a;WHATSAPP_PHONE_NUMBER_ID=..." TextWrapping="NoWrap" />
-                                <StackPanel Grid.Row="4" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="8">
+                                <TextBox x:Name="ChannelAllowlistBox" Grid.Row="4" Header="Allowed senders" AcceptsReturn="True" MinHeight="62" PlaceholderText="U123&#x0a;+15555550100" TextWrapping="NoWrap" />
+                                <TextBox x:Name="ChannelGroupAllowlistBox" Grid.Row="4" Grid.Column="1" Header="Allowed rooms/groups" AcceptsReturn="True" MinHeight="62" PlaceholderText="C123&#x0a;chat-42" TextWrapping="NoWrap" />
+                                <TextBox x:Name="ChannelOutboundTextBox" Grid.Row="5" Grid.ColumnSpan="2" Header="Outbound message" AcceptsReturn="True" MinHeight="78" PlaceholderText="Prepare a reply or approved send for this channel" TextWrapping="Wrap" />
+                                <StackPanel Grid.Row="6" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="8">
                                     <Button x:Name="SaveChannelButton" Content="Save setup" Click="SaveChannelButton_Click" />
                                     <Button x:Name="TestChannelButton" Content="Preview inbound" Click="TestChannelButton_Click" />
+                                    <Button x:Name="PrepareOutboundButton" Content="Prepare outbound" Click="PrepareOutboundButton_Click" />
+                                    <Button x:Name="SendOutboundButton" Content="Send approved" Click="SendOutboundButton_Click" />
                                     <Button x:Name="TickChannelButton" Content="Poll now" Click="TickChannelButton_Click" />
                                     <Button Content="Refresh listeners" Click="RefreshListenersButton_Click" />
                                     <Button Content="Refresh outbox" Click="RefreshOutboxButton_Click" />

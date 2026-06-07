@@ -31,5 +31,7 @@ public sealed class ChannelSetup
     public string SecretValue { get; set; } = "";
     public Dictionary<string, string> SecretValues { get; set; } = [];
     public bool SecretConfigured { get; set; }
+    public List<string> Allowlist { get; set; } = [];
+    public List<string> GroupAllowlist { get; set; } = [];
     public string Notes { get; set; } = "";
 }

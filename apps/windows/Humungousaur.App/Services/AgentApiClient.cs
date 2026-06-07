@@ -74,9 +74,42 @@ public sealed class AgentApiClient
             },
             ["secret_refs"] = ChannelSecretRefs(setup),
             ["secret_configured"] = ChannelSecretConfigured(setup),
+            ["allowlist"] = StringArray(setup.Allowlist ?? []),
+            ["group_allowlist"] = StringArray(setup.GroupAllowlist ?? []),
             ["notes"] = setup.Notes,
         };
         return PostJsonObjectAsync("channels/setup", payload);
+    }
+
+    public Task<JsonObject> PrepareChannelMessageAsync(ChannelInfo channel, ChannelSetup setup, string text, AppSettings settings)
+    {
+        var payload = RuntimePayload(settings);
+        payload["channel_id"] = channel.ChannelId;
+        payload["conversation_id"] = string.IsNullOrWhiteSpace(setup.ConversationId) ? "windows-app-preview" : setup.ConversationId;
+        payload["text"] = text;
+        payload["reason"] = "Prepared from the Windows app channel panel.";
+        payload["metadata"] = new JsonObject
+        {
+            ["source"] = "windows_app",
+            ["conversation_type"] = setup.ConversationType,
+        };
+        return PostJsonObjectAsync("channels/message/prepare", payload);
+    }
+
+    public Task<JsonObject> SendChannelMessageAsync(ChannelInfo channel, ChannelSetup setup, string text, AppSettings settings)
+    {
+        var payload = RuntimePayload(settings);
+        payload["channel_id"] = channel.ChannelId;
+        payload["conversation_id"] = string.IsNullOrWhiteSpace(setup.ConversationId) ? "windows-app-preview" : setup.ConversationId;
+        payload["text"] = text;
+        payload["reason"] = "Approval-gated send from the Windows app channel panel.";
+        payload["approve_high_risk"] = settings.ApproveHighRisk;
+        payload["metadata"] = new JsonObject
+        {
+            ["source"] = "windows_app",
+            ["conversation_type"] = setup.ConversationType,
+        };
+        return PostJsonObjectAsync("channels/message/send", payload);
     }
 
     public async Task<ToolCatalog> GetToolsAsync()
@@ -173,7 +206,7 @@ public sealed class AgentApiClient
             {
                 AddSecret(secrets, channel.SecretName, channel.SecretValue);
             }
-            foreach (var item in channel.SecretValues)
+            foreach (var item in channel.SecretValues ?? [])
             {
                 AddSecret(secrets, item.Key, item.Value);
             }
@@ -188,7 +221,7 @@ public sealed class AgentApiClient
         {
             refs["primary"] = setup.SecretName;
         }
-        foreach (var item in setup.SecretValues)
+        foreach (var item in setup.SecretValues ?? [])
         {
             refs[item.Key] = item.Key;
         }
@@ -202,11 +235,24 @@ public sealed class AgentApiClient
         {
             configured["primary"] = setup.SecretConfigured || !string.IsNullOrWhiteSpace(setup.SecretValue);
         }
-        foreach (var item in setup.SecretValues)
+        foreach (var item in setup.SecretValues ?? [])
         {
             configured[item.Key] = !string.IsNullOrWhiteSpace(item.Value);
         }
         return configured;
+    }
+
+    private static JsonArray StringArray(IEnumerable<string> values)
+    {
+        var array = new JsonArray();
+        foreach (var value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                array.Add(value.Trim());
+            }
+        }
+        return array;
     }
 
     private static void AddSecret(JsonObject secrets, string name, string value)

@@ -258,6 +258,9 @@ public sealed partial class MainWindow : Window
         SecretNameBox.Text = setup.SecretName;
         ChannelSecretBox.Password = setup.SecretValue;
         ChannelSecretsBox.Text = SerializeSecretLines(setup.SecretValues);
+        ChannelAllowlistBox.Text = SerializeListLines(setup.Allowlist);
+        ChannelGroupAllowlistBox.Text = SerializeListLines(setup.GroupAllowlist);
+        ChannelOutboundTextBox.Text = "";
         ChannelNotesBox.Text = setup.Notes;
         SetComboByTag(ConversationTypeBox, setup.ConversationType);
         _ = RefreshSelectedChannelStatusAsync(channel.ChannelId);
@@ -279,6 +282,8 @@ public sealed partial class MainWindow : Window
         setup.SecretName = SecretNameBox.Text.Trim();
         setup.SecretValue = ChannelSecretBox.Password;
         setup.SecretValues = ParseSecretLines(ChannelSecretsBox.Text);
+        setup.Allowlist = ParseListLines(ChannelAllowlistBox.Text);
+        setup.GroupAllowlist = ParseListLines(ChannelGroupAllowlistBox.Text);
         setup.SecretConfigured = setup.SecretConfigured
             || !string.IsNullOrWhiteSpace(setup.SecretValue)
             || setup.SecretValues.Values.Any(value => !string.IsNullOrWhiteSpace(value));
@@ -352,6 +357,72 @@ public sealed partial class MainWindow : Window
         {
             ChannelListenerText.Text = exc.Message;
             ShowNotice("Listener tick failed.", InfoBarSeverity.Error);
+        }
+    }
+
+    private async void PrepareOutboundButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (ChannelList.SelectedItem is not ChannelInfo channel)
+        {
+            ShowNotice("Select a channel first.", InfoBarSeverity.Warning);
+            return;
+        }
+
+        var text = ChannelOutboundTextBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            ShowNotice("Write an outbound message first.", InfoBarSeverity.Warning);
+            return;
+        }
+
+        try
+        {
+            ReadSettingsFromUi();
+            var setup = SetupFor(channel.ChannelId);
+            var result = await _api.PrepareChannelMessageAsync(channel, setup, text, _settings);
+            var status = result["message"]?["status"]?.GetValue<string>() ?? "prepared";
+            ShowNotice($"Outbound message {status}.", InfoBarSeverity.Success);
+            await RefreshOutboxAsync();
+        }
+        catch (Exception exc)
+        {
+            ShowNotice(exc.Message, InfoBarSeverity.Error);
+        }
+    }
+
+    private async void SendOutboundButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (ChannelList.SelectedItem is not ChannelInfo channel)
+        {
+            ShowNotice("Select a channel first.", InfoBarSeverity.Warning);
+            return;
+        }
+
+        var text = ChannelOutboundTextBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            ShowNotice("Write an outbound message first.", InfoBarSeverity.Warning);
+            return;
+        }
+
+        try
+        {
+            ReadSettingsFromUi();
+            if (!_settings.ApproveHighRisk)
+            {
+                ShowNotice("Enable high-risk approval in Settings before live channel sends.", InfoBarSeverity.Warning);
+                return;
+            }
+            var setup = SetupFor(channel.ChannelId);
+            var result = await _api.SendChannelMessageAsync(channel, setup, text, _settings);
+            var status = result["message"]?["status"]?.GetValue<string>() ?? "unknown";
+            ShowNotice($"Channel send result: {status}.", status == "sent" ? InfoBarSeverity.Success : InfoBarSeverity.Warning);
+            await RefreshOutboxAsync();
+            await RefreshSelectedChannelStatusAsync(channel.ChannelId);
+        }
+        catch (Exception exc)
+        {
+            ShowNotice(exc.Message, InfoBarSeverity.Error);
         }
     }
 
@@ -659,6 +730,20 @@ public sealed partial class MainWindow : Window
     private static string SerializeSecretLines(Dictionary<string, string> values)
     {
         return string.Join(Environment.NewLine, values.Select(item => $"{item.Key}={item.Value}"));
+    }
+
+    private static List<string> ParseListLines(string text)
+    {
+        return text.Split(["\r\n", "\n", ","], StringSplitOptions.None)
+            .Select(item => item.Trim())
+            .Where(item => !string.IsNullOrWhiteSpace(item) && !item.StartsWith("#", StringComparison.Ordinal))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static string SerializeListLines(IEnumerable<string> values)
+    {
+        return string.Join(Environment.NewLine, values.Where(value => !string.IsNullOrWhiteSpace(value)));
     }
 
     private static string ShortenPath(string path)

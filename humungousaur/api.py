@@ -26,7 +26,9 @@ from humungousaur.integrations.channels import (
     handle_channel_inbound,
     list_outbox,
     load_channel_catalog,
+    prepare_outbound_message,
     save_channel_setup,
+    send_outbound_message,
 )
 from humungousaur.indexing import FileIndex
 from humungousaur.interaction import InteractionHarness, harness_result_to_dict
@@ -402,6 +404,38 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                         approve_high_risk=bool(payload.get("approve_high_risk", False)),
                     )
                     self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/channels/message/prepare":
+                    run_config = request_config(effective_config(), payload)
+                    message = prepare_outbound_message(
+                        run_config,
+                        channel_id=str(payload.get("channel_id") or ""),
+                        conversation_id=str(payload.get("conversation_id") or ""),
+                        text=str(payload.get("text") or ""),
+                        media_paths=[str(item) for item in payload.get("media_paths", [])] if isinstance(payload.get("media_paths", []), list) else [],
+                        metadata=payload.get("metadata", {}) if isinstance(payload.get("metadata", {}), dict) else {},
+                        reason=str(payload.get("reason") or ""),
+                    )
+                    self._send_json({"message": message}, HTTPStatus.CREATED)
+                    return
+                if path == "/channels/message/send":
+                    if not bool(payload.get("approve_high_risk", False)):
+                        self._send_error(HTTPStatus.FORBIDDEN, "Sending channel messages requires approve_high_risk=true.")
+                        return
+                    run_config = request_config(effective_config(), payload)
+                    message = send_outbound_message(
+                        run_config,
+                        channel_id=str(payload.get("channel_id") or ""),
+                        conversation_id=str(payload.get("conversation_id") or ""),
+                        text=str(payload.get("text") or ""),
+                        media_paths=[str(item) for item in payload.get("media_paths", [])] if isinstance(payload.get("media_paths", []), list) else [],
+                        metadata=payload.get("metadata", {}) if isinstance(payload.get("metadata", {}), dict) else {},
+                        reason=str(payload.get("reason") or ""),
+                    )
+                    status = HTTPStatus.CREATED
+                    if message.get("status") == "blocked_missing_credentials":
+                        status = HTTPStatus.ACCEPTED
+                    self._send_json({"message": message}, status)
                     return
                 webhook_channel_id = _channel_webhook_route(path)
                 if webhook_channel_id is not None:
