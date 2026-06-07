@@ -307,6 +307,7 @@ class ToolTests(unittest.TestCase):
         self.assertEqual(tools["transcript_summary_inspect"].input_schema["required"], ["path"])
         self.assertEqual(tools["notion_operation_prepare"].input_schema["required"], ["operation", "reason"])
         self.assertEqual(tools["airtable_operation_prepare"].input_schema["required"], ["operation", "base_id", "reason"])
+        self.assertEqual(tools["google_workspace_operation_prepare"].input_schema["required"], ["app", "operation", "reason"])
         self.assertEqual(tools["api_operation_inspect"].input_schema["required"], ["path"])
         self.assertEqual(tools["citation_bibliography_create"].capability_group, "research")
         self.assertEqual(tools["citation_bibliography_create"].input_schema["required"], ["title", "entries", "reason"])

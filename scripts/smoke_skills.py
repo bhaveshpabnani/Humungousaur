@@ -174,6 +174,61 @@ def _smoke_productivity(record, tools: dict[str, Any], config: AgentConfig) -> N
     record("productivity", "notion_operation_inspect", _ok(notion_inspect) and notion_inspect.output.get("provider") == "notion", _tool_payload(notion_inspect))
     record("productivity", "airtable_operation_prepare", _ok(airtable) and airtable.output.get("live_execution_status") == "not_executed", _tool_payload(airtable))
     record("productivity", "airtable_operation_inspect", _ok(airtable_inspect) and airtable_inspect.output.get("provider") == "airtable", _tool_payload(airtable_inspect))
+    google_calendar = tools["google_workspace_operation_prepare"].execute(
+        {
+            "app": "calendar",
+            "operation": "create_event",
+            "calendar_id": "primary",
+            "title": "Humungousaur Skill Smoke",
+            "description": "Prepared locally; not scheduled.",
+            "start": "2026-06-08T09:00:00+05:30",
+            "end": "2026-06-08T09:30:00+05:30",
+            "timezone": "Asia/Kolkata",
+            "attendees": ["person@example.com"],
+            "reason": "Verify native Google Calendar operation packet.",
+        },
+        config,
+    )
+    google_drive = tools["google_workspace_operation_prepare"].execute(
+        {
+            "app": "drive",
+            "operation": "share_file",
+            "file_id": "file-skill-smoke",
+            "recipients": ["person@example.com"],
+            "role": "reader",
+            "reason": "Verify native Google Drive operation packet.",
+        },
+        config,
+    )
+    google_docs = tools["google_workspace_operation_prepare"].execute(
+        {
+            "app": "docs",
+            "operation": "append_doc_text",
+            "document_id": "doc-skill-smoke",
+            "body": "Prepared local batch update text for skill smoke.",
+            "reason": "Verify native Google Docs operation packet.",
+        },
+        config,
+    )
+    google_sheets = tools["google_workspace_operation_prepare"].execute(
+        {
+            "app": "sheets",
+            "operation": "update_values",
+            "spreadsheet_id": "sheet-skill-smoke",
+            "range": "Summary!A1:B2",
+            "values": [["Metric", "Value"], ["Smoke", "Pass"]],
+            "reason": "Verify native Google Sheets operation packet.",
+        },
+        config,
+    )
+    google_calendar_inspect = tools["api_operation_inspect"].execute({"path": google_calendar.output.get("path", "")}, config) if _ok(google_calendar) else google_calendar
+    google_sheets_inspect = tools["api_operation_inspect"].execute({"path": google_sheets.output.get("path", "")}, config) if _ok(google_sheets) else google_sheets
+    record("productivity", "google_calendar_operation_prepare", _ok(google_calendar) and google_calendar.output.get("live_execution_status") == "not_executed", _tool_payload(google_calendar))
+    record("productivity", "google_drive_operation_prepare", _ok(google_drive) and google_drive.output.get("approval_required") is True, _tool_payload(google_drive))
+    record("productivity", "google_docs_operation_prepare", _ok(google_docs) and google_docs.output.get("provider") == "google_workspace", _tool_payload(google_docs))
+    record("productivity", "google_sheets_operation_prepare", _ok(google_sheets) and google_sheets.output.get("method") == "PUT", _tool_payload(google_sheets))
+    record("productivity", "google_calendar_operation_inspect", _ok(google_calendar_inspect) and google_calendar_inspect.output.get("operation") == "calendar.create_event", _tool_payload(google_calendar_inspect))
+    record("productivity", "google_sheets_operation_inspect", _ok(google_sheets_inspect) and google_sheets_inspect.output.get("operation") == "sheets.update_values", _tool_payload(google_sheets_inspect))
 
 
 def _smoke_pdf(record, tools: dict[str, Any], config: AgentConfig) -> None:

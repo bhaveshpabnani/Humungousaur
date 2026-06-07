@@ -12,6 +12,7 @@ from humungousaur.tools.productivity import (
     ApiOperationInspectTool,
     EmailDraftPrepareTool,
     GmailDraftPrepareTool,
+    GoogleWorkspaceOperationPrepareTool,
     NotionOperationPrepareTool,
     XlsxWorkbookCreateTool,
     XlsxWorkbookInspectTool,
@@ -169,8 +170,78 @@ class ProductivityToolTests(unittest.TestCase):
                 config,
             )
 
+        self.assertEqual(result.status, ActionStatus.FAILED)
+        self.assertIn("require id", result.summary)
+
+    def test_google_workspace_calendar_operation_prepare_and_inspect(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
+
+            prepared = GoogleWorkspaceOperationPrepareTool().execute(
+                {
+                    "app": "calendar",
+                    "operation": "create_event",
+                    "calendar_id": "primary",
+                    "title": "Humungousaur Smoke",
+                    "description": "Local packet only.",
+                    "start": "2026-06-08T09:00:00+05:30",
+                    "end": "2026-06-08T09:30:00+05:30",
+                    "timezone": "Asia/Kolkata",
+                    "attendees": ["person@example.com"],
+                    "reason": "Verify Google Calendar operation packet creation.",
+                },
+                config,
+            )
+            inspected = ApiOperationInspectTool().execute({"path": prepared.output["path"]}, config)
+            packet = json.loads(Path(prepared.output["path"]).read_text(encoding="utf-8"))
+
+            self.assertEqual(prepared.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(prepared.output["provider"], "google_workspace")
+            self.assertEqual(prepared.output["operation"], "calendar.create_event")
+            self.assertTrue(prepared.output["approval_required"])
+            self.assertEqual(packet["live_execution_status"], "not_executed")
+            self.assertEqual(packet["metadata"]["scopes"], ["https://www.googleapis.com/auth/calendar.events"])
+            self.assertEqual(inspected.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(inspected.output["payload_shape"]["keys"], ["attendees", "description", "end", "start", "summary"])
+
+    def test_google_workspace_sheets_update_values_packet(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
+
+            prepared = GoogleWorkspaceOperationPrepareTool().execute(
+                {
+                    "app": "sheets",
+                    "operation": "update_values",
+                    "spreadsheet_id": "sheet-smoke",
+                    "range": "Summary!A1:B2",
+                    "values": [["Metric", "Value"], ["Rows", 2]],
+                    "reason": "Verify Google Sheets operation packet creation.",
+                },
+                config,
+            )
+            inspected = ApiOperationInspectTool().execute({"path": prepared.output["path"]}, config)
+
+            self.assertEqual(prepared.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(prepared.output["method"], "PUT")
+            self.assertEqual(inspected.output["operation"], "sheets.update_values")
+            self.assertEqual(inspected.output["payload_shape"]["keys"], ["majorDimension", "range", "values"])
+
+    def test_google_workspace_share_file_requires_recipient(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
+
+            result = GoogleWorkspaceOperationPrepareTool().execute(
+                {
+                    "app": "drive",
+                    "operation": "share_file",
+                    "file_id": "file-smoke",
+                    "reason": "Verify Google Drive validation.",
+                },
+                config,
+            )
+
             self.assertEqual(result.status, ActionStatus.FAILED)
-            self.assertIn("require id", result.summary)
+            self.assertIn("recipients", result.summary)
 
     def test_productivity_tools_are_in_global_catalog(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -183,6 +254,7 @@ class ProductivityToolTests(unittest.TestCase):
             self.assertIn("xlsx_workbook_inspect", tools)
             self.assertIn("notion_operation_prepare", tools)
             self.assertIn("airtable_operation_prepare", tools)
+            self.assertIn("google_workspace_operation_prepare", tools)
             self.assertIn("api_operation_inspect", tools)
             self.assertEqual(tools["gmail_draft_prepare"].capability_group, "productivity")
 

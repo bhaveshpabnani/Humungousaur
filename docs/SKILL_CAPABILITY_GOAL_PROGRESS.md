@@ -8,7 +8,7 @@ Smoke test each skill task one by one, identify skills that are only prompt/proc
 
 ## Current Status
 
-- Repository state reviewed at commit `045cb2f Add native presentation planning artifacts`.
+- Repository state reviewed after the Google Workspace operation packet slice.
 - Current workspace skill count: `132`.
 - Current tool-domain folders: `29`.
 - Latest full skill smoke result: `393` sections, `0` failures.
@@ -37,6 +37,7 @@ These slices have been implemented, smoke-tested, regression-tested, committed, 
 | `ef662a2` | Design system artifacts | Brand-guideline and theme-pack create/inspect tools with Markdown/JSON/CSS sidecars. |
 | `1e296e1` | Visual artifacts | Diagram, Mermaid, Excalidraw-compatible JSON, and infographic plan tools. |
 | `045cb2f` | Presentation planning | Native presentation plan create/inspect tools with audience, goal, narrative arc, slide plan, visual intent, speaker notes, evidence refs, risks, and status. |
+| current slice | Google Workspace operation packets | Native local packets for Calendar, Drive, Docs, Sheets, and Gmail-style Google operations, with OAuth scopes, approval requirements, payload previews, and `not_executed` status. |
 
 ## Current Native Capability Areas
 
@@ -62,7 +63,7 @@ Humungousaur now has native tool domains for:
 - OS/screen/keyboard/mouse/window/clipboard control surfaces
 - Personal planning and contact notes
 - Plugin discovery
-- Productivity operations including Gmail draft, XLSX, Notion, Airtable
+- Productivity operations including Gmail draft, XLSX, Notion, Airtable, and Google Workspace operation packets
 - Research citation/literature artifacts
 - Skills, scripts, skill catalog/read/run surfaces
 - System health/status
@@ -85,25 +86,25 @@ The recurring verification pattern for each completed slice has been:
 
 Latest verified results:
 
-- Full skill smoke: `393` sections, `0` failures.
-- Full regression after presentation slice: `369 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
+- Full skill smoke: `399` sections, `0` failures.
+- Full regression after Google Workspace packet slice: `372 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
 - The warnings are from `openpyxl` datetime deprecation during XLSX tests, not from the new skill slices.
 
 ## Still To Do
 
 The following areas still need one-by-one hardening or deeper exploration. They are ordered roughly by current thinness, user value, and risk.
 
-### 1. Google Workspace
+### 1. Google Workspace Live Execution And Desktop Onboarding
 
-Current weak signal: `google-workspace` still has low native coverage and mostly points through discovery surfaces.
+Current status: local Google Workspace operation packets are being added for Calendar, Drive, Docs, Sheets, and Gmail-style operations. Remaining work is live adapter execution and desktop configuration/onboarding.
 
 Needed work:
 
-- Native Google Calendar event prepare/inspect packets.
-- Native Google Drive file/folder operation prepare/inspect packets.
-- Native Google Docs/Sheets operation packet surfaces where they do not duplicate existing DOCX/XLSX tools.
 - Desktop-app configuration/onboarding surfaces for provider credentials.
-- Smoke tests for draft-only local packets and guarded live execution.
+- OAuth token storage and refresh flow.
+- Guarded live execution after explicit approval.
+- Browser-assisted fallback smoke where native OAuth is not configured.
+- Live Calendar/Drive/Docs/Sheets/Gmail smoke when credentials are available.
 
 ### 2. Creative Writing And Songwriting
 

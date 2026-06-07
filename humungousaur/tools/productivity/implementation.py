@@ -339,6 +339,98 @@ class AirtableOperationPrepareTool(Tool):
         return _write_api_operation(self.name, self.risk_level, config, path, packet)
 
 
+class GoogleWorkspaceOperationPrepareTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="google_workspace_operation_prepare",
+            description=(
+                "Prepare a Google Workspace operation artifact for Calendar, Drive, Docs, Sheets, or Gmail workflows. "
+                "This validates the target and payload shape, records OAuth scope needs, and never calls Google APIs."
+            ),
+            risk_level=RiskLevel.MEDIUM,
+            input_schema=object_input_schema(
+                {
+                    "app": {"type": "string", "enum": ["calendar", "drive", "docs", "sheets", "gmail"]},
+                    "operation": {
+                        "type": "string",
+                        "enum": [
+                            "create_event",
+                            "update_event",
+                            "delete_event",
+                            "create_folder",
+                            "upload_file",
+                            "share_file",
+                            "create_doc",
+                            "append_doc_text",
+                            "create_sheet",
+                            "update_values",
+                            "append_values",
+                            "create_draft",
+                        ],
+                    },
+                    "calendar_id": {"type": "string"},
+                    "event_id": {"type": "string"},
+                    "file_id": {"type": "string"},
+                    "folder_id": {"type": "string"},
+                    "document_id": {"type": "string"},
+                    "spreadsheet_id": {"type": "string"},
+                    "range": {"type": "string"},
+                    "title": {"type": "string"},
+                    "description": {"type": "string"},
+                    "start": {"type": "string"},
+                    "end": {"type": "string"},
+                    "timezone": {"type": "string"},
+                    "attendees": {"type": "array", "items": {"type": "string"}},
+                    "recipients": {"type": "array", "items": {"type": "string"}},
+                    "role": {"type": "string", "enum": ["reader", "commenter", "writer"]},
+                    "path": {"type": "string", "description": "Local file path for upload_file planning."},
+                    "mime_type": {"type": "string"},
+                    "body": {"type": "string"},
+                    "values": {"type": "array", "items": {"type": "array"}},
+                    "payload": {"type": "object", "description": "Optional provider-specific payload additions."},
+                    "filename": {"type": "string"},
+                    "reason": {"type": "string"},
+                },
+                required=["app", "operation", "reason"],
+            ),
+            capability_group="productivity",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        normalized = config.normalized()
+        app = str(tool_input.get("app") or "").strip().lower()
+        operation = str(tool_input.get("operation") or "").strip()
+        reason = str(tool_input.get("reason") or "").strip()
+        if not app or not operation or not reason:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Google app, operation, and reason are required.")
+        try:
+            endpoint = _google_endpoint(app, operation, tool_input)
+            payload = _google_payload(app, operation, tool_input)
+            _enforce_operation_size(payload)
+        except ValueError as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, str(exc), error=str(exc))
+        approval_required = _google_approval_required(operation)
+        packet = _api_operation_packet(
+            provider="google_workspace",
+            operation=f"{app}.{operation}",
+            endpoint=endpoint,
+            method=_google_method(operation),
+            payload=payload,
+            reason=reason,
+            approval_required=approval_required,
+            secret_refs={"oauth": "GOOGLE_WORKSPACE_OAUTH_TOKEN"},
+            metadata={
+                "app": app,
+                "operation": operation,
+                "scopes": _google_scopes(app, operation),
+                "target": _google_target(tool_input),
+                "adapter_status": "not_configured_for_live_execution",
+            },
+        )
+        path = _api_operation_path(normalized, provider="google_workspace", filename=str(tool_input.get("filename") or ""))
+        return _write_api_operation(self.name, self.risk_level, config, path, packet)
+
+
 class ApiOperationInspectTool(Tool):
     def __init__(self) -> None:
         super().__init__(
@@ -390,6 +482,7 @@ def default_productivity_tools() -> dict[str, Tool]:
         XlsxWorkbookInspectTool(),
         NotionOperationPrepareTool(),
         AirtableOperationPrepareTool(),
+        GoogleWorkspaceOperationPrepareTool(),
         ApiOperationInspectTool(),
     ]
     return {tool.name: tool for tool in tools}
@@ -686,6 +779,186 @@ def _airtable_record(record: Any, *, require_id: bool) -> dict[str, Any]:
     if record_id:
         payload["id"] = record_id
     return payload
+
+
+def _google_endpoint(app: str, operation: str, tool_input: dict[str, Any]) -> str:
+    if app == "calendar":
+        calendar_id = str(tool_input.get("calendar_id") or "primary").strip()
+        if operation == "create_event":
+            return f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events"
+        if operation in {"update_event", "delete_event"}:
+            event_id = str(tool_input.get("event_id") or "").strip()
+            if not event_id:
+                raise ValueError(f"{operation} requires event_id.")
+            return f"https://www.googleapis.com/calendar/v3/calendars/{calendar_id}/events/{event_id}"
+    if app == "drive":
+        if operation == "create_folder":
+            return "https://www.googleapis.com/drive/v3/files"
+        if operation == "upload_file":
+            return "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart"
+        if operation == "share_file":
+            file_id = str(tool_input.get("file_id") or "").strip()
+            if not file_id:
+                raise ValueError("share_file requires file_id.")
+            return f"https://www.googleapis.com/drive/v3/files/{file_id}/permissions"
+    if app == "docs":
+        if operation == "create_doc":
+            return "https://docs.googleapis.com/v1/documents"
+        if operation == "append_doc_text":
+            document_id = str(tool_input.get("document_id") or "").strip()
+            if not document_id:
+                raise ValueError("append_doc_text requires document_id.")
+            return f"https://docs.googleapis.com/v1/documents/{document_id}:batchUpdate"
+    if app == "sheets":
+        if operation == "create_sheet":
+            return "https://sheets.googleapis.com/v4/spreadsheets"
+        if operation in {"update_values", "append_values"}:
+            spreadsheet_id = str(tool_input.get("spreadsheet_id") or "").strip()
+            value_range = str(tool_input.get("range") or "").strip()
+            if not spreadsheet_id or not value_range:
+                raise ValueError(f"{operation} requires spreadsheet_id and range.")
+            action = "append" if operation == "append_values" else "values"
+            suffix = f":append" if operation == "append_values" else ""
+            return f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}/values/{value_range}{suffix}"
+    if app == "gmail" and operation == "create_draft":
+        return "https://gmail.googleapis.com/gmail/v1/users/me/drafts"
+    raise ValueError(f"Unsupported Google Workspace operation: {app}.{operation}")
+
+
+def _google_method(operation: str) -> str:
+    if operation in {"update_event", "update_values"}:
+        return "PUT"
+    if operation == "delete_event":
+        return "DELETE"
+    return "POST"
+
+
+def _google_payload(app: str, operation: str, tool_input: dict[str, Any]) -> dict[str, Any]:
+    extra = _json_object(tool_input.get("payload"))
+    if app == "calendar":
+        if operation == "delete_event":
+            return extra
+        title = str(tool_input.get("title") or "").strip()
+        start = str(tool_input.get("start") or "").strip()
+        end = str(tool_input.get("end") or "").strip()
+        if not title or not start or not end:
+            raise ValueError(f"{operation} requires title, start, and end.")
+        payload = {
+            "summary": title,
+            "description": str(tool_input.get("description") or "").strip(),
+            "start": {"dateTime": start, "timeZone": str(tool_input.get("timezone") or "UTC").strip()},
+            "end": {"dateTime": end, "timeZone": str(tool_input.get("timezone") or "UTC").strip()},
+        }
+        attendees = _email_list(tool_input.get("attendees"))
+        if attendees:
+            payload["attendees"] = [{"email": address} for address in attendees]
+        payload.update(extra)
+        return payload
+    if app == "drive":
+        title = str(tool_input.get("title") or "").strip()
+        if operation == "create_folder":
+            if not title:
+                raise ValueError("create_folder requires title.")
+            payload = {"name": title, "mimeType": "application/vnd.google-apps.folder"}
+            folder_id = str(tool_input.get("folder_id") or "").strip()
+            if folder_id:
+                payload["parents"] = [folder_id]
+            payload.update(extra)
+            return payload
+        if operation == "upload_file":
+            local_path = str(tool_input.get("path") or "").strip()
+            if not title or not local_path:
+                raise ValueError("upload_file requires title and path.")
+            payload = {
+                "metadata": {
+                    "name": title,
+                    "mimeType": str(tool_input.get("mime_type") or "application/octet-stream").strip(),
+                    "parents": [str(tool_input.get("folder_id")).strip()] if tool_input.get("folder_id") else [],
+                },
+                "local_path": local_path,
+                "upload_status": "not_uploaded",
+            }
+            payload.update(extra)
+            return payload
+        if operation == "share_file":
+            recipients = _email_list(tool_input.get("recipients"))
+            if not recipients:
+                raise ValueError("share_file requires recipients.")
+            role = str(tool_input.get("role") or "reader").strip()
+            return {"permissions": [{"type": "user", "role": role, "emailAddress": address} for address in recipients], **extra}
+    if app == "docs":
+        title = str(tool_input.get("title") or "").strip()
+        body = str(tool_input.get("body") or "").strip()
+        if operation == "create_doc":
+            if not title:
+                raise ValueError("create_doc requires title.")
+            payload = {"title": title}
+            if body:
+                payload["initial_text"] = body
+                payload["follow_up_batch_update_required"] = True
+            payload.update(extra)
+            return payload
+        if operation == "append_doc_text":
+            if not body:
+                raise ValueError("append_doc_text requires body.")
+            payload = {"requests": [{"insertText": {"location": {"index": 1}, "text": body}}]}
+            payload.update(extra)
+            return payload
+    if app == "sheets":
+        title = str(tool_input.get("title") or "").strip()
+        values = _json_list(tool_input.get("values"), limit=API_OPERATION_MAX_RECORDS)
+        if operation == "create_sheet":
+            if not title:
+                raise ValueError("create_sheet requires title.")
+            payload = {"properties": {"title": title}}
+            if values:
+                payload["initial_values"] = values
+            payload.update(extra)
+            return payload
+        if operation in {"update_values", "append_values"}:
+            if not values:
+                raise ValueError(f"{operation} requires values.")
+            payload = {"range": str(tool_input.get("range") or "").strip(), "majorDimension": "ROWS", "values": values}
+            payload.update(extra)
+            return payload
+    if app == "gmail" and operation == "create_draft":
+        recipients = _email_list(tool_input.get("recipients") or tool_input.get("to"))
+        title = str(tool_input.get("title") or tool_input.get("subject") or "").strip()
+        body = str(tool_input.get("body") or "").strip()
+        if not recipients or not title or not body:
+            raise ValueError("create_draft requires recipients, title/subject, and body.")
+        return {"message": {"to": recipients, "subject": title, "body": body, "raw_status": "not_encoded"}, **extra}
+    raise ValueError(f"Unsupported Google Workspace payload: {app}.{operation}")
+
+
+def _google_scopes(app: str, operation: str) -> list[str]:
+    if app == "calendar":
+        return ["https://www.googleapis.com/auth/calendar.events"]
+    if app == "drive":
+        return ["https://www.googleapis.com/auth/drive.file"]
+    if app == "docs":
+        return ["https://www.googleapis.com/auth/documents"]
+    if app == "sheets":
+        return ["https://www.googleapis.com/auth/spreadsheets"]
+    if app == "gmail":
+        return ["https://www.googleapis.com/auth/gmail.compose"]
+    return []
+
+
+def _google_approval_required(operation: str) -> bool:
+    return operation not in set()
+
+
+def _google_target(tool_input: dict[str, Any]) -> dict[str, str]:
+    return {
+        "calendar_id": str(tool_input.get("calendar_id") or "").strip(),
+        "event_id": str(tool_input.get("event_id") or "").strip(),
+        "file_id": str(tool_input.get("file_id") or "").strip(),
+        "folder_id": str(tool_input.get("folder_id") or "").strip(),
+        "document_id": str(tool_input.get("document_id") or "").strip(),
+        "spreadsheet_id": str(tool_input.get("spreadsheet_id") or "").strip(),
+        "range": str(tool_input.get("range") or "").strip(),
+    }
 
 
 def _api_operation_packet(
