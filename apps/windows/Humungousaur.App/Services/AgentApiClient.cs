@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Humungousaur.App.Models;
@@ -246,7 +247,8 @@ public sealed class AgentApiClient
 
     private async Task<JsonObject> PostJsonObjectAsync(string route, JsonObject payload)
     {
-        using var response = await _http.PostAsJsonAsync(new Uri(_baseUri, route), payload, JsonOptions);
+        using var content = new StringContent(payload.ToJsonString(JsonOptions), Encoding.UTF8, "application/json");
+        using var response = await _http.PostAsync(new Uri(_baseUri, route), content);
         await EnsureSuccessAsync(response, route);
         var node = await response.Content.ReadFromJsonAsync<JsonObject>(JsonOptions);
         return node ?? [];
