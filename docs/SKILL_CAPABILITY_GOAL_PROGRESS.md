@@ -37,7 +37,8 @@ These slices have been implemented, smoke-tested, regression-tested, committed, 
 | `ef662a2` | Design system artifacts | Brand-guideline and theme-pack create/inspect tools with Markdown/JSON/CSS sidecars. |
 | `1e296e1` | Visual artifacts | Diagram, Mermaid, Excalidraw-compatible JSON, and infographic plan tools. |
 | `045cb2f` | Presentation planning | Native presentation plan create/inspect tools with audience, goal, narrative arc, slide plan, visual intent, speaker notes, evidence refs, risks, and status. |
-| current slice | Google Workspace operation packets | Native local packets for Calendar, Drive, Docs, Sheets, and Gmail-style Google operations, with OAuth scopes, approval requirements, payload previews, and `not_executed` status. |
+| `b2f6679` | Google Workspace operation packets | Native local packets for Calendar, Drive, Docs, Sheets, and Gmail-style Google operations, with OAuth scopes, approval requirements, payload previews, and `not_executed` status. |
+| current slice | Network and DNS safety diagnostics | Native bounded DNS lookup, HTTP endpoint check, and single-port TCP connectivity probe tools. |
 
 ## Current Native Capability Areas
 
@@ -59,6 +60,7 @@ Humungousaur now has native tool domains for:
 - Files, PDFs, OCR, and shell/file utilities
 - Media/storyboard/music/video planning
 - Memory search/write/summary/profile
+- Network/DNS/HTTP/TCP diagnostics
 - Office DOCX/PPTX/presentation plan artifacts
 - OS/screen/keyboard/mouse/window/clipboard control surfaces
 - Personal planning and contact notes
@@ -86,8 +88,8 @@ The recurring verification pattern for each completed slice has been:
 
 Latest verified results:
 
-- Full skill smoke: `399` sections, `0` failures.
-- Full regression after Google Workspace packet slice: `372 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
+- Full skill smoke: `403` sections, `0` failures.
+- Full regression after network diagnostic slice: `376 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
 - The warnings are from `openpyxl` datetime deprecation during XLSX tests, not from the new skill slices.
 
 ## Still To Do
@@ -118,16 +120,16 @@ Needed work:
 - Tone/persona/evidence preservation for creative writing tasks.
 - Smoke tests for story, poem, song outline, and revision workflows.
 
-### 3. Network And DNS Safety
+### 3. Network And DNS Live Change Management
 
-Current weak signal: mostly `system_status` and shell.
+Current status: native diagnostic tools are being added for DNS lookup, HTTP endpoint checks, and single-port TCP probes. Remaining work is safe live change management for DNS/proxy/firewall/tunnel settings.
 
 Needed work:
 
-- Native DNS lookup diagnostic tool with safe limits.
-- Native HTTP endpoint health check tool with timeout, redirect, TLS, and status metadata.
-- Native port/connectivity probe with approval/risk boundaries.
-- Smoke tests using localhost or deterministic safe fixtures.
+- Native rollback-plan artifact for DNS/proxy/firewall/tunnel changes.
+- Approval-gated setting change packets for Windows DNS/proxy/firewall operations.
+- Admin privilege detection and blocked-state reporting.
+- Before/after diagnostics for approved live changes.
 
 ### 4. GitHub And CI Workflows
 

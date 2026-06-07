@@ -16,6 +16,7 @@ from .files import default_tools as default_file_tools
 from .memory import default_memory_tools
 from .media import default_media_tools
 from .office import default_office_tools
+from .network import default_network_tools
 from .os_control import default_os_tools
 from .personal import default_personal_tools
 from .plugins import default_plugin_tools
@@ -74,6 +75,7 @@ def default_tools(config=None) -> dict[str, Tool]:
     tools.update(default_workflow_tools())
     tools.update(default_memory_tools())
     tools.update(default_media_tools())
+    tools.update(default_network_tools())
     tools.update(default_office_tools())
     tools.update(default_personal_tools())
     tools.update(default_research_tools())

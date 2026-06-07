@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import argparse
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import importlib.util
 import json
 from pathlib import Path
 import re
 import sys
+import threading
 from typing import Any
 import uuid
 
@@ -110,6 +112,7 @@ def main() -> int:
     _smoke_visuals(record, tools, config)
     _smoke_channels(record, tools, config)
     _smoke_rss(record, tools, config)
+    _smoke_network(record, tools, config)
     _smoke_core_surfaces(record, tools, config)
     _smoke_skill_task_surfaces(record, tools, config)
 
@@ -800,6 +803,46 @@ def _smoke_visuals(record, tools: dict[str, Any], config: AgentConfig) -> None:
     record("visuals", "excalidraw_diagram_create", _ok(excalidraw) and excalidraw.output.get("element_count", 0) >= 7, _tool_payload(excalidraw))
     record("visuals", "infographic_plan_create", _ok(infographic) and infographic.output.get("metric_count") == 1, _tool_payload(infographic))
     record("visuals", "infographic_plan_inspect", _ok(infographic_inspect) and infographic_inspect.output.get("accessibility_note_count") == 1, _tool_payload(infographic_inspect))
+
+
+class _SkillSmokeHttpHandler(BaseHTTPRequestHandler):
+    def do_HEAD(self) -> None:
+        self.send_response(204)
+        self.send_header("X-Humungousaur-Smoke", "network")
+        self.end_headers()
+
+    def do_GET(self) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"Humungousaur skill smoke network endpoint")
+
+    def log_message(self, format: str, *args: Any) -> None:
+        return
+
+
+def _smoke_network(record, tools: dict[str, Any], config: AgentConfig) -> None:
+    dns = tools["dns_lookup"].execute({"hostname": "localhost", "record_types": ["A", "AAAA"], "reason": "Verify native DNS diagnostic skill capability."}, config)
+    record("network", "dns_lookup", _ok(dns) and dns.output.get("resolved") is True, _tool_payload(dns))
+
+    server = HTTPServer(("127.0.0.1", 0), _SkillSmokeHttpHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = int(server.server_address[1])
+        http = tools["http_endpoint_check"].execute(
+            {"url": f"http://127.0.0.1:{port}/health", "method": "GET", "timeout_seconds": 2, "reason": "Verify native HTTP endpoint diagnostic skill capability."},
+            config,
+        )
+        tcp = tools["tcp_connectivity_probe"].execute({"host": "127.0.0.1", "port": port, "timeout_seconds": 2, "reason": "Verify native TCP diagnostic skill capability."}, config)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+    closed_tcp = tools["tcp_connectivity_probe"].execute({"host": "127.0.0.1", "port": port, "timeout_seconds": 0.2, "reason": "Verify closed TCP diagnostic skill capability."}, config)
+    record("network", "http_endpoint_check", _ok(http) and http.output.get("status_code") == 200, _tool_payload(http))
+    record("network", "tcp_connectivity_probe_open", _ok(tcp) and tcp.output.get("reachable") is True, _tool_payload(tcp))
+    record("network", "tcp_connectivity_probe_closed", _ok(closed_tcp) and closed_tcp.output.get("reachable") is False, _tool_payload(closed_tcp))
 
 
 def _prepare_script_fixtures(config: AgentConfig) -> None:

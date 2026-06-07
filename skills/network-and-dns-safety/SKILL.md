@@ -20,6 +20,9 @@ Use for DNS/ad-block/privacy services, proxy settings, tunnels, firewall rules, 
 
 ## Tool Map
 
+- `dns_lookup`
+- `http_endpoint_check`
+- `tcp_connectivity_probe`
 - `system_status`
 - `run_shell_command`
 - `web-data-extraction`
@@ -29,17 +32,20 @@ Use for DNS/ad-block/privacy services, proxy settings, tunnels, firewall rules, 
 ## Workflow
 
 1. Clarify the problem or desired network change.
-2. Gather non-destructive diagnostics first.
-3. Identify privacy/security impact.
-4. Propose a minimal reversible change.
-5. Apply only after approval.
-6. Verify connectivity and rollback path.
+2. Use `dns_lookup`, `http_endpoint_check`, and `tcp_connectivity_probe` for bounded native diagnostics before shell commands.
+3. Gather non-destructive diagnostics first.
+4. Identify privacy/security impact.
+5. Propose a minimal reversible change.
+6. Apply changes only after approval.
+7. Verify connectivity and rollback path.
 
 ## Native Implementation Boundaries
 
 - Use native shell/status tools when approved.
 - Do not import OpenClaw AdGuard/DNS plugins.
 - Do not modify network settings through hidden scripts.
+- Native network tools are diagnostic only; they do not edit DNS, proxy, firewall, tunnel, or adapter settings.
+- TCP probing is limited to a single host and port, not scan ranges.
 
 ## Safety And Approval
 
@@ -50,6 +56,9 @@ Use for DNS/ad-block/privacy services, proxy settings, tunnels, firewall rules, 
 ## Verification
 
 - Before/after diagnostics should be recorded.
+- DNS diagnostics should report resolved state, address records, and address classification.
+- HTTP diagnostics should report status, redirects, TLS metadata, headers, and errors.
+- TCP diagnostics should report reachable state for the single requested host and port.
 - Confirm target service behavior.
 - Report if admin privileges blocked action.
 
