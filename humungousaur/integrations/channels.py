@@ -162,6 +162,209 @@ def channel_doctor(config: AgentConfig, channel_id: str | None = None) -> dict[s
     }
 
 
+def channel_integration_smoke(
+    config: AgentConfig,
+    *,
+    channel_ids: list[str] | None = None,
+    prepare_messages: bool = True,
+    dry_run_sends: bool = True,
+) -> dict[str, Any]:
+    from humungousaur.integrations.channel_listeners import channel_listener_status
+
+    normalized = config.normalized()
+    channels = load_channel_catalog()
+    selected_ids = [_clean_id(item) for item in (channel_ids or []) if _clean_id(item)]
+    if selected_ids:
+        selected = set(selected_ids)
+        channels = [channel for channel in channels if channel.get("channel_id") in selected]
+    elif any(_saved_setup_enabled(item) for item in load_channel_setups(normalized).get("channels", {}).values() if isinstance(item, dict)):
+        enabled_ids = {
+            str(channel_id)
+            for channel_id, setup in load_channel_setups(normalized).get("channels", {}).items()
+            if isinstance(setup, dict) and _saved_setup_enabled(setup)
+        }
+        channels = [channel for channel in channels if channel.get("channel_id") in enabled_ids]
+    else:
+        priority = {"telegram", "slack", "discord", "whatsapp", "sms", "webchat", "googlechat", "msteams"}
+        channels = [channel for channel in channels if channel.get("channel_id") in priority]
+    status_by_id = {
+        item["channel_id"]: item
+        for item in channel_setup_status(normalized, channel_id=None).get("channels", [])
+        if isinstance(item, dict)
+    }
+    listener_by_id = {
+        item["channel_id"]: item
+        for item in channel_listener_status(normalized).get("listeners", [])
+        if isinstance(item, dict)
+    }
+    doctor = channel_doctor(normalized)
+    findings_by_id: dict[str, list[dict[str, Any]]] = {}
+    for finding in doctor.get("findings", []):
+        if isinstance(finding, dict):
+            findings_by_id.setdefault(str(finding.get("channel_id", "")), []).append(finding)
+    setups = load_channel_setups(normalized)
+    smoke_config = AgentConfig(
+        workspace=normalized.workspace,
+        data_dir=normalized.data_dir,
+        max_file_bytes=normalized.max_file_bytes,
+        max_search_results=normalized.max_search_results,
+        dry_run=True,
+        planner_provider=normalized.planner_provider,
+        model_provider=normalized.model_provider,
+        model_name=normalized.model_name,
+        model_base_url=normalized.model_base_url,
+        model_api_key_env=normalized.model_api_key_env,
+        model_timeout_seconds=normalized.model_timeout_seconds,
+        runtime_secrets=normalized.runtime_secrets,
+        allowed_read_roots=normalized.allowed_read_roots,
+        allowed_write_roots=normalized.allowed_write_roots,
+    ).normalized()
+    results = [
+        _channel_smoke_result(
+            normalized,
+            smoke_config,
+            channel,
+            status_by_id.get(channel["channel_id"], {}),
+            listener_by_id.get(channel["channel_id"], {}),
+            findings_by_id.get(channel["channel_id"], []),
+            setups,
+            prepare_messages=prepare_messages,
+            dry_run_sends=dry_run_sends,
+        )
+        for channel in channels
+    ]
+    ready_count = sum(1 for item in results if item.get("readiness") == "ready")
+    partial_count = sum(1 for item in results if item.get("readiness") == "partial")
+    blocked_count = sum(1 for item in results if item.get("readiness") == "blocked")
+    overall = "ready" if results and blocked_count == 0 and partial_count == 0 else "needs_setup"
+    if results and ready_count == 0 and partial_count > 0 and blocked_count == 0:
+        overall = "partial"
+    return {
+        "overall_status": overall,
+        "channel_count": len(results),
+        "ready_count": ready_count,
+        "partial_count": partial_count,
+        "blocked_count": blocked_count,
+        "prepare_messages": bool(prepare_messages),
+        "dry_run_sends": bool(dry_run_sends),
+        "channels": results,
+        "source": "humungousaur_native_channel_smoke",
+        "live_send_performed": False,
+    }
+
+
+def _channel_smoke_result(
+    config: AgentConfig,
+    smoke_config: AgentConfig,
+    channel: dict[str, Any],
+    status: dict[str, Any],
+    listener: dict[str, Any],
+    findings: list[dict[str, Any]],
+    setups: dict[str, Any],
+    *,
+    prepare_messages: bool,
+    dry_run_sends: bool,
+) -> dict[str, Any]:
+    channel_id = str(channel.get("channel_id", ""))
+    saved = setups.get("channels", {}).get(channel_id, {}) if isinstance(setups.get("channels", {}), dict) else {}
+    if not isinstance(saved, dict):
+        saved = {}
+    defaults = saved.get("conversation_defaults", {}) if isinstance(saved.get("conversation_defaults", {}), dict) else {}
+    conversation_id = str(defaults.get("conversation_id") or _smoke_conversation_id(channel))
+    text = f"Humungousaur channel integration smoke for {channel.get('display_name', channel_id)}. This message was not sent."
+    prepared: dict[str, Any] | None = None
+    prepare_error = ""
+    if prepare_messages:
+        try:
+            prepared = prepare_outbound_message(
+                config,
+                channel_id=channel_id,
+                conversation_id=conversation_id,
+                text=text,
+                metadata={"source": "channel_integration_smoke", "dry_run": True},
+                reason="Verify desktop/channel integration envelope preparation without sending.",
+            )
+        except Exception as exc:
+            prepare_error = str(exc)
+    dry_run: dict[str, Any] | None = None
+    dry_run_error = ""
+    if dry_run_sends:
+        try:
+            dry_run = send_outbound_message(
+                smoke_config,
+                channel_id=channel_id,
+                conversation_id=conversation_id,
+                text=text,
+                metadata={"source": "channel_integration_smoke", "dry_run": True},
+                reason="Verify approval-gated send path in dry-run mode.",
+            )
+        except Exception as exc:
+            dry_run_error = str(exc)
+    missing_credentials = list(status.get("missing_send_env", [])) if isinstance(status.get("missing_send_env", []), list) else []
+    listener_missing = list(listener.get("missing_env", [])) if isinstance(listener.get("missing_env", []), list) else []
+    send_implemented = bool(status.get("send_implemented", False))
+    send_ready = bool(status.get("ready_for_send", False))
+    listener_required = bool(channel.get("runtime", {}).get("listener_required_for_inbound", False)) if isinstance(channel.get("runtime", {}), dict) else False
+    listener_ready = bool(listener.get("ready", False))
+    prepare_ok = not prepare_messages or (prepared is not None and prepared.get("status") == "prepared_not_sent")
+    dry_run_ok = not dry_run_sends or (dry_run is not None and dry_run.get("status") == "dry_run_not_sent")
+    if prepare_ok and dry_run_ok and ((not send_implemented) or send_ready) and ((not listener_required) or listener_ready):
+        readiness = "ready"
+    elif prepare_ok and dry_run_ok:
+        readiness = "partial"
+    else:
+        readiness = "blocked"
+    blockers = []
+    if prepare_error:
+        blockers.append({"kind": "prepare_error", "detail": prepare_error})
+    if dry_run_error:
+        blockers.append({"kind": "dry_run_error", "detail": dry_run_error})
+    if missing_credentials:
+        blockers.append({"kind": "missing_send_credentials", "detail": missing_credentials})
+    if listener_missing:
+        blockers.append({"kind": "missing_listener_credentials", "detail": listener_missing})
+    if listener_required and not listener_ready:
+        blockers.append({"kind": "listener_not_ready", "detail": listener.get("listener_mode", "")})
+    return {
+        "channel_id": channel_id,
+        "display_name": channel.get("display_name", channel.get("name", "")),
+        "readiness": readiness,
+        "conversation_id": conversation_id,
+        "setup_enabled": bool(saved.get("enabled", False)),
+        "prepared_outbox_ready": prepare_ok,
+        "prepared_message_id": prepared.get("message_id", "") if prepared else "",
+        "dry_run_send_ready": dry_run_ok,
+        "dry_run_message_id": dry_run.get("message_id", "") if dry_run else "",
+        "direct_send_implemented": send_implemented,
+        "direct_send_ready": send_ready,
+        "send_mode": status.get("send_mode", ""),
+        "missing_send_env": missing_credentials,
+        "listener_required": listener_required,
+        "listener_ready": listener_ready,
+        "listener_mode": listener.get("listener_mode", ""),
+        "webhook_path": listener.get("webhook_path", ""),
+        "missing_listener_env": listener_missing,
+        "doctor_findings": findings,
+        "blockers": blockers,
+    }
+
+
+def _saved_setup_enabled(setup: dict[str, Any]) -> bool:
+    return bool(setup.get("enabled", False))
+
+
+def _smoke_conversation_id(channel: dict[str, Any]) -> str:
+    target = str(_official_send_contract(channel).get("target", "conversation_id"))
+    if target == "env_webhook":
+        return "configured-webhook"
+    channel_id = str(channel.get("channel_id", "channel"))
+    if channel_id == "sms":
+        return "+15555550100"
+    if channel_id == "whatsapp":
+        return "+15555550100"
+    return f"{channel_id}-smoke-conversation"
+
+
 def prepare_outbound_message(
     config: AgentConfig,
     *,

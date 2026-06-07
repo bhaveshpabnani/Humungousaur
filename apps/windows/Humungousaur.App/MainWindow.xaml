@@ -268,10 +268,14 @@
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <TextBlock Text="Doctor" FontWeight="SemiBold" VerticalAlignment="Center" />
                                         <Button Content="Run doctor" Click="RunChannelDoctorButton_Click" />
+                                        <Button Content="Run smoke" Click="RunChannelSmokeButton_Click" />
                                     </StackPanel>
                                     <TextBlock x:Name="ChannelPolicyText" TextWrapping="WrapWholeWords" Opacity="0.76" />
                                     <ScrollViewer MaxHeight="132">
-                                        <TextBlock x:Name="ChannelDoctorText" TextWrapping="WrapWholeWords" />
+                                        <StackPanel Spacing="8">
+                                            <TextBlock x:Name="ChannelDoctorText" TextWrapping="WrapWholeWords" />
+                                            <TextBlock x:Name="ChannelSmokeText" TextWrapping="WrapWholeWords" />
+                                        </StackPanel>
                                     </ScrollViewer>
                                 </StackPanel>
                             </Grid>

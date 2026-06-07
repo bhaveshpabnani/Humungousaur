@@ -12,6 +12,7 @@ from humungousaur.tools.channel_tools import (
     ChannelActionPrepareTool,
     ChannelCatalogTool,
     ChannelDoctorTool,
+    ChannelIntegrationSmokeTool,
     ChannelManifestTool,
     ChannelListenerStatusTool,
     ChannelMessagePrepareTool,
@@ -130,6 +131,8 @@ class ChannelToolTests(unittest.TestCase):
 
         self.assertIn("channel_action_prepare", tools)
         self.assertEqual(tools["channel_action_prepare"].capability_group, "channels")
+        self.assertIn("channel_integration_smoke", tools)
+        self.assertEqual(tools["channel_integration_smoke"].capability_group, "channels")
 
     def test_channel_setup_save_status_and_doctor_report_missing_env_without_secrets(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -188,6 +191,42 @@ class ChannelToolTests(unittest.TestCase):
         self.assertEqual(status["channels"][0]["missing_send_env"], [])
         self.assertTrue(status["channels"][0]["ready_for_send"])
         self.assertTrue(listener["listeners"][0]["polling_available"])
+
+    def test_channel_integration_smoke_reports_runtime_secret_readiness_without_live_send(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(
+                workspace=workspace,
+                data_dir=workspace / "artifacts",
+                runtime_secrets={"TELEGRAM_BOT_TOKEN": "tg-runtime"},
+            ).normalized()
+            ChannelSetupSaveTool().execute(
+                {
+                    "channel_id": "telegram",
+                    "enabled": True,
+                    "conversation_defaults": {"conversation_id": "42", "conversation_type": "dm"},
+                    "secret_refs": {"bot_token": "TELEGRAM_BOT_TOKEN"},
+                    "secret_configured": {"bot_token": True},
+                },
+                config,
+            )
+
+            with patch.dict("os.environ", {}, clear=True):
+                result = ChannelIntegrationSmokeTool().execute(
+                    {"channel_ids": ["telegram"], "reason": "Verify channel smoke."},
+                    config,
+                )
+                outbox = ChannelOutboxTool().execute({"limit": 10}, config)
+
+        self.assertEqual(result.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(result.output["channel_count"], 1)
+        self.assertEqual(result.output["channels"][0]["readiness"], "ready")
+        self.assertTrue(result.output["channels"][0]["prepared_outbox_ready"])
+        self.assertTrue(result.output["channels"][0]["dry_run_send_ready"])
+        self.assertTrue(result.output["channels"][0]["direct_send_ready"])
+        self.assertTrue(result.output["channels"][0]["listener_ready"])
+        self.assertFalse(result.output["live_send_performed"])
+        self.assertGreaterEqual(len(outbox.output["messages"]), 2)
 
     def test_channel_inbound_routes_to_interaction_harness_and_prepares_reply(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

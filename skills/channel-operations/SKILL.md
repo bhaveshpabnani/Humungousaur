@@ -13,6 +13,7 @@ description: Concrete operations playbook for configuring, testing, and safely u
 - `channel_setup_save`
 - `channel_setup_status`
 - `channel_doctor`
+- `channel_integration_smoke`
 - `channel_listener_status`
 - `channel_listener_tick`
 - `channel_webhook_ingest`
@@ -29,7 +30,8 @@ Use this skill when the task involves onboarding, diagnosing, or sending through
 2. Call `channel_manifest` for the exact selected channel.
 3. Call `channel_setup_requirements` to read required env vars, fields, direct-send support, and policy defaults.
 4. Call `channel_doctor` before sending or declaring setup complete.
-5. Call `channel_listener_status` before declaring the agent is listening.
+5. Call `channel_integration_smoke` for a non-sending readiness report covering setup, prepared outbox, dry-run send wiring, and listener state.
+6. Call `channel_listener_status` before declaring the agent is listening.
 
 ## Setup State
 
@@ -48,14 +50,15 @@ Do not put raw tokens, app secrets, OAuth refresh tokens, phone auth state, QR s
 
 For a non-destructive smoke:
 
-1. Prepare a message with `channel_message_prepare`.
-2. Prepare reactions, file shares, thread replies, pins, typing indicators, or read receipts with `channel_action_prepare`.
-3. Inspect `channel_outbox`.
-4. For inbound harness smoke, pass an inbound channel message with explicit `requires_response:true`.
-5. For webhook smoke, use `channel_webhook_ingest` with a structured provider payload.
-6. For Telegram listener smoke, use `channel_listener_tick` after enabling the channel and configuring `TELEGRAM_BOT_TOKEN`.
-7. Confirm a prepared reply exists only for non-ambient request messages.
-8. For external send smoke, use `channel_message_send` only with approval and a test recipient or room.
+1. Run `channel_integration_smoke` for the selected channel.
+2. Prepare a message with `channel_message_prepare` when you need to inspect the exact outbound envelope.
+3. Prepare reactions, file shares, thread replies, pins, typing indicators, or read receipts with `channel_action_prepare`.
+4. Inspect `channel_outbox`.
+5. For inbound harness smoke, pass an inbound channel message with explicit `requires_response:true`.
+6. For webhook smoke, use `channel_webhook_ingest` with a structured provider payload.
+7. For Telegram listener smoke, use `channel_listener_tick` after enabling the channel and configuring `TELEGRAM_BOT_TOKEN`.
+8. Confirm a prepared reply exists only for non-ambient request messages.
+9. For external send smoke, use `channel_message_send` only with approval and a test recipient or room.
 
 ## Group And Ambient Behavior
 

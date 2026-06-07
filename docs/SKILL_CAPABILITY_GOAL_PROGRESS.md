@@ -11,7 +11,7 @@ Smoke test each skill task one by one, identify skills that are only prompt/proc
 - Repository state reviewed during the desktop channel-onboarding integration slice.
 - Current workspace skill count: `132`.
 - Current tool-domain folders: `33`.
-- Latest full skill smoke result: `424` sections, `0` failures.
+- Latest full skill smoke result: `428` sections, `0` failures.
 - The goal is still active. The current work proves strong incremental progress, but not exhaustive completion across every skill and external/live integration.
 
 ## Completed Capability Slices
@@ -44,6 +44,7 @@ These slices have been implemented, smoke-tested, regression-tested, committed, 
 | `e35444f` | GitHub and CI workflow artifacts | Native GitHub issue packets, PR packets, CI failure reports, repo-state reports, artifact inspection, skill docs, and smoke coverage without requiring live GitHub credentials. |
 | current slice | Desktop channel-operations integration | Windows app allowlist/group allowlist onboarding, outbound channel message preparation, approval-gated send flow, API channel-message routes, and API regression coverage. |
 | current slice | Desktop channel onboarding | Backend channel setup requirements endpoint plus Windows app provider-specific required secrets, setup steps, delivery/policy/runtime summaries, and setup doctor results. |
+| current slice | Channel integration smoke | Native non-sending channel readiness report covering setup/status, doctor blockers, prepared outbox, dry-run send wiring, listener state, API route, app button, skill docs, and smoke coverage. |
 
 ## Current Native Capability Areas
 
@@ -62,7 +63,7 @@ Humungousaur now has native tool domains for:
 - Cognition, memory curation, persona evolution, automations, and multi-agent coordination
 - Creative writing, songwriting, and revision artifacts
 - Design systems and theme packs
-- Desktop app channel setup requirements, setup doctor, allowlists, runtime settings, voice settings, and outbound channel operations
+- Desktop app channel setup requirements, setup doctor, non-sending channel smoke, allowlists, runtime settings, voice settings, and outbound channel operations
 - External integration status surfaces
 - Files, PDFs, OCR, and shell/file utilities
 - GitHub issue/PR/CI/repo-state workflow artifacts
@@ -97,8 +98,8 @@ The recurring verification pattern for each completed slice has been:
 
 Latest verified results:
 
-- Full skill smoke: `424` sections, `0` failures.
-- Full regression after desktop channel-operations slice: `390 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
+- Full skill smoke after channel integration smoke slice: `428` sections, `0` failures.
+- Full regression after channel integration smoke slice: `391 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
 - The warnings are from `openpyxl` datetime deprecation during XLSX tests, not from the new skill slices.
 
 ## Still To Do
@@ -185,7 +186,7 @@ Needed work:
 
 ### 8. Desktop App End-To-End
 
-Current status: the Windows app exposes runtime start/stop, provider/model settings, voice settings, provider-aware channel setup requirements, channel setup doctor, channel allowlists, listener status, inbound preview, prepared outbound messages, and approval-gated channel sends. Remaining work is full live validation and richer daily-use panels.
+Current status: the Windows app exposes runtime start/stop, provider/model settings, voice settings, provider-aware channel setup requirements, channel setup doctor, non-sending channel integration smoke, channel allowlists, listener status, inbound preview, prepared outbound messages, and approval-gated channel sends. Remaining work is full live validation and richer daily-use panels.
 
 Needed work:
 
@@ -196,7 +197,7 @@ Needed work:
 
 ### 9. Live Channel Integrations
 
-Current status: channel manifests, setup requirements, setup/status, setup doctor, listener status, webhook ingest, inbound preview, prepared outbox, allowlists, and approval-gated outbound send are wired through the backend and Windows app. Live provider-specific execution still needs credentialed smoke.
+Current status: channel manifests, setup requirements, setup/status, setup doctor, non-sending integration smoke, listener status, webhook ingest, inbound preview, prepared outbox, allowlists, and approval-gated outbound send are wired through the backend and Windows app. Live provider-specific execution still needs credentialed smoke.
 
 Needed work:
 

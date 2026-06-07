@@ -27,6 +27,10 @@ Use when the task involves multiple channels, channel onboarding, gateway manife
 - `channel_setup_requirements`
 - `channel_setup_status`
 - `channel_doctor`
+- `channel_integration_smoke`
+- `channel_listener_status`
+- `channel_webhook_ingest`
+- `channel_action_prepare`
 - `channel_message_prepare`
 - `channel_message_send`
 - `channel_outbox`
@@ -37,11 +41,12 @@ Use when the task involves multiple channels, channel onboarding, gateway manife
 
 1. Start with `channel_catalog` or `channel_manifest` for the exact channel.
 2. Inspect setup requirements and status before assuming direct send support.
-3. Preserve structured metadata for inbound events; do not infer routing from message text alone.
-4. Apply channel policy: allowlist, pairing, mention, ambient room, bot-loop, and approval boundaries.
-5. Route accepted inbound messages as channel stimuli into the normal interaction harness.
-6. For outbound work, prepare an outbox envelope first unless a direct send is explicitly approved and configured.
-7. Report the exact delivery status: prepared, blocked, failed, dry run, or sent.
+3. Run `channel_integration_smoke` for non-sending readiness evidence.
+4. Preserve structured metadata for inbound events; do not infer routing from message text alone.
+5. Apply channel policy: allowlist, pairing, mention, ambient room, bot-loop, and approval boundaries.
+6. Route accepted inbound messages as channel stimuli into the normal interaction harness.
+7. For outbound work, prepare an outbox envelope first unless a direct send is explicitly approved and configured.
+8. Report the exact delivery status: prepared, blocked, failed, dry run, or sent.
 
 ## Native Implementation Boundaries
 
@@ -58,6 +63,7 @@ Use when the task involves multiple channels, channel onboarding, gateway manife
 ## Verification
 
 - `channel_doctor` explains missing credentials or runtime gaps.
+- `channel_integration_smoke` proves prepared envelope creation, dry-run send wiring, listener readiness, and exact blockers without live delivery.
 - `channel_outbox` proves prepared messages.
 - A sent claim requires `channel_message_send` status `sent`.
 - Ambient and bot-authored events should produce explicit suppression or observation reasons.

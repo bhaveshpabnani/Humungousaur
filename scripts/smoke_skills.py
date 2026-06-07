@@ -1113,6 +1113,15 @@ def _smoke_channels(record, tools: dict[str, Any], config: AgentConfig) -> None:
         )
         status = tools["channel_setup_status"].execute({"channel_id": channel_id}, config)
         listener = tools["channel_listener_status"].execute({"channel_id": channel_id}, config)
+        integration_smoke = tools["channel_integration_smoke"].execute(
+            {
+                "channel_ids": [channel_id],
+                "prepare_messages": True,
+                "dry_run_sends": True,
+                "reason": f"Run non-sending {channel_id} integration smoke.",
+            },
+            config,
+        )
         prepared = tools["channel_message_prepare"].execute(
             {
                 "channel_id": channel_id,
@@ -1140,6 +1149,16 @@ def _smoke_channels(record, tools: dict[str, Any], config: AgentConfig) -> None:
         record("channels", f"{channel_id}_setup_save", _ok(setup), _tool_payload(setup))
         record("channels", f"{channel_id}_setup_status", _ok(status), _tool_payload(status))
         record("channels", f"{channel_id}_listener_status", _ok(listener), _tool_payload(listener))
+        record(
+            "channels",
+            f"{channel_id}_integration_smoke",
+            _ok(integration_smoke)
+            and integration_smoke.output.get("channel_count") == 1
+            and integration_smoke.output.get("live_send_performed") is False
+            and integration_smoke.output.get("channels", [{}])[0].get("prepared_outbox_ready") is True
+            and integration_smoke.output.get("channels", [{}])[0].get("dry_run_send_ready") is True,
+            _tool_payload(integration_smoke),
+        )
         record(
             "channels",
             f"{channel_id}_message_prepare",

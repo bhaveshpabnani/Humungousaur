@@ -131,6 +131,21 @@ class APITests(unittest.TestCase):
                     {"channel_id": "slack", "runtime_secrets": {"SLACK_BOT_TOKEN": "xoxb-runtime"}},
                 )
                 self.assertEqual(channel_status_with_app_secret["channels"][0]["missing_send_env"], [])
+                channel_smoke = api_post(
+                    base_url,
+                    "/channels/smoke",
+                    {
+                        "channel_id": "slack",
+                        "runtime_secrets": {"SLACK_BOT_TOKEN": "xoxb-runtime"},
+                        "prepare_messages": True,
+                        "dry_run_sends": True,
+                    },
+                )
+                self.assertEqual(channel_smoke["channel_count"], 1)
+                self.assertEqual(channel_smoke["channels"][0]["channel_id"], "slack")
+                self.assertTrue(channel_smoke["channels"][0]["prepared_outbox_ready"])
+                self.assertTrue(channel_smoke["channels"][0]["dry_run_send_ready"])
+                self.assertFalse(channel_smoke["live_send_performed"])
                 channel_doctor = api_get(base_url, "/channels/doctor?channel_id=slack")
                 self.assertEqual(channel_doctor["overall_status"], "needs_setup")
                 saved_setup = api_post(

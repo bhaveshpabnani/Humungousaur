@@ -10,6 +10,7 @@ from humungousaur.integrations.channel_listeners import (
 )
 from humungousaur.integrations.channels import (
     channel_doctor,
+    channel_integration_smoke,
     channel_setup_requirements,
     channel_setup_status,
     find_channel,
@@ -200,6 +201,45 @@ class ChannelDoctorTool(Tool):
             self.risk_level,
             f"Channel doctor finished with {len(warnings)} warning(s).",
             doctor,
+        )
+
+
+class ChannelIntegrationSmokeTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="channel_integration_smoke",
+            description=(
+                "Run a non-sending integration smoke for selected or priority channels. "
+                "The report checks requirements, setup state, listener readiness, prepared outbox creation, and dry-run send wiring."
+            ),
+            risk_level=RiskLevel.MEDIUM,
+            input_schema=object_input_schema(
+                {
+                    "channel_ids": {"type": "array", "items": {"type": "string"}, "maxItems": 20},
+                    "prepare_messages": {"type": "boolean"},
+                    "dry_run_sends": {"type": "boolean"},
+                    "reason": {"type": "string", "description": "Why channel integration readiness should be checked."},
+                }
+            ),
+            capability_group="channels",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        channel_ids = tool_input.get("channel_ids", [])
+        if not isinstance(channel_ids, list):
+            channel_ids = []
+        report = channel_integration_smoke(
+            config,
+            channel_ids=[str(item) for item in channel_ids],
+            prepare_messages=bool(tool_input.get("prepare_messages", True)),
+            dry_run_sends=bool(tool_input.get("dry_run_sends", True)),
+        )
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Channel integration smoke checked {report['channel_count']} channel(s); {report['ready_count']} ready.",
+            report,
         )
 
 
@@ -500,6 +540,7 @@ def default_channel_tools() -> dict[str, Tool]:
         ChannelSetupSaveTool(),
         ChannelSetupStatusTool(),
         ChannelDoctorTool(),
+        ChannelIntegrationSmokeTool(),
         ChannelMessagePrepareTool(),
         ChannelMessageSendTool(),
         ChannelActionPrepareTool(),

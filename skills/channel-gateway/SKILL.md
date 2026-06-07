@@ -13,6 +13,7 @@ description: Operate Humungousaur Gateway chat channels with setup checks, polic
 - `channel_setup_save`
 - `channel_setup_status`
 - `channel_doctor`
+- `channel_integration_smoke`
 - `channel_listener_status`
 - `channel_listener_tick`
 - `channel_webhook_ingest`
@@ -30,8 +31,9 @@ Every channel turn has three layers:
 
 1. Capability manifest: `channel_catalog` or `channel_manifest`.
 2. Setup state: `channel_setup_requirements`, `channel_setup_save`, `channel_setup_status`, `channel_doctor`.
-3. Listener path: `channel_listener_status`, `channel_listener_tick`, or `channel_webhook_ingest`.
-4. Message path: `channel_message_prepare` for audited outbox, or approval-gated `channel_message_send` when a Humungousaur official adapter and credentials exist.
+3. Readiness smoke: `channel_integration_smoke` for non-sending prepared-outbox, dry-run send, credential, and listener evidence.
+4. Listener path: `channel_listener_status`, `channel_listener_tick`, or `channel_webhook_ingest`.
+5. Message path: `channel_message_prepare` for audited outbox, or approval-gated `channel_message_send` when a Humungousaur official adapter and credentials exist.
 
 ## Inbound Workflow
 
@@ -66,8 +68,9 @@ Every channel turn has three layers:
 2. Save only non-secret config with `channel_setup_save`.
 3. Store raw tokens in `.env`, Windows Credential Manager, or another secret provider, not in channel setup JSON.
 4. Run `channel_doctor` and `channel_listener_status` to fix missing env vars, binaries, listener mode, or webhook readiness.
-5. Configure provider webhooks to the local forwarded route `/channels/webhook/{channel_id}` when the channel cannot be long-polled.
-6. Keep allowlists strict for phone-number and group-room surfaces.
+5. Run `channel_integration_smoke` before declaring the channel app-ready.
+6. Configure provider webhooks to the local forwarded route `/channels/webhook/{channel_id}` when the channel cannot be long-polled.
+7. Keep allowlists strict for phone-number and group-room surfaces.
 
 ## Ambient Rooms
 
@@ -83,6 +86,7 @@ Rules:
 
 - Inspect `channel_catalog` or `channel_manifest` before assuming support.
 - Run `channel_doctor` before setup-sensitive work.
+- Run `channel_integration_smoke` to prove non-sending envelope preparation, dry-run send wiring, and readiness blockers.
 - Run `channel_listener_status` before claiming the agent is listening on a channel.
 - Use `channel_listener_tick` for a Telegram polling smoke or `channel_webhook_ingest` for a structured webhook smoke.
 - Check `channel_outbox` for prepared replies.

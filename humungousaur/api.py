@@ -22,6 +22,7 @@ from humungousaur.integrations.channel_listeners import (
 )
 from humungousaur.integrations.channels import (
     channel_doctor,
+    channel_integration_smoke,
     channel_setup_requirements,
     channel_setup_status,
     handle_channel_inbound,
@@ -283,6 +284,17 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                 if path == "/channels/doctor":
                     self._send_json(channel_doctor(effective_config(), channel_id=_str_arg(query, "channel_id") or None))
                     return
+                if path == "/channels/smoke":
+                    channel_id = _str_arg(query, "channel_id")
+                    self._send_json(
+                        channel_integration_smoke(
+                            effective_config(),
+                            channel_ids=[channel_id] if channel_id else None,
+                            prepare_messages=_bool_arg(query, "prepare_messages", True),
+                            dry_run_sends=_bool_arg(query, "dry_run_sends", True),
+                        )
+                    )
+                    return
                 if path == "/channels/outbox":
                     self._send_json({"messages": list_outbox(effective_config(), limit=_int_arg(query, "limit", 20))})
                     return
@@ -404,6 +416,23 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                 if path == "/channels/doctor":
                     run_config = request_config(effective_config(), payload)
                     self._send_json(channel_doctor(run_config, channel_id=str(payload.get("channel_id") or "") or None), HTTPStatus.CREATED)
+                    return
+                if path == "/channels/smoke":
+                    run_config = request_config(effective_config(), payload)
+                    raw_ids = payload.get("channel_ids", [])
+                    channel_ids = [str(item) for item in raw_ids] if isinstance(raw_ids, list) else []
+                    single_channel = str(payload.get("channel_id") or "").strip()
+                    if single_channel and not channel_ids:
+                        channel_ids = [single_channel]
+                    self._send_json(
+                        channel_integration_smoke(
+                            run_config,
+                            channel_ids=channel_ids or None,
+                            prepare_messages=_payload_bool(payload, "prepare_messages", True),
+                            dry_run_sends=_payload_bool(payload, "dry_run_sends", True),
+                        ),
+                        HTTPStatus.CREATED,
+                    )
                     return
                 if path == "/channels/listeners":
                     run_config = request_config(effective_config(), payload)

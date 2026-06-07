@@ -253,6 +253,7 @@ public sealed partial class MainWindow : Window
         ApplyChannelSetupDefaults(channel, setup);
         RenderChannelRequirements(channel);
         ChannelDoctorText.Text = "Run doctor after saving setup or entering runtime secrets.";
+        ChannelSmokeText.Text = "Run smoke to prepare an envelope and validate dry-run send wiring.";
         ChannelTitleText.Text = channel.DisplayName;
         ChannelCapabilityText.Text = $"{channel.Transport}; text {(channel.SupportsText ? "yes" : "no")}; media {(channel.SupportsMedia ? "yes" : "no")}; reactions {(channel.SupportsReactions ? "yes" : "no")}";
         ChannelEnabledSwitch.IsOn = setup.Enabled;
@@ -359,6 +360,31 @@ public sealed partial class MainWindow : Window
         {
             ChannelDoctorText.Text = exc.Message;
             ShowNotice("Channel doctor failed.", InfoBarSeverity.Error);
+        }
+    }
+
+    private async void RunChannelSmokeButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (ChannelList.SelectedItem is not ChannelInfo channel)
+        {
+            ShowNotice("Select a channel first.", InfoBarSeverity.Warning);
+            return;
+        }
+
+        try
+        {
+            ReadSettingsFromUi();
+            var smoke = await _api.RunChannelSmokeAsync(channel.ChannelId, _settings);
+            ChannelSmokeText.Text = FormatChannelSmoke(smoke);
+            var readiness = smoke["channels"]?.AsArray().FirstOrDefault()?["readiness"]?.GetValue<string>() ?? smoke["overall_status"]?.GetValue<string>() ?? "unknown";
+            ShowNotice($"{channel.DisplayName} smoke: {readiness}.", readiness == "ready" ? InfoBarSeverity.Success : InfoBarSeverity.Warning);
+            await RefreshOutboxAsync();
+            await RefreshSelectedChannelStatusAsync(channel.ChannelId);
+        }
+        catch (Exception exc)
+        {
+            ChannelSmokeText.Text = exc.Message;
+            ShowNotice("Channel smoke failed.", InfoBarSeverity.Error);
         }
     }
 
@@ -771,6 +797,37 @@ public sealed partial class MainWindow : Window
             }).Where(line => !string.IsNullOrWhiteSpace(line)));
     }
 
+    private static string FormatChannelSmoke(JsonObject smoke)
+    {
+        var channel = smoke["channels"]?.AsArray().FirstOrDefault()?.AsObject();
+        if (channel is null)
+        {
+            return "No channel smoke result returned.";
+        }
+        var blockers = channel["blockers"]?.AsArray()
+            .Select(item =>
+            {
+                var blocker = item?.AsObject();
+                return blocker is null ? "" : $"{blocker["kind"]?.GetValue<string>()}: {FormatJsonDetail(blocker["detail"])}";
+            })
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .ToList() ?? [];
+        var lines = new List<string>
+        {
+            $"Smoke: {channel["readiness"]?.GetValue<string>() ?? "unknown"}",
+            $"Prepared outbox: {JsonNodeBool(channel["prepared_outbox_ready"])} ({channel["prepared_message_id"]?.GetValue<string>() ?? "none"})",
+            $"Dry-run send: {JsonNodeBool(channel["dry_run_send_ready"])} ({channel["dry_run_message_id"]?.GetValue<string>() ?? "none"})",
+            $"Direct send: {JsonNodeBool(channel["direct_send_ready"])} via {channel["send_mode"]?.GetValue<string>() ?? "prepared"}",
+            $"Listener: {JsonNodeBool(channel["listener_ready"])} via {channel["listener_mode"]?.GetValue<string>() ?? "listener"}",
+        };
+        if (blockers.Count > 0)
+        {
+            lines.Add("Blockers:");
+            lines.AddRange(blockers.Select(item => $"- {item}"));
+        }
+        return string.Join(Environment.NewLine, lines);
+    }
+
     private static List<string> JsonArrayStrings(JsonObject? node, string key)
     {
         if (node?[key] is not JsonArray array)
@@ -792,6 +849,31 @@ public sealed partial class MainWindow : Window
     private static string JsonBool(JsonObject? node, string key)
     {
         return node?[key]?.GetValue<bool>() == true ? "yes" : "no";
+    }
+
+    private static string JsonNodeBool(JsonNode? node)
+    {
+        return node?.GetValue<bool>() == true ? "yes" : "no";
+    }
+
+    private static string FormatJsonDetail(JsonNode? node)
+    {
+        if (node is null)
+        {
+            return "";
+        }
+        if (node is JsonArray array)
+        {
+            return string.Join(", ", array.Select(item => item?.GetValue<string>() ?? "").Where(item => !string.IsNullOrWhiteSpace(item)));
+        }
+        try
+        {
+            return node.GetValue<string>();
+        }
+        catch
+        {
+            return node.ToJsonString();
+        }
     }
 
     private static string FormatInline(IReadOnlyCollection<string> values)

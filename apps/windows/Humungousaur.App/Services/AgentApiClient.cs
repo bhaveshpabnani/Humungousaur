@@ -50,6 +50,15 @@ public sealed class AgentApiClient
         return GetJsonObjectAsync($"channels/requirements?channel_id={Uri.EscapeDataString(channelId)}");
     }
 
+    public Task<JsonObject> RunChannelSmokeAsync(string channelId, AppSettings settings)
+    {
+        var payload = RuntimePayload(settings);
+        payload["channel_id"] = channelId;
+        payload["prepare_messages"] = true;
+        payload["dry_run_sends"] = true;
+        return PostJsonObjectAsync("channels/smoke", payload);
+    }
+
     public Task<JsonObject> GetChannelListenersAsync(string channelId, AppSettings settings)
     {
         var payload = RuntimePayload(settings);

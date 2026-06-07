@@ -18,8 +18,8 @@ The core standard for this goal is:
 
 - Branch: `main`.
 - Last fully pushed capability commit before this slice: `e35444f Add native GitHub workflow artifacts`.
-- Latest documented full skill smoke: `424` sections, `0` failures.
-- Latest documented full regression: `390 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
+- Latest documented full skill smoke: `428` sections, `0` failures.
+- Latest documented full regression: `391 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
 - Current tool-domain folders observed: `33`.
 - Current skills observed: more than `130`.
 - Current working tree note: desktop channel operations have been implemented and tested in this slice; final commit/push status should be checked with `git status` and `git log`.
@@ -70,7 +70,7 @@ These areas have code and skills, but they are not yet finished as daily-use, li
 | Voice wakeup to spoken response | Native voice tools exist, and local/provider STT/TTS surfaces are wired. | Run continuous wake word, STT, agent turn, tool execution, TTS, and playback in one live Windows flow. |
 | OpenAI/Groq/Ollama provider path | Provider clients and smoke flows exist; OpenAI is currently the practical default for live smoke. | Reconfirm configured desktop settings, local Ollama model health, context-window fit, fallback policy, and live model-specific failures. |
 | Local speech models | Local Whisper/faster-whisper paths reference the separate `voice-wakeup` assets. | Confirm installed local model paths, test actual transcription on current machine, add local TTS if the installed assets include it. |
-| Channels | Native channel catalog, setup requirements, setup/status, doctor, webhook ingest, listener tick, outbox, message preparation, allowlists, and approval-gated send routes exist, and the Windows app can operate them with provider-specific onboarding details. | Complete live onboarding and live receive/send smoke for Telegram, Slack, Discord, WhatsApp, SMS, WebChat, and other important channels. |
+| Channels | Native channel catalog, setup requirements, setup/status, doctor, non-sending integration smoke, webhook ingest, listener tick, outbox, message preparation, allowlists, and approval-gated send routes exist, and the Windows app can operate them with provider-specific onboarding details. | Complete credentialed live receive/send smoke for Telegram, Slack, Discord, WhatsApp, SMS, WebChat, and other important channels. |
 | Google Workspace | Safe operation packets exist. | Add OAuth onboarding, token storage/refresh, approval-gated execution, and live Gmail/Calendar/Drive/Docs/Sheets smoke. |
 | Browser/computer use | Native browser and OS/computer tools exist. | Run complex browser and Windows UI tasks end to end from natural user requests, with visual verification and recovery behavior. |
 | Open Interpreter-style capability | Code execution and interpreter-style artifacts exist. | Expand sandbox policy, richer long-running process control, artifact capture, and user approval for risky execution. |
@@ -89,6 +89,7 @@ These areas have code and skills, but they are not yet finished as daily-use, li
 - Provider, model, API key, channel, voice, runtime, and approval settings should remain configurable from the Windows app.
 - `.env` should remain internal or fallback configuration, not the normal user-facing setup surface.
 - Channel onboarding should continue using backend channel manifests as the source of truth for required fields, required secrets, delivery mode, policy, listener mode, and doctor findings.
+- Desktop channel checks should use `channel_integration_smoke` for non-sending readiness evidence before any live provider-specific smoke.
 - Add richer tool execution visibility.
 - Run live app smoke against the local API.
 
@@ -121,6 +122,7 @@ For each channel:
 
 - In-app onboarding.
 - Setup doctor.
+- Non-sending integration smoke.
 - Listener status.
 - Inbound event normalization.
 - Bot-loop protection.
