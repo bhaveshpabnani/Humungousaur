@@ -132,10 +132,14 @@ def _validate_url(url: str) -> str | None:
         return "URL port is invalid."
     if port is not None and not 1 <= port <= 65535:
         return "URL port is invalid."
+    previous_timeout = socket.getdefaulttimeout()
+    socket.setdefaulttimeout(WEB_TIMEOUT_SECONDS)
     try:
         addresses = socket.getaddrinfo(parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80), type=socket.SOCK_STREAM)
     except OSError as exc:
         return f"Hostname could not be resolved: {exc}"
+    finally:
+        socket.setdefaulttimeout(previous_timeout)
     for item in addresses:
         address = item[4][0]
         try:

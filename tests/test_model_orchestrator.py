@@ -218,6 +218,37 @@ class ModelOrchestratorTests(unittest.TestCase):
         self.assertEqual(plan.used_provider, "model:sequence:repair")
         self.assertEqual(plan.steps[0].tool_input["text"], "Hello from repaired input.")
 
+    def test_model_planner_repairs_numeric_schema_bounds(self) -> None:
+        tool_schema = {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {"limit": {"type": "integer", "minimum": 1, "maximum": 20}},
+            "required": ["limit"],
+        }
+        provider = ModelPlanProvider(
+            _SequenceModelClient(
+                [
+                    '{"steps":[{"tool_name":"limited_tool","tool_input":{"limit":50},"reason":"inspect"}]}',
+                    '{"steps":[{"tool_name":"limited_tool","tool_input":{"limit":10},"reason":"inspect"}]}',
+                ]
+            ),
+            allowed_tools={"limited_tool"},
+            tool_catalog={
+                "limited_tool": {
+                    "description": "Tool with bounded numeric limit.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": tool_schema,
+                    "capability_group": "test",
+                }
+            },
+        )
+
+        plan = provider.plan("Inspect bounded state.")
+
+        self.assertEqual(plan.used_provider, "model:sequence:repair")
+        self.assertEqual(plan.steps[0].tool_input["limit"], 10)
+
     def test_ollama_provider_defaults_to_local_openai_endpoint(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)

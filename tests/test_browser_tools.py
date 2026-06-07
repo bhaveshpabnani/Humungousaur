@@ -4,6 +4,7 @@ import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs
+from unittest.mock import patch
 
 from humungousaur.config import AgentConfig
 from humungousaur.executor import Executor
@@ -45,6 +46,7 @@ from humungousaur.tools.browser_tools import (
     BrowserTypeTool,
     FetchWebPageTool,
     ResearchWebPagesTool,
+    WebSearchTool,
     extract_urls,
 )
 
@@ -78,6 +80,34 @@ class BrowserToolTests(unittest.TestCase):
             self.assertEqual(len(result.output["summaries"]), 2)
             self.assertIn("Browser research needle", result.output["summaries"][0]["summary"])
             self.assertIn("untrusted data", result.output["safety_note"])
+
+    def test_web_search_returns_candidate_urls(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
+            with patch(
+                "humungousaur.tools.browser.static_tools._search_web",
+                return_value=([{"title": "Rail lookup", "url": "https://example.com/rail"}], "bing", []),
+            ):
+                result = WebSearchTool().execute({"query": "train availability Nagpur Kharagpur", "limit": 3}, config)
+
+            self.assertEqual(result.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(result.output["results"][0]["url"], "https://example.com/rail")
+            self.assertEqual(result.output["engine"], "bing")
+            self.assertEqual(result.output["source"], "web_search")
+
+    def test_research_web_pages_discovers_urls_from_query(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts", planner_provider="explicit").normalized()
+            with running_web_server({"/a": SAMPLE_HTML}) as base_url:
+                with patch(
+                    "humungousaur.tools.browser.static_tools._search_web",
+                    return_value=([{"title": "Local result", "url": f"{base_url}/a"}], "bing", []),
+                ):
+                    result = ResearchWebPagesTool().execute({"query": "browser research"}, config)
+
+            self.assertEqual(result.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(len(result.output["summaries"]), 1)
+            self.assertIn("Browser research needle", result.output["summaries"][0]["summary"])
 
     def test_fetch_web_page_blocks_unsafe_urls(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

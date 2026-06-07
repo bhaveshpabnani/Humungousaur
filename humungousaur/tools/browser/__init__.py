@@ -43,6 +43,7 @@ from .static_tools import (
     BrowserTypeTool,
     FetchWebPageTool,
     ResearchWebPagesTool,
+    WebSearchTool,
 )
 
-__all__ = [name for name in globals() if name.startswith("Browser") or name in {"FetchWebPageTool", "ResearchWebPagesTool", "LiveBrowserManager", "LIVE_BROWSER_MANAGER", "default_browser_tools", "extract_urls"}]
+__all__ = [name for name in globals() if name.startswith("Browser") or name in {"FetchWebPageTool", "ResearchWebPagesTool", "WebSearchTool", "LiveBrowserManager", "LIVE_BROWSER_MANAGER", "default_browser_tools", "extract_urls"}]

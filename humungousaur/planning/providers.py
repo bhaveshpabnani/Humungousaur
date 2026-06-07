@@ -570,6 +570,13 @@ def _validate_planned_tool_input(value: Any, schema: dict[str, Any], path: str =
         raise ValueError(f"{path} must be an integer.")
     if expected_type == "number" and (not isinstance(value, (int, float)) or isinstance(value, bool)):
         raise ValueError(f"{path} must be a number.")
+    if expected_type in {"integer", "number"} and isinstance(value, (int, float)) and not isinstance(value, bool):
+        minimum = schema.get("minimum")
+        maximum = schema.get("maximum")
+        if isinstance(minimum, (int, float)) and value < minimum:
+            raise ValueError(f"{path} must be at least {minimum}.")
+        if isinstance(maximum, (int, float)) and value > maximum:
+            raise ValueError(f"{path} must be at most {maximum}.")
     if expected_type == "boolean" and not isinstance(value, bool):
         raise ValueError(f"{path} must be a boolean.")
     allowed_values = schema.get("enum")

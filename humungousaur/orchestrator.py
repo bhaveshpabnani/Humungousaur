@@ -499,8 +499,14 @@ class AgentOrchestrator:
         return "\n".join(lines).strip()
 
     def _direct_result_response(self, results: list[ToolResult]) -> str:
+        operational_results = [
+            result for result in results
+            if result.tool_name not in {"conversation_response_prepare", "write_note"}
+        ]
         for result in reversed(results):
             if result.tool_name != "conversation_response_prepare" or result.status != ActionStatus.SUCCEEDED:
+                continue
+            if operational_results:
                 continue
             text = str(result.output.get("text") or "").strip()
             if text:
@@ -561,7 +567,7 @@ class AgentOrchestrator:
         text = str(output.get("text", "")).strip()
         if text:
             highlights.append(f"text: {redact_secrets(summarize_text(text, max_sentences=3)[:1200])}")
-        for collection_key in ("files", "matches", "summaries", "captures", "sessions", "responses", "integrations", "runs"):
+        for collection_key in ("files", "matches", "summaries", "captures", "sessions", "responses", "integrations", "runs", "tool_groups", "surfaces"):
             value = output.get(collection_key)
             if isinstance(value, list):
                 if result.tool_name == "summarize_pdfs" and collection_key == "summaries":

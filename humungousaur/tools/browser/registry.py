@@ -44,10 +44,12 @@ from .static_tools import (
     BrowserTypeTool,
     FetchWebPageTool,
     ResearchWebPagesTool,
+    WebSearchTool,
 )
 
 def default_browser_tools() -> dict[str, Tool]:
     tools: list[Tool] = [
+        WebSearchTool(),
         FetchWebPageTool(),
         ResearchWebPagesTool(),
         BrowserSessionsTool(),
