@@ -106,6 +106,7 @@ def main() -> int:
     _smoke_travel(record, tools, config)
     _smoke_commerce(record, tools, config)
     _smoke_personal(record, tools, config)
+    _smoke_design(record, tools, config)
     _smoke_channels(record, tools, config)
     _smoke_rss(record, tools, config)
     _smoke_core_surfaces(record, tools, config)
@@ -598,6 +599,50 @@ def _smoke_personal(record, tools: dict[str, Any], config: AgentConfig) -> None:
     record("personal", "contact_note_inspect", _ok(contact_inspect) and contact_inspect.output.get("followup_count") == 1, _tool_payload(contact_inspect))
     record("personal", "daily_plan_create", _ok(plan) and plan.output.get("plan_status") == "prepared_not_scheduled", _tool_payload(plan))
     record("personal", "daily_plan_inspect", _ok(plan_inspect) and plan_inspect.output.get("reminder_draft_count") == 1, _tool_payload(plan_inspect))
+
+
+def _smoke_design(record, tools: dict[str, Any], config: AgentConfig) -> None:
+    brand = tools["brand_guidelines_create"].execute(
+        {
+            "filename": "skill-smoke-brand.md",
+            "brand_name": "Humungousaur",
+            "status": "proposed",
+            "colors": [
+                {"name": "ink", "value": "#111827", "usage": "primary text", "accessibility": "Use on light surfaces."},
+                {"name": "surface", "value": "#f8fafc", "usage": "background", "accessibility": "Pair with ink."},
+            ],
+            "typography": [{"role": "body", "family": "Segoe UI", "size": "14px", "weight": "400", "notes": "Readable default."}],
+            "tone": ["calm", "direct", "evidence-led"],
+            "layout_rules": ["Use compact panels for operational interfaces."],
+            "accessibility_notes": ["Check contrast before applying to UI."],
+            "source_refs": ["scripts/smoke_skills.py synthetic fixture"],
+            "reason": "Verify native brand-guideline artifact support.",
+        },
+        config,
+    )
+    brand_inspect = tools["brand_guidelines_inspect"].execute({"path": brand.output.get("path", "")}, config) if _ok(brand) else brand
+    theme = tools["theme_pack_create"].execute(
+        {
+            "filename": "skill-smoke-theme.md",
+            "theme_name": "Skill Smoke Clear Work",
+            "mode": "light",
+            "palette": [{"name": "surface", "value": "#f8fafc", "usage": "page background"}, {"name": "ink", "value": "#111827", "usage": "text"}],
+            "tokens": {"radius-card": "8px", "space-panel": "16px"},
+            "typography": {"body": "Segoe UI 14px"},
+            "spacing": {"panel": "16px"},
+            "radii": {"card": "8px"},
+            "component_states": [{"component": "button", "state": "hover", "token": "color-ink", "notes": "Preserve contrast."}],
+            "contrast_checks": [{"foreground": "#111827", "background": "#f8fafc", "ratio": "15:1", "status": "pass"}],
+            "source_refs": ["scripts/smoke_skills.py synthetic fixture"],
+            "reason": "Verify native theme-pack artifact support.",
+        },
+        config,
+    )
+    theme_inspect = tools["theme_pack_inspect"].execute({"path": theme.output.get("path", "")}, config) if _ok(theme) else theme
+    record("design", "brand_guidelines_create", _ok(brand) and brand.output.get("status") == "proposed", _tool_payload(brand))
+    record("design", "brand_guidelines_inspect", _ok(brand_inspect) and brand_inspect.output.get("color_count") == 2, _tool_payload(brand_inspect))
+    record("design", "theme_pack_create", _ok(theme) and theme.output.get("token_count", 0) >= 2, _tool_payload(theme))
+    record("design", "theme_pack_inspect", _ok(theme_inspect) and theme_inspect.output.get("contrast_check_count") == 1, _tool_payload(theme_inspect))
 
 
 def _prepare_script_fixtures(config: AgentConfig) -> None:

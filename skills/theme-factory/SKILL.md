@@ -22,6 +22,8 @@ Use for color/theme systems, dark/light modes, design tokens, typography, compon
 
 - `read_file`
 - `search_workspace`
+- `theme_pack_create`
+- `theme_pack_inspect`
 - `frontend-design`
 - `browser_live_observe`
 - `browser_live_screenshot`
@@ -30,9 +32,9 @@ Use for color/theme systems, dark/light modes, design tokens, typography, compon
 ## Workflow
 
 1. Inspect current token/style structure.
-2. Define palette, typography, spacing, radius, and component states.
+2. Use `theme_pack_create` to define palette, typography, spacing, radius, component states, contrast checks, and generated CSS variables.
 3. Avoid dominant single-hue themes unless brand requires it.
-4. Apply theme in existing styling architecture.
+4. Use `theme_pack_inspect` before applying the theme in existing styling architecture.
 5. Verify contrast, text fit, and layout.
 6. Document the theme rules when useful.
 
@@ -41,6 +43,7 @@ Use for color/theme systems, dark/light modes, design tokens, typography, compon
 - Use project-owned CSS/code.
 - Do not import Anthropic theme-factory code.
 - Do not add styling libraries without approval.
+- Theme-pack artifacts are local specs and CSS sidecars; they are not applied to app code until separate edits are made.
 
 ## Safety And Approval
 
@@ -52,6 +55,7 @@ Use for color/theme systems, dark/light modes, design tokens, typography, compon
 
 - Browser screenshots prove theme application.
 - Check major states and viewports.
+- Inspect theme-pack artifacts and CSS sidecars before applying.
 - Report contrast or responsive gaps.
 
 ## Failure Modes
