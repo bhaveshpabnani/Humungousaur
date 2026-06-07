@@ -20,6 +20,7 @@ Use for data exploration, CSV/JSON analysis, calculations, simulations, small pl
 
 ## Tool Map
 
+- `csv_dataset_profile`
 - `python_interpreter`
 - `python_interpreter_runs`
 - `python_interpreter_run`
@@ -36,17 +37,18 @@ Use for data exploration, CSV/JSON analysis, calculations, simulations, small pl
 ## Workflow
 
 1. Define the analysis question and data boundaries.
-2. Choose the least-privilege interpreter sandbox/import mode.
-3. Run small, readable analysis code.
-4. Inspect stdout, errors, and artifacts.
-5. Iterate only as needed.
-6. Summarize methods, results, assumptions, and reproducibility.
+2. Use `csv_dataset_profile` first for CSV structure, missing values, numeric ranges, and sample rows.
+3. Choose the least-privilege interpreter sandbox/import mode only when native analysis tools are insufficient.
+4. Run small, readable analysis code.
+5. Inspect stdout, errors, and artifacts.
+6. Iterate only as needed.
+7. Summarize methods, results, assumptions, and reproducibility.
 
 ## Native Implementation Boundaries
 
 - Use Humungousaur `python_interpreter` tools.
 - Do not import Hermes Jupyter live-kernel code.
-- Notebook/live-kernel support beyond this requires native implementation.
+- CSV profiling is native; notebook/live-kernel support beyond this requires native implementation.
 
 ## Safety And Approval
 

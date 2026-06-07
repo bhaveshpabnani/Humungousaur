@@ -20,6 +20,9 @@ Use for charts, diagrams, architecture flows, KPI visuals, explanatory graphics,
 
 ## Tool Map
 
+- `chart_artifact_create`
+- `chart_artifact_inspect`
+- `csv_dataset_profile`
 - `python_interpreter`
 - `python_interpreter_artifact`
 - `canvas_a2ui_create`
@@ -31,16 +34,16 @@ Use for charts, diagrams, architecture flows, KPI visuals, explanatory graphics,
 
 1. Identify what the visual should communicate.
 2. Choose chart/diagram type based on data and audience.
-3. Generate data summaries or visual artifacts through native tools.
+3. Generate SVG charts with `chart_artifact_create` when structured data is available.
 4. Label axes, units, sources, and caveats.
-5. Render/inspect artifacts when possible.
+5. Inspect generated artifacts with `chart_artifact_inspect`.
 6. Explain the finding without overstating certainty.
 
 ## Native Implementation Boundaries
 
 - Use Humungousaur interpreter and canvas tools.
 - Do not import Hermes diagram or Anthropic canvas skill code.
-- Add richer chart generators as native tools if needed.
+- Bar/line SVG chart generation and inspection are native; add richer chart generators as native tools if needed.
 
 ## Safety And Approval
 

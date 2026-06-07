@@ -96,6 +96,7 @@ def main() -> int:
 
     _smoke_productivity(record, tools, config)
     _smoke_office(record, tools, config)
+    _smoke_analysis(record, tools, config)
     _smoke_channels(record, tools, config)
     _smoke_core_surfaces(record, tools, config)
     _smoke_skill_task_surfaces(record, tools, config)
@@ -183,10 +184,50 @@ def _smoke_office(record, tools: dict[str, Any], config: AgentConfig) -> None:
     )
 
 
+def _smoke_analysis(record, tools: dict[str, Any], config: AgentConfig) -> None:
+    fixture = config.data_dir / "script-fixtures" / "sales.csv"
+    profile = tools["csv_dataset_profile"].execute({"path": str(fixture), "sample_rows": 5}, config)
+    chart = tools["chart_artifact_create"].execute(
+        {
+            "filename": "skill-smoke-sales.svg",
+            "title": "Skill Smoke Revenue",
+            "chart_type": "bar",
+            "x_label": "Month",
+            "y_label": "Revenue",
+            "data": [{"label": "Jan", "value": 100}, {"label": "Feb", "value": 125}, {"label": "Mar", "value": 150}],
+            "source_note": "Source: sales.csv fixture",
+            "reason": "Verify native chart artifact creation.",
+        },
+        config,
+    )
+    chart_inspect = tools["chart_artifact_inspect"].execute({"path": chart.output.get("path", "")}, config) if _ok(chart) else chart
+    report = tools["business_report_create"].execute(
+        {
+            "filename": "skill-smoke-sales-report.md",
+            "title": "Skill Smoke Sales Report",
+            "audience": "Smoke test",
+            "period": "Q1",
+            "summary": "Revenue rises across the three-row smoke fixture.",
+            "metrics": [{"name": "Rows", "value": profile.output.get("row_count", 0), "note": "Profiled CSV rows"}],
+            "findings": ["March has the highest revenue."],
+            "recommendations": ["Review missing cost values before final reporting."],
+            "artifact_paths": [chart.output.get("path", "")],
+            "assumptions": ["Fixture data is synthetic."],
+            "reason": "Verify native business report creation.",
+        },
+        config,
+    )
+    record("analysis", "csv_dataset_profile", _ok(profile) and profile.output.get("row_count") == 3, _tool_payload(profile))
+    record("analysis", "chart_artifact_create", _ok(chart), _tool_payload(chart))
+    record("analysis", "chart_artifact_inspect", _ok(chart_inspect) and chart_inspect.output.get("point_count") == 3, _tool_payload(chart_inspect))
+    record("analysis", "business_report_create", _ok(report), _tool_payload(report))
+
+
 def _prepare_script_fixtures(config: AgentConfig) -> None:
     fixtures = config.data_dir / "script-fixtures"
     fixtures.mkdir(parents=True, exist_ok=True)
     (fixtures / "sample.csv").write_text("name,score\nAda,10\nGrace,12\nAlan,\n", encoding="utf-8")
+    (fixtures / "sales.csv").write_text("month,revenue,cost\nJan,100,40\nFeb,125,50\nMar,150,\n", encoding="utf-8")
     (fixtures / "note-a.md").write_text("# Note A\n\nLinks to [[Note B]] and [web](https://example.com).\n", encoding="utf-8")
     (fixtures / "note-b.md").write_text("# Note B\n\nBacklink target.\n", encoding="utf-8")
 

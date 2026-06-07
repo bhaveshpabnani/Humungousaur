@@ -20,6 +20,10 @@ Use for KPI reports, executive summaries, weekly/monthly business reviews, sales
 
 ## Tool Map
 
+- `business_report_create`
+- `csv_dataset_profile`
+- `chart_artifact_create`
+- `chart_artifact_inspect`
 - `read_file`
 - `python_interpreter`
 - `write_note`
@@ -30,16 +34,16 @@ Use for KPI reports, executive summaries, weekly/monthly business reviews, sales
 ## Workflow
 
 1. Clarify business question and audience.
-2. Inspect data provenance and quality.
-3. Compute metrics through native interpreter/tool paths when approved.
-4. Write insights with evidence, caveats, and recommendations.
-5. Create charts/tables when native tools support them.
-6. Verify totals, filters, and time periods.
+2. Inspect data provenance and quality with `csv_dataset_profile` when CSV data is provided.
+3. Compute metrics through native tools or approved interpreter paths when needed.
+4. Create charts with `chart_artifact_create` when structured data supports a clear visual.
+5. Write the markdown report with `business_report_create`.
+6. Verify totals, filters, time periods, chart artifacts, and report path.
 
 ## Native Implementation Boundaries
 
 - Do not import OpenClaw business-reporting plugins.
-- Use Humungousaur-owned analysis/artifact tools.
+- Use Humungousaur-owned analysis/report/chart artifact tools.
 - External BI connectors need native adapters.
 
 ## Safety And Approval

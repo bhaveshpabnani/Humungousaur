@@ -1,5 +1,6 @@
 from .base import Tool
 from .activity import default_activity_tools
+from .analysis import default_analysis_tools
 from .browser import default_browser_tools
 from .capabilities import default_capability_tools
 from .channels import default_channel_tools
@@ -43,6 +44,7 @@ class _ToolAlias(Tool):
 def default_tools(config=None) -> dict[str, Tool]:
     tools = default_file_tools()
     tools.update(default_activity_tools())
+    tools.update(default_analysis_tools())
     tools.update(default_browser_tools())
     tools.update(default_capability_tools())
     tools.update(default_channel_tools())
