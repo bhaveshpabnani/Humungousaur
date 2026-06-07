@@ -26,6 +26,9 @@ Use when the user asks to compare products, find options, evaluate specs, inspec
 - `browser_live_open`
 - `browser_live_observe`
 - `web-data-extraction`
+- `shopping_comparison_create`
+- `shopping_comparison_inspect`
+- `purchase_intent_prepare`
 - `write_note`
 - `message-approval-policy`
 
@@ -34,15 +37,16 @@ Use when the user asks to compare products, find options, evaluate specs, inspec
 1. Clarify budget, constraints, and decision criteria.
 2. Gather current product evidence from native web/browser tools.
 3. Compare options by user-relevant dimensions, not only price.
-4. Identify risks: fake reviews, unclear sellers, returns, warranty, compatibility, or hidden fees.
-5. Prepare a recommendation and optional shortlist.
-6. Stop before checkout, payment, order placement, or contacting sellers unless explicitly approved.
+4. Use `shopping_comparison_create` to preserve products, evidence timing, seller/price/availability, risks, and recommendation as a local artifact.
+5. Use `shopping_comparison_inspect` before reporting the shortlist or recommendation.
+6. If the user wants a cart/review step, use `purchase_intent_prepare` and stop before checkout, payment, order placement, or contacting sellers unless explicitly approved.
 
 ## Native Implementation Boundaries
 
 - Use Humungousaur web and browser tools.
 - Do not import OpenClaw shopping plugins or store-specific upstream scripts.
 - Do not use brittle product-name keyword routing; reason from user criteria and page evidence.
+- Native commerce tools create research and purchase-review artifacts only; they do not buy, add to cart, or contact sellers.
 
 ## Safety And Approval
 
@@ -54,6 +58,7 @@ Use when the user asks to compare products, find options, evaluate specs, inspec
 
 - Include source URLs and observation timing for prices/specs.
 - Say when availability or shipping was not verified.
+- Inspect shopping comparison artifacts and confirm `research_only_not_purchased`.
 - A purchase claim requires an approved native action result, which should usually be avoided.
 
 ## Failure Modes

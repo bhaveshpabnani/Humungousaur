@@ -104,6 +104,7 @@ def main() -> int:
     _smoke_research(record, tools, config)
     _smoke_media(record, tools, config)
     _smoke_travel(record, tools, config)
+    _smoke_commerce(record, tools, config)
     _smoke_channels(record, tools, config)
     _smoke_rss(record, tools, config)
     _smoke_core_surfaces(record, tools, config)
@@ -503,6 +504,55 @@ def _smoke_travel(record, tools: dict[str, Any], config: AgentConfig) -> None:
     inspected = tools["travel_plan_inspect"].execute({"path": plan.output.get("path", "")}, config) if _ok(plan) else plan
     record("travel", "travel_plan_create", _ok(plan) and plan.output.get("approval_status") == "planning_only_not_booked", _tool_payload(plan))
     record("travel", "travel_plan_inspect", _ok(inspected) and inspected.output.get("route_option_count") == 1, _tool_payload(inspected))
+
+
+def _smoke_commerce(record, tools: dict[str, Any], config: AgentConfig) -> None:
+    comparison = tools["shopping_comparison_create"].execute(
+        {
+            "filename": "skill-smoke-shopping-comparison.md",
+            "title": "Skill Smoke Headphones Comparison",
+            "budget": "$150",
+            "region": "US",
+            "decision_criteria": ["comfortable", "clear returns", "USB-C"],
+            "products": [
+                {
+                    "name": "Headphones A",
+                    "seller": "Example Store",
+                    "price": "$129",
+                    "availability": "fixture only",
+                    "shipping": "standard",
+                    "return_terms": "30 days",
+                    "pros": ["comfortable", "USB-C"],
+                    "cons": ["live stock not checked"],
+                    "source_ref": "synthetic smoke fixture",
+                }
+            ],
+            "recommendation": "Headphones A fits the fixture criteria but live price and stock still need verification.",
+            "risks": ["Synthetic smoke data only.", "No live seller verification."],
+            "source_refs": ["scripts/smoke_skills.py synthetic fixture"],
+            "reason": "Verify native shopping comparison artifact support.",
+        },
+        config,
+    )
+    comparison_inspect = tools["shopping_comparison_inspect"].execute({"path": comparison.output.get("path", "")}, config) if _ok(comparison) else comparison
+    purchase = tools["purchase_intent_prepare"].execute(
+        {
+            "filename": "skill-smoke-cart-review.md",
+            "intent_type": "cart_review",
+            "seller": "Example Store",
+            "items": [{"name": "Headphones A", "quantity": "1", "price": "$129", "seller": "Example Store", "source_ref": "synthetic smoke fixture"}],
+            "total": "$129 before taxes/shipping",
+            "return_terms": "30 days",
+            "checks": [{"name": "Final total verified", "status": "not_verified", "evidence": "smoke fixture only"}],
+            "reason": "Verify native purchase/payment review artifact support without checkout.",
+        },
+        config,
+    )
+    purchase_inspect = tools["purchase_intent_inspect"].execute({"path": purchase.output.get("path", "")}, config) if _ok(purchase) else purchase
+    record("commerce", "shopping_comparison_create", _ok(comparison) and comparison.output.get("purchase_status") == "research_only_not_purchased", _tool_payload(comparison))
+    record("commerce", "shopping_comparison_inspect", _ok(comparison_inspect) and comparison_inspect.output.get("product_count") == 1, _tool_payload(comparison_inspect))
+    record("commerce", "purchase_intent_prepare", _ok(purchase) and purchase.output.get("purchase_status") == "prepared_not_purchased", _tool_payload(purchase))
+    record("commerce", "purchase_intent_inspect", _ok(purchase_inspect) and purchase_inspect.output.get("approval_required") is True, _tool_payload(purchase_inspect))
 
 
 def _prepare_script_fixtures(config: AgentConfig) -> None:

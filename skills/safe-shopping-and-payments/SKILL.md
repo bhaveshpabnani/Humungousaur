@@ -21,6 +21,10 @@ Use for purchases, subscriptions, checkout pages, invoices, payment links, carts
 ## Tool Map
 
 - `shopping-assistant`
+- `shopping_comparison_create`
+- `shopping_comparison_inspect`
+- `purchase_intent_prepare`
+- `purchase_intent_inspect`
 - `web-form-automation`
 - `browser_live_observe`
 - `message-approval-policy`
@@ -31,9 +35,9 @@ Use for purchases, subscriptions, checkout pages, invoices, payment links, carts
 
 1. Research/compare before checkout.
 2. Verify seller, price, fees, return terms, and delivery.
-3. Prepare cart or form only when user requested it.
-4. Stop before payment/order placement unless explicit approval is given.
-5. Never store payment credentials.
+3. Use `purchase_intent_prepare` for cart, checkout, purchase, subscription, refund, cancellation, or payment-review artifacts.
+4. Use `purchase_intent_inspect` to confirm `prepared_not_purchased`, approval requirement, check count, and no credential storage.
+5. Stop before payment/order placement unless explicit approval is given.
 6. Verify confirmation/order status only from tool/browser evidence.
 
 ## Native Implementation Boundaries
@@ -41,6 +45,7 @@ Use for purchases, subscriptions, checkout pages, invoices, payment links, carts
 - Use Humungousaur browser and approval tools.
 - Do not import OpenClaw AgentPay or shopping plugins.
 - Payment integrations require native, audited tools.
+- `purchase_intent_prepare` never stores payment credentials and never executes purchase/payment actions.
 
 ## Safety And Approval
 
@@ -52,6 +57,7 @@ Use for purchases, subscriptions, checkout pages, invoices, payment links, carts
 
 - Purchase claims require confirmation evidence.
 - Cart/prepared states must be labeled correctly.
+- Inspect purchase intent artifacts and confirm `prepared_not_purchased`.
 - Report price/source timing.
 
 ## Failure Modes
