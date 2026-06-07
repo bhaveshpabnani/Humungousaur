@@ -20,6 +20,8 @@ Use for slide outlines, speaker notes, deck narratives, content extraction from 
 
 ## Tool Map
 
+- `pptx_deck_create`
+- `pptx_deck_inspect`
 - `write_note`
 - `read_file`
 - `search_workspace`
@@ -32,14 +34,14 @@ Use for slide outlines, speaker notes, deck narratives, content extraction from 
 1. Clarify deck objective and audience.
 2. Build a slide-by-slide narrative outline.
 3. Draft titles, key bullets, visuals, and speaker notes.
-4. Check for a native PPTX adapter before claiming file creation/editing.
-5. Use approved interpreter workflow only when packages and permissions support it.
+4. Use `pptx_deck_create` for structured local PPTX artifacts.
+5. Use `pptx_deck_inspect` to verify slide count and text.
 6. Verify artifacts and note visual/render limitations.
 
 ## Native Implementation Boundaries
 
 - Do not import Anthropic PPTX or Hermes PowerPoint scripts.
-- Dedicated PPTX creation/editing must be Humungousaur-owned.
+- Dedicated PPTX creation/inspection is Humungousaur-owned for structured local artifacts.
 - Upstream skills are design references only.
 
 ## Safety And Approval

@@ -10,6 +10,7 @@ from .cognition import default_cognition_tools
 from .external import default_external_tools
 from .files import default_tools as default_file_tools
 from .memory import default_memory_tools
+from .office import default_office_tools
 from .os_control import default_os_tools
 from .plugins import default_plugin_tools
 from .productivity import default_productivity_tools
@@ -55,6 +56,7 @@ def default_tools(config=None) -> dict[str, Tool]:
     tools.update(default_voice_tools())
     tools.update(default_workflow_tools())
     tools.update(default_memory_tools())
+    tools.update(default_office_tools())
     tools.update(default_skill_tools())
     tools.update(default_plugin_tools(config, set(tools)))
     tools.update(default_productivity_tools())

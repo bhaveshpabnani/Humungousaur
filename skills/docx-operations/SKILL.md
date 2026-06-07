@@ -20,6 +20,8 @@ Use for DOCX planning, drafting content for Word, reading provided document text
 
 ## Tool Map
 
+- `docx_document_create`
+- `docx_document_inspect`
 - `read_file`
 - `write_note`
 - `python_interpreter`
@@ -29,17 +31,17 @@ Use for DOCX planning, drafting content for Word, reading provided document text
 
 ## Workflow
 
-1. Check whether a dedicated native DOCX tool exists.
-2. If absent, draft content or plan an approved interpreter-based conversion/edit.
+1. Use `docx_document_create` for structured local DOCX artifacts.
+2. Use `docx_document_inspect` to verify generated or provided DOCX files.
 3. Keep document structure explicit: headings, tables, lists, styles, comments.
-4. Use approved Python only when package support is available and the user wants artifact work.
+4. Use approved Python only for capabilities not covered by the native DOCX tools.
 5. Verify generated artifacts by file existence and, where possible, rendered/parsed content.
 6. Report unsupported operations honestly.
 
 ## Native Implementation Boundaries
 
 - Do not import Anthropic DOCX skill code or Hermes document scripts.
-- Dedicated DOCX helpers must be Humungousaur-owned, tested, and schema-bound.
+- Dedicated DOCX helpers are Humungousaur-owned, tested, and schema-bound.
 - Upstream document skills are reference evidence only.
 
 ## Safety And Approval

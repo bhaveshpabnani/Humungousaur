@@ -95,6 +95,7 @@ def main() -> int:
         )
 
     _smoke_productivity(record, tools, config)
+    _smoke_office(record, tools, config)
     _smoke_channels(record, tools, config)
     _smoke_core_surfaces(record, tools, config)
     _smoke_skill_task_surfaces(record, tools, config)
@@ -132,6 +133,54 @@ def _smoke_productivity(record, tools: dict[str, Any], config: AgentConfig) -> N
     formula_ok = _ok(inspect) and any(item.get("formula") == "=B2-B3" for item in inspect.output["sheets"][0]["formulas"])
     record("productivity", "xlsx_workbook_create", _ok(xlsx), _tool_payload(xlsx))
     record("productivity", "xlsx_workbook_inspect", formula_ok, _tool_payload(inspect))
+
+
+def _smoke_office(record, tools: dict[str, Any], config: AgentConfig) -> None:
+    docx = tools["docx_document_create"].execute(
+        {
+            "filename": "skill-smoke.docx",
+            "title": "Humungousaur DOCX Skill Smoke",
+            "reason": "Verify DOCX creation skill capability.",
+            "sections": [
+                {
+                    "heading": "Summary",
+                    "paragraphs": ["This DOCX was created by a native Humungousaur office tool."],
+                    "bullets": ["Native artifact", "Inspectable text"],
+                    "tables": [{"rows": [["Capability", "Status"], ["DOCX", "Created"]]}],
+                }
+            ],
+        },
+        config,
+    )
+    docx_inspect = tools["docx_document_inspect"].execute({"path": docx.output.get("path", ""), "sample_paragraphs": 10}, config) if _ok(docx) else docx
+    record("office", "docx_document_create", _ok(docx), _tool_payload(docx))
+    record(
+        "office",
+        "docx_document_inspect",
+        _ok(docx_inspect) and "Humungousaur DOCX Skill Smoke" in docx_inspect.output.get("text_preview", ""),
+        _tool_payload(docx_inspect),
+    )
+
+    pptx = tools["pptx_deck_create"].execute(
+        {
+            "filename": "skill-smoke.pptx",
+            "title": "Humungousaur PPTX Skill Smoke",
+            "reason": "Verify PPTX creation skill capability.",
+            "slides": [
+                {"title": "Capability", "bullets": ["Native PPTX artifact", "Inspectable slide text"]},
+                {"title": "Verification", "bullets": ["File exists", "Slide count matches"]},
+            ],
+        },
+        config,
+    )
+    pptx_inspect = tools["pptx_deck_inspect"].execute({"path": pptx.output.get("path", ""), "sample_slides": 5}, config) if _ok(pptx) else pptx
+    record("office", "pptx_deck_create", _ok(pptx), _tool_payload(pptx))
+    record(
+        "office",
+        "pptx_deck_inspect",
+        _ok(pptx_inspect) and pptx_inspect.output.get("slide_count", 0) >= 3,
+        _tool_payload(pptx_inspect),
+    )
 
 
 def _prepare_script_fixtures(config: AgentConfig) -> None:
