@@ -25,6 +25,8 @@ Use for travel plans, local places, route comparisons, hotel/activity research, 
 - `fetch_webpage`
 - `browser_live_open`
 - `browser_live_observe`
+- `travel_plan_create`
+- `travel_plan_inspect`
 - `write_note`
 - `cognitive_trigger_record`
 - `message-approval-policy`
@@ -34,15 +36,16 @@ Use for travel plans, local places, route comparisons, hotel/activity research, 
 1. Clarify location, dates, constraints, and output shape.
 2. Use current web evidence for changing facts such as hours, fares, closures, and weather-sensitive details.
 3. Compare options by time, cost, reliability, accessibility, and user preference.
-4. Create itinerary notes or reminders when requested.
-5. Stop before bookings, payments, cancellations, or messages unless approved.
-6. If native maps/geocoding adapters are missing, say so and use browser/web research.
+4. Use `travel_plan_create` to preserve route options, places, itinerary days, source refs, evidence timestamps, uncertainties, and approval boundaries.
+5. Use `travel_plan_inspect` before reporting a saved itinerary or handing it to reminders/messages.
+6. Stop before bookings, payments, cancellations, or messages unless approved.
 
 ## Native Implementation Boundaries
 
 - Use Humungousaur-owned web/browser tools or future native map adapters.
 - Do not import Hermes map skills or OpenClaw transportation plugins as implementation.
 - Do not claim exact live routing without a current source.
+- `travel_plan_create` is a local planning artifact tool; it is not live geocoding, routing, booking, or venue contact.
 
 ## Safety And Approval
 
@@ -54,6 +57,7 @@ Use for travel plans, local places, route comparisons, hotel/activity research, 
 
 - Cite current pages for hours, routes, and prices.
 - Note date/time of evidence for travel facts.
+- Inspect the travel plan artifact and confirm `planning_only_not_booked`.
 - Confirm saved itinerary or reminder IDs when created.
 
 ## Failure Modes

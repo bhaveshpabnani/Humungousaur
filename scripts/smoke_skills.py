@@ -103,6 +103,7 @@ def main() -> int:
     _smoke_content(record, tools, config)
     _smoke_research(record, tools, config)
     _smoke_media(record, tools, config)
+    _smoke_travel(record, tools, config)
     _smoke_channels(record, tools, config)
     _smoke_rss(record, tools, config)
     _smoke_core_surfaces(record, tools, config)
@@ -476,6 +477,32 @@ def _smoke_media(record, tools: dict[str, Any], config: AgentConfig) -> None:
     record("media", "sound_spec_inspect", _ok(sound_inspect) and sound_inspect.output.get("section_count") == 1, _tool_payload(sound_inspect))
     record("media", "media_storyboard_create", _ok(storyboard) and storyboard.output.get("scene_count") == 2, _tool_payload(storyboard))
     record("media", "media_storyboard_inspect", _ok(storyboard_inspect) and storyboard_inspect.output.get("media_type") == "gif", _tool_payload(storyboard_inspect))
+
+
+def _smoke_travel(record, tools: dict[str, Any], config: AgentConfig) -> None:
+    plan = tools["travel_plan_create"].execute(
+        {
+            "filename": "skill-smoke-travel-plan.md",
+            "title": "Skill Smoke Museum Commute",
+            "origin": "Hotel district",
+            "destination": "Museum district",
+            "date_range": "2026-06-13",
+            "travelers": "1 adult",
+            "budget": "Prefer low-cost transit.",
+            "preferences": ["low walking", "clear fallback option"],
+            "constraints": ["Live schedules and opening hours must be verified before travel."],
+            "places": [{"name": "City Museum", "kind": "museum", "location": "Museum district", "hours": "10:00-17:00", "cost": "ticketed", "notes": "Synthetic smoke venue.", "source_ref": "fixture"}],
+            "route_options": [{"label": "Metro route", "mode": "transit", "estimated_duration": "35 min", "estimated_cost": "$3", "reliability": "medium", "accessibility": "elevator status needs live check", "tradeoffs": "Lowest cost, schedule-sensitive.", "source_ref": "fixture"}],
+            "itinerary_days": [{"label": "Saturday", "summary": "Transit-first museum visit.", "items": [{"time": "09:30", "activity": "Depart hotel", "location": "Hotel district", "notes": "Verify route before leaving."}]}],
+            "source_refs": ["scripts/smoke_skills.py synthetic fixture"],
+            "uncertainties": ["No live transit or venue API was queried in smoke."],
+            "reason": "Verify native travel-and-maps artifact support without booking.",
+        },
+        config,
+    )
+    inspected = tools["travel_plan_inspect"].execute({"path": plan.output.get("path", "")}, config) if _ok(plan) else plan
+    record("travel", "travel_plan_create", _ok(plan) and plan.output.get("approval_status") == "planning_only_not_booked", _tool_payload(plan))
+    record("travel", "travel_plan_inspect", _ok(inspected) and inspected.output.get("route_option_count") == 1, _tool_payload(inspected))
 
 
 def _prepare_script_fixtures(config: AgentConfig) -> None:
