@@ -38,7 +38,8 @@ These slices have been implemented, smoke-tested, regression-tested, committed, 
 | `1e296e1` | Visual artifacts | Diagram, Mermaid, Excalidraw-compatible JSON, and infographic plan tools. |
 | `045cb2f` | Presentation planning | Native presentation plan create/inspect tools with audience, goal, narrative arc, slide plan, visual intent, speaker notes, evidence refs, risks, and status. |
 | `b2f6679` | Google Workspace operation packets | Native local packets for Calendar, Drive, Docs, Sheets, and Gmail-style Google operations, with OAuth scopes, approval requirements, payload previews, and `not_executed` status. |
-| current slice | Network and DNS safety diagnostics | Native bounded DNS lookup, HTTP endpoint check, and single-port TCP connectivity probe tools. |
+| `49e8598` | Network and DNS safety diagnostics | Native bounded DNS lookup, HTTP endpoint check, and single-port TCP connectivity probe tools. |
+| current slice | Creative writing and songwriting artifacts | Native creative brief, song structure, and creative revision packet artifacts with originality guardrails. |
 
 ## Current Native Capability Areas
 
@@ -55,6 +56,7 @@ Humungousaur now has native tool domains for:
 - Content/transcript summaries
 - Conversation response preparation
 - Cognition, memory curation, persona evolution, automations, and multi-agent coordination
+- Creative writing, songwriting, and revision artifacts
 - Design systems and theme packs
 - External integration status surfaces
 - Files, PDFs, OCR, and shell/file utilities
@@ -88,8 +90,8 @@ The recurring verification pattern for each completed slice has been:
 
 Latest verified results:
 
-- Full skill smoke: `403` sections, `0` failures.
-- Full regression after network diagnostic slice: `376 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
+- Full skill smoke: `409` sections, `0` failures.
+- Full regression after creative writing slice: `380 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
 - The warnings are from `openpyxl` datetime deprecation during XLSX tests, not from the new skill slices.
 
 ## Still To Do
@@ -108,17 +110,16 @@ Needed work:
 - Browser-assisted fallback smoke where native OAuth is not configured.
 - Live Calendar/Drive/Docs/Sheets/Gmail smoke when credentials are available.
 
-### 2. Creative Writing And Songwriting
+### 2. Creative Writing And Songwriting Publishing And Audio Follow-Through
 
-Current weak signal: only a small native surface through note/writing/voice tools.
+Current status: native creative brief, song structure, and revision packet artifacts are being added. Remaining work is deeper drafting, audio generation handoff, and publishing/approval flows.
 
 Needed work:
 
-- Native creative brief artifact.
-- Song lyric/song-structure planning artifact without copyrighted lyric generation issues.
-- Revision/variant packet support.
-- Tone/persona/evidence preservation for creative writing tasks.
-- Smoke tests for story, poem, song outline, and revision workflows.
+- Richer long-form drafting workflows with model-led revision loops.
+- Audio generation provider handoff from song structures after explicit approval.
+- Publishing/channel packet integration for final creative outputs.
+- Optional plagiarism/similarity/originality review against user-provided references.
 
 ### 3. Network And DNS Live Change Management
 

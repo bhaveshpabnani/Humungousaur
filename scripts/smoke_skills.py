@@ -102,6 +102,7 @@ def main() -> int:
     _smoke_office(record, tools, config)
     _smoke_analysis(record, tools, config)
     _smoke_writing(record, tools, config)
+    _smoke_creative(record, tools, config)
     _smoke_content(record, tools, config)
     _smoke_research(record, tools, config)
     _smoke_media(record, tools, config)
@@ -429,6 +430,69 @@ def _smoke_writing(record, tools: dict[str, Any], config: AgentConfig) -> None:
     record("writing", "writing_draft_create", _ok(draft) and draft.output.get("send_status") == "not_sent", _tool_payload(draft))
     record("writing", "writing_draft_inspect", _ok(inspected) and inspected.output.get("variant_count") == 1, _tool_payload(inspected))
     record("writing", "meeting_followup_packet_create", _ok(followup) and followup.output.get("send_status") == "not_sent", _tool_payload(followup))
+
+
+def _smoke_creative(record, tools: dict[str, Any], config: AgentConfig) -> None:
+    brief = tools["creative_brief_create"].execute(
+        {
+            "filename": "skill-smoke-creative-brief.md",
+            "title": "Skill Smoke Rain Station Scene",
+            "creative_type": "scene",
+            "genre": "quiet speculative fiction",
+            "theme": "repair over escape",
+            "audience": "adult readers",
+            "mood": "tender and tense",
+            "constraints": ["Original scene, no living-author imitation."],
+            "forbidden_elements": ["copyrighted characters", "quoted lyrics"],
+            "beats": [{"label": "Arrival", "purpose": "Set place and conflict", "notes": "Rain reveals the broken station sign."}],
+            "motifs": ["warm light", "delayed train"],
+            "voice_notes": ["specific sensory details", "plainspoken emotional turn"],
+            "source_refs": ["scripts/smoke_skills.py synthetic fixture"],
+            "reason": "Verify native creative brief artifact support.",
+        },
+        config,
+    )
+    brief_inspect = tools["creative_brief_inspect"].execute({"path": brief.output.get("path", "")}, config) if _ok(brief) else brief
+    song = tools["song_structure_create"].execute(
+        {
+            "filename": "skill-smoke-song-structure.md",
+            "title": "Window Light",
+            "genre": "indie pop",
+            "mood": "hopeful",
+            "tempo_bpm": 104,
+            "hook_concept": "A small light becoming a signal.",
+            "sections": [
+                {"name": "Verse 1", "role": "setup", "length": "8 bars", "notes": "Original concrete image."},
+                {"name": "Chorus", "role": "hook", "length": "8 bars", "notes": "Lift in contour, no borrowed melody."},
+            ],
+            "rhyme_notes": ["Favor loose internal rhyme, no quoted lyric references."],
+            "production_notes": ["Clean drums, soft synth bass."],
+            "originality_constraints": ["No copyrighted lyric reproduction.", "No living-artist voice imitation."],
+            "reason": "Verify native songwriting structure artifact support.",
+        },
+        config,
+    )
+    song_inspect = tools["song_structure_inspect"].execute({"path": song.output.get("path", "")}, config) if _ok(song) else song
+    revision = tools["creative_revision_packet_create"].execute(
+        {
+            "filename": "skill-smoke-creative-revision.md",
+            "title": "Skill Smoke Scene Revision",
+            "source_draft": "The train arrived late, and Mira watched the station lights blink awake.",
+            "revision_goals": ["Make the image more specific.", "Preserve the quiet tone."],
+            "protected_elements": ["Mira", "late train"],
+            "change_notes": ["Keep it compact."],
+            "variants": [{"label": "sensory", "body": "The late train sighed in, and Mira counted each amber station light as it woke."}],
+            "reason": "Verify native creative revision packet support.",
+        },
+        config,
+    )
+    revision_inspect = tools["creative_revision_packet_inspect"].execute({"path": revision.output.get("path", "")}, config) if _ok(revision) else revision
+    record("creative", "creative_brief_create", _ok(brief) and brief.output.get("beat_count") == 1, _tool_payload(brief))
+    record("creative", "creative_brief_inspect", _ok(brief_inspect) and brief_inspect.output.get("forbidden_element_count") == 2, _tool_payload(brief_inspect))
+    record("creative", "song_structure_create", _ok(song) and song.output.get("section_count") == 2, _tool_payload(song))
+    record("creative", "song_structure_inspect", _ok(song_inspect) and song_inspect.output.get("originality_constraint_count") == 2, _tool_payload(song_inspect))
+    record("creative", "creative_revision_packet_create", _ok(revision) and revision.output.get("variant_count") == 1, _tool_payload(revision))
+    record("creative", "creative_revision_packet_inspect", _ok(revision_inspect) and revision_inspect.output.get("protected_element_count") == 2, _tool_payload(revision_inspect))
 
 
 def _smoke_content(record, tools: dict[str, Any], config: AgentConfig) -> None:

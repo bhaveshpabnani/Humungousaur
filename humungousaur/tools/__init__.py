@@ -10,6 +10,7 @@ from .commerce import default_commerce_tools
 from .content import default_content_tools
 from .conversation import default_conversation_tools
 from .cognition import default_cognition_tools
+from .creative import default_creative_tools
 from .design import default_design_tools
 from .external import default_external_tools
 from .files import default_tools as default_file_tools
@@ -64,6 +65,7 @@ def default_tools(config=None) -> dict[str, Tool]:
     tools.update(default_content_tools())
     tools.update(default_conversation_tools())
     tools.update(default_cognition_tools())
+    tools.update(default_creative_tools())
     tools.update(default_design_tools())
     tools.update(default_external_tools())
     tools.update(default_system_tools())
