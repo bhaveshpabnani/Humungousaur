@@ -232,14 +232,14 @@ public sealed class AgentApiClient
     private async Task<T?> GetAsync<T>(string route)
     {
         using var response = await _http.GetAsync(new Uri(_baseUri, route));
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessAsync(response, route);
         return await response.Content.ReadFromJsonAsync<T>(JsonOptions);
     }
 
     private async Task<JsonObject> GetJsonObjectAsync(string route)
     {
         using var response = await _http.GetAsync(new Uri(_baseUri, route));
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessAsync(response, route);
         var node = await response.Content.ReadFromJsonAsync<JsonObject>(JsonOptions);
         return node ?? [];
     }
@@ -247,9 +247,44 @@ public sealed class AgentApiClient
     private async Task<JsonObject> PostJsonObjectAsync(string route, JsonObject payload)
     {
         using var response = await _http.PostAsJsonAsync(new Uri(_baseUri, route), payload, JsonOptions);
-        response.EnsureSuccessStatusCode();
+        await EnsureSuccessAsync(response, route);
         var node = await response.Content.ReadFromJsonAsync<JsonObject>(JsonOptions);
         return node ?? [];
+    }
+
+    private static async Task EnsureSuccessAsync(HttpResponseMessage response, string route)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var body = await response.Content.ReadAsStringAsync();
+        var detail = ExtractErrorDetail(body);
+        throw new HttpRequestException(
+            string.IsNullOrWhiteSpace(detail)
+                ? $"{route} failed with HTTP {(int)response.StatusCode} {response.ReasonPhrase}."
+                : $"{route} failed with HTTP {(int)response.StatusCode} {response.ReasonPhrase}: {detail}",
+            null,
+            response.StatusCode);
+    }
+
+    private static string ExtractErrorDetail(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return "";
+        }
+
+        try
+        {
+            var node = JsonNode.Parse(body);
+            return node?["error"]?.GetValue<string>() ?? node?["message"]?.GetValue<string>() ?? body;
+        }
+        catch (JsonException)
+        {
+            return body.Length > 1200 ? body[..1200] : body;
+        }
     }
 
     public static string Pretty(JsonNode? node)

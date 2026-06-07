@@ -109,6 +109,18 @@ class ModelOrchestratorTests(unittest.TestCase):
             self.assertEqual(client.model, "desktop-model")
             self.assertEqual(client.api_key, "gsk-desktop")
 
+    def test_conversation_response_tool_returns_direct_user_response(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", planner_provider="explicit")
+
+            result = AgentOrchestrator(config).run(
+                'conversation_response_prepare {"text":"Hey, I am here.","reason":"Direct greeting response."}'
+            )
+
+            self.assertEqual(result.final_response, "Hey, I am here.")
+            self.assertEqual(result.results[0].tool_name, "conversation_response_prepare")
+
     def test_ollama_provider_defaults_to_local_openai_endpoint(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from dataclasses import asdict
+from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -79,6 +81,7 @@ DASHBOARD_DIR = Path(__file__).resolve().parent / "dashboard"
 def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
     base_config = config.normalized()
     settings_store = PermissionSettingsStore(base_config.permission_settings_path)
+    request_log_lock = threading.Lock()
 
     def effective_config() -> AgentConfig:
         return settings_store.effective_config(base_config)
@@ -92,9 +95,11 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
         server_version = "HumungousaurAPI/0.1"
 
         def do_OPTIONS(self) -> None:
+            self._mark_request_started()
             self._send_json({"ok": True})
 
         def do_GET(self) -> None:
+            self._mark_request_started()
             try:
                 path, query = self._route_parts()
                 if path == "/" or path.startswith("/dashboard/"):
@@ -324,6 +329,7 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                 self._send_error(HTTPStatus.INTERNAL_SERVER_ERROR, str(exc))
 
         def do_POST(self) -> None:
+            self._mark_request_started()
             try:
                 path, _query = self._route_parts()
                 payload = self._read_json()
@@ -563,6 +569,11 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
         def log_message(self, format: str, *args: Any) -> None:
             return
 
+        def _mark_request_started(self) -> None:
+            self._request_started_at = time.perf_counter()
+            self._request_received_at = datetime.now(timezone.utc).isoformat()
+            self._request_payload_summary = {}
+
         def _route_parts(self) -> tuple[str, dict[str, list[str]]]:
             parsed = urlparse(self.path)
             return parsed.path.rstrip("/") or "/", parse_qs(parsed.query)
@@ -578,6 +589,7 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                 raise ValueError(f"Request body must be valid JSON: {exc}") from exc
             if not isinstance(payload, dict):
                 raise ValueError("Request body must be a JSON object.")
+            self._request_payload_summary = _payload_summary(payload)
             return payload
 
         def _send_json(self, payload: Any, status: HTTPStatus = HTTPStatus.OK) -> None:
@@ -590,6 +602,7 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             self.end_headers()
             self.wfile.write(body)
+            self._log_response(status, payload)
 
         def _send_text(self, payload: str, status: HTTPStatus = HTTPStatus.OK) -> None:
             body = payload.encode("utf-8")
@@ -599,6 +612,7 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
             self.send_header("Access-Control-Allow-Origin", "http://127.0.0.1")
             self.end_headers()
             self.wfile.write(body)
+            self._log_response(status, {"content_type": "text/plain", "text_length": len(payload)})
 
         def _send_dashboard_asset(self, path: str) -> None:
             relative = "index.html" if path == "/" else path.removeprefix("/dashboard/")
@@ -616,9 +630,25 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+            self._log_response(HTTPStatus.OK, {"asset": relative, "content_type": content_type, "bytes": len(body)})
 
         def _send_error(self, status: HTTPStatus, message: str) -> None:
             self._send_json({"error": message}, status)
+
+        def _log_response(self, status: HTTPStatus, payload: Any) -> None:
+            started = getattr(self, "_request_started_at", time.perf_counter())
+            entry = {
+                "created_at": getattr(self, "_request_received_at", datetime.now(timezone.utc).isoformat()),
+                "method": self.command,
+                "path": self._route_parts()[0],
+                "query": _query_keys(self.path),
+                "status": int(status.value),
+                "duration_ms": round((time.perf_counter() - started) * 1000, 3),
+                "request": getattr(self, "_request_payload_summary", {}),
+            }
+            if isinstance(payload, dict) and payload.get("error"):
+                entry["error"] = str(payload.get("error", ""))[:1000]
+            _append_request_log(base_config, entry, request_log_lock)
 
     return HumungousaurAPIHandler
 
@@ -627,6 +657,42 @@ def create_api_server(config: AgentConfig, host: str = "127.0.0.1", port: int = 
     if host not in {"127.0.0.1", "localhost", "::1"}:
         raise ValueError("Humungousaur API binds to loopback hosts only by default.")
     return ThreadingHTTPServer((host, port), make_handler(config))
+
+
+def _append_request_log(config: AgentConfig, entry: dict[str, Any], lock: threading.Lock) -> None:
+    path = config.data_dir / "api_requests.jsonl"
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with lock:
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n")
+    except OSError:
+        return
+
+
+def _payload_summary(payload: dict[str, Any]) -> dict[str, Any]:
+    metadata = payload.get("metadata")
+    runtime_secrets = payload.get("runtime_secrets", payload.get("secrets", {}))
+    summary: dict[str, Any] = {
+        "keys": sorted(str(key) for key in payload.keys()),
+    }
+    if payload.get("text") is not None:
+        text = str(payload.get("text") or "")
+        summary["text_preview"] = text[:160]
+        summary["text_length"] = len(text)
+    for name in ("source", "response_mode", "planner", "model_provider", "model"):
+        if payload.get(name) is not None:
+            summary[name] = str(payload.get(name) or "")
+    if isinstance(metadata, dict):
+        summary["metadata_keys"] = sorted(str(key) for key in metadata.keys())
+    if isinstance(runtime_secrets, dict):
+        summary["runtime_secret_names"] = sorted(str(key) for key in runtime_secrets.keys())
+    return summary
+
+
+def _query_keys(path: str) -> list[str]:
+    parsed = urlparse(path)
+    return sorted(parse_qs(parsed.query).keys())
 
 
 def run_api_server(config: AgentConfig, host: str = "127.0.0.1", port: int = 8765) -> None:

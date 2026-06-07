@@ -6,6 +6,8 @@ namespace Humungousaur.App.Services;
 public sealed class LocalAgentProcess
 {
     private Process? _process;
+    private string _stdoutLogPath = "";
+    private string _stderrLogPath = "";
 
     public event Action<string>? OutputReceived;
 
@@ -21,6 +23,10 @@ public sealed class LocalAgentProcess
         var workspace = string.IsNullOrWhiteSpace(settings.WorkspacePath)
             ? Environment.CurrentDirectory
             : settings.WorkspacePath;
+        var logRoot = Path.Combine(workspace, "artifacts", "windows-app");
+        Directory.CreateDirectory(logRoot);
+        _stdoutLogPath = Path.Combine(logRoot, "api.stdout.log");
+        _stderrLogPath = Path.Combine(logRoot, "api.stderr.log");
 
         var info = new ProcessStartInfo
         {
@@ -40,8 +46,8 @@ public sealed class LocalAgentProcess
         info.ArgumentList.Add(settings.Port.ToString());
 
         _process = new Process { StartInfo = info, EnableRaisingEvents = true };
-        _process.OutputDataReceived += (_, args) => Emit(args.Data);
-        _process.ErrorDataReceived += (_, args) => Emit(args.Data);
+        _process.OutputDataReceived += (_, args) => Emit(args.Data, _stdoutLogPath);
+        _process.ErrorDataReceived += (_, args) => Emit(args.Data, _stderrLogPath);
         _process.Exited += (_, _) => Emit("Agent process exited.");
         _process.Start();
         _process.BeginOutputReadLine();
@@ -60,10 +66,21 @@ public sealed class LocalAgentProcess
         _process = null;
     }
 
-    private void Emit(string? line)
+    private void Emit(string? line, string logPath = "")
     {
         if (!string.IsNullOrWhiteSpace(line))
         {
+            if (!string.IsNullOrWhiteSpace(logPath))
+            {
+                try
+                {
+                    File.AppendAllText(logPath, $"{DateTimeOffset.Now:O}  {line}{Environment.NewLine}");
+                }
+                catch
+                {
+                    // UI logging should not keep the local API from running.
+                }
+            }
             OutputReceived?.Invoke(line);
         }
     }

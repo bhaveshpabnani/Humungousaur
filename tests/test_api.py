@@ -2,6 +2,7 @@ import json
 import tempfile
 import threading
 import time
+import urllib.error
 import unittest
 import urllib.request
 from pathlib import Path
@@ -68,6 +69,16 @@ class APITests(unittest.TestCase):
                 self.assertEqual(health["status"], "ok")
                 self.assertIn("system", health)
                 self.assertIn("overall_status", health["system"])
+                bad_stimulus = api_post_error(base_url, "/stimuli", {"text": "", "source": "user_text"})
+                self.assertEqual(bad_stimulus["status"], 400)
+                self.assertEqual(bad_stimulus["payload"]["error"], "Field 'text' is required.")
+                request_logs = [
+                    json.loads(line)
+                    for line in (workspace / "artifacts" / "api_requests.jsonl").read_text(encoding="utf-8").splitlines()
+                    if line.strip()
+                ]
+                self.assertTrue(any(entry["path"] == "/stimuli" and entry["status"] == 400 for entry in request_logs))
+                self.assertNotIn("runtime_secrets", json.dumps(request_logs))
                 system_status = api_get(base_url, "/system/status")
                 self.assertEqual(system_status["workspace"], str(workspace.resolve()))
                 tools = api_get(base_url, "/tools")
@@ -782,6 +793,20 @@ def api_post(base_url: str, path: str, payload: dict):
     )
     with urllib.request.urlopen(request, timeout=15) as response:
         return json.loads(response.read().decode("utf-8"))
+
+
+def api_post_error(base_url: str, path: str, payload: dict):
+    request = urllib.request.Request(
+        base_url + path,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        urllib.request.urlopen(request, timeout=15)
+    except urllib.error.HTTPError as exc:
+        return {"status": exc.code, "payload": json.loads(exc.read().decode("utf-8"))}
+    raise AssertionError("Expected HTTP error response.")
 
 
 def wait_for_finished_run(base_url: str, run_id: str, timeout_seconds: float = 5.0):

@@ -236,11 +236,14 @@ class OpenAICompatibleChatClient(ModelClient):
             method="POST",
         )
         last_exc: Exception | None = None
-        for _attempt in range(2):
+        for _attempt in range(3):
             try:
                 with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
                     return json.loads(response.read().decode("utf-8"))
-            except urllib.error.HTTPError:
+            except urllib.error.HTTPError as exc:
+                if exc.code == 429 and _attempt < 2:
+                    time.sleep(_retry_after_seconds(exc))
+                    continue
                 raise
             except (urllib.error.URLError, http.client.HTTPException, TimeoutError) as exc:
                 last_exc = exc

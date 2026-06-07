@@ -311,6 +311,7 @@ class ModelPlanProvider(PlanProvider):
             "Choose tools by their descriptions, schemas, risk levels, permissions, runtime context, active goals, persona, and skills.\n"
             "Tool names are meaningful capability evidence; use them together with descriptions and schemas.\n"
             "For broad user intent, hand off through the most relevant capability tool instead of requiring exact command words or static routing constants.\n"
+            "When the right action is only to answer the user conversationally, use the direct conversation response tool instead of forcing unrelated operational tools.\n"
             "For an actionable request, return at least one safe step when a relevant allowed tool exists. Return an empty steps list only when no allowed tool can help, the request is unsafe, or more user input is genuinely required.\n"
             "Prefer one observe/act step at a time for browser, OS, shell, or other state-changing work.\n"
             "Use high-risk tools only when the user explicitly asks for that capability; approval will be handled later.\n"

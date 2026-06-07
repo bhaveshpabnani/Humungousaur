@@ -430,6 +430,9 @@ class AgentOrchestrator:
         }
 
     def _compose_response(self, request: str, results: list[ToolResult]) -> str:
+        direct_response = self._direct_conversation_response(results)
+        if direct_response:
+            return direct_response
         payload = {
             "request": request,
             "results": [self._result_for_response(result) for result in results if result.tool_name != "write_note"],
@@ -493,6 +496,15 @@ class AgentOrchestrator:
                     lines.append(f"- {item.get('tool_name')} ({item.get('risk_level')}): {approval.get('reason', item.get('summary'))}")
                     lines.append(f"  token: {approval.get('approval_token', 'missing')}")
         return "\n".join(lines).strip()
+
+    def _direct_conversation_response(self, results: list[ToolResult]) -> str:
+        for result in reversed(results):
+            if result.tool_name != "conversation_response_prepare" or result.status != ActionStatus.SUCCEEDED:
+                continue
+            text = str(result.output.get("text") or "").strip()
+            if text:
+                return redact_secrets(text)
+        return ""
 
     def _result_for_response(self, result: ToolResult) -> dict[str, object]:
         payload: dict[str, object] = {
