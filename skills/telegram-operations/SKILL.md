@@ -5,6 +5,20 @@ description: Configure and operate Telegram bot DMs, groups, topics, markdown-im
 
 # Telegram Operations
 
+## Tool Map
+
+- `channel_manifest`
+- `channel_setup_requirements`
+- `channel_setup_save`
+- `channel_setup_status`
+- `channel_doctor`
+- `channel_listener_status`
+- `channel_listener_tick`
+- `channel_webhook_ingest`
+- `channel_message_prepare`
+- `channel_message_send`
+- `channel_outbox`
+
 Use this skill when Telegram bot setup, Telegram groups, topics, media conversion, or Telegram sends are involved.
 
 ## Setup

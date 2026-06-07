@@ -5,6 +5,14 @@ description: Delegate bounded repository work to Codex CLI or another trusted co
 
 # Coding Agent Delegation
 
+## Tool Map
+
+- `codex_cli_status`
+- `codex_cli_plan`
+- `codex_cli_run`
+- `multi_agent_coordinate`
+- `multi_agent_board`
+
 Use this skill for background feature builds, code reviews, large refactors, and issue-to-PR loops. Do not use it for simple edits or read-only lookup.
 
 ## When To Delegate

@@ -5,6 +5,18 @@ description: Apply structured computer-use practices inspired by robust assistan
 
 # Claude-Style Computer Use
 
+## Tool Map
+
+- `browser_live_observe`
+- `browser_live_click`
+- `browser_live_type`
+- `browser_live_screenshot`
+- `os_observe_ui`
+- `os_click_element`
+- `os_type_text`
+- `os_send_keys`
+- `screenshot_capture`
+
 Use this skill when a task needs careful GUI execution, multi-step form work, or visual verification.
 
 ## Principles

@@ -5,6 +5,14 @@ description: Operate speech-to-text, text-to-speech, wake-word, voice response, 
 
 # Speech Operations
 
+## Tool Map
+
+- `voice_provider_status`
+- `voice_transcribe`
+- `voice_response_prepare`
+- `voice_speak`
+- `voice_responses`
+
 Use this skill when the task involves STT, TTS, voice wakeup, spoken responses, voice calls, or audio files.
 
 ## Providers

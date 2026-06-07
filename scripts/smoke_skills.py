@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import sys
 from typing import Any
+import uuid
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -51,13 +52,14 @@ def main() -> int:
         record(
             "skills",
             f"tool_map:{skill['name']}",
-            not missing,
+            bool(tool_map) and not missing,
             {
                 "skill_id": skill_id,
                 "tool_map": tool_map,
                 "native_tools": [entry for entry in tool_map if entry in tool_names],
                 "skill_refs": [entry for entry in tool_map if entry in skill_names],
                 "missing": missing,
+                "has_tool_map": bool(tool_map),
             },
         )
 
@@ -95,6 +97,7 @@ def main() -> int:
     _smoke_productivity(record, tools, config)
     _smoke_channels(record, tools, config)
     _smoke_core_surfaces(record, tools, config)
+    _smoke_skill_task_surfaces(record, tools, config)
 
     failed = [item for item in sections if not item["ok"]]
     config.data_dir.mkdir(parents=True, exist_ok=True)
@@ -160,8 +163,135 @@ def _smoke_channels(record, tools: dict[str, Any], config: AgentConfig) -> None:
     for channel_id in ("slack", "whatsapp", "telegram", "discord"):
         manifest = tools["channel_manifest"].execute({"channel_id": channel_id}, config)
         doctor = tools["channel_doctor"].execute({"channel_id": channel_id}, config)
+        requirements = tools["channel_setup_requirements"].execute({"channel_id": channel_id}, config)
+        setup = tools["channel_setup_save"].execute(
+            {
+                "channel_id": channel_id,
+                "enabled": True,
+                "conversation_defaults": _channel_defaults(channel_id),
+                "secret_refs": _channel_secret_refs(channel_id),
+                "allowlist": ["user-smoke"],
+                "group_allowlist": ["room-smoke"],
+                "notes": f"Skill smoke setup for {channel_id}.",
+            },
+            config,
+        )
+        status = tools["channel_setup_status"].execute({"channel_id": channel_id}, config)
+        listener = tools["channel_listener_status"].execute({"channel_id": channel_id}, config)
+        prepared = tools["channel_message_prepare"].execute(
+            {
+                "channel_id": channel_id,
+                "conversation_id": _channel_defaults(channel_id)["conversation_id"],
+                "text": _channel_smoke_text(channel_id),
+                "metadata": _channel_prepare_metadata(channel_id),
+                "reason": f"Prepare a non-sending {channel_id} channel smoke envelope.",
+            },
+            config,
+        )
+        webhook = tools["channel_webhook_ingest"].execute(
+            {
+                "channel_id": channel_id,
+                "payload": _channel_webhook_payload(channel_id),
+                "prepare_reply": True,
+                "reason": f"Normalize and process a representative {channel_id} inbound event.",
+            },
+            config,
+        )
+        outbox = tools["channel_outbox"].execute({"limit": 20}, config)
         record("channels", f"{channel_id}_manifest", _ok(manifest), _tool_payload(manifest))
         record("channels", f"{channel_id}_doctor", _ok(doctor), _tool_payload(doctor))
+        record("channels", f"{channel_id}_requirements", _ok(requirements), _tool_payload(requirements))
+        record("channels", f"{channel_id}_setup_save", _ok(setup), _tool_payload(setup))
+        record("channels", f"{channel_id}_setup_status", _ok(status), _tool_payload(status))
+        record("channels", f"{channel_id}_listener_status", _ok(listener), _tool_payload(listener))
+        record(
+            "channels",
+            f"{channel_id}_message_prepare",
+            _ok(prepared) and prepared.output["message"]["status"] == "prepared_not_sent",
+            _tool_payload(prepared),
+        )
+        record(
+            "channels",
+            f"{channel_id}_webhook_ingest",
+            _ok(webhook) and webhook.output.get("message_count", 0) == 1,
+            _tool_payload(webhook),
+        )
+        record(
+            "channels",
+            f"{channel_id}_outbox",
+            _ok(outbox) and any(item.get("channel_id") == channel_id for item in outbox.output.get("messages", [])),
+            _tool_payload(outbox),
+        )
+
+
+def _channel_defaults(channel_id: str) -> dict[str, str]:
+    return {
+        "slack": {"conversation_id": "D-SMOKE", "conversation_type": "im"},
+        "whatsapp": {"conversation_id": "+15555550100", "conversation_type": "private"},
+        "telegram": {"conversation_id": "420001", "conversation_type": "private"},
+        "discord": {"conversation_id": "990001", "conversation_type": "dm"},
+    }.get(channel_id, {"conversation_id": "smoke-room", "conversation_type": "dm"})
+
+
+def _channel_secret_refs(channel_id: str) -> dict[str, str]:
+    return {
+        "slack": {"bot_token": "SLACK_BOT_TOKEN", "signing_secret": "SLACK_SIGNING_SECRET"},
+        "whatsapp": {"access_token": "WHATSAPP_ACCESS_TOKEN", "phone_number_id": "WHATSAPP_PHONE_NUMBER_ID"},
+        "telegram": {"bot_token": "TELEGRAM_BOT_TOKEN"},
+        "discord": {"bot_token": "DISCORD_BOT_TOKEN"},
+    }.get(channel_id, {})
+
+
+def _channel_smoke_text(channel_id: str) -> str:
+    if channel_id == "telegram":
+        return "Skill smoke with image: ![chart](https://example.com/chart.png)"
+    return f"Humungousaur {channel_id} channel skill smoke. This was not sent."
+
+
+def _channel_prepare_metadata(channel_id: str) -> dict[str, Any]:
+    if channel_id == "slack":
+        return {"thread_ts": "1712023032.1234"}
+    if channel_id == "discord":
+        return {"thread_id": "990001"}
+    return {}
+
+
+def _channel_webhook_payload(channel_id: str) -> dict[str, Any]:
+    suffix = uuid.uuid4().hex[:8]
+    if channel_id == "slack":
+        return {
+            "event_id": f"EvSkillSmoke-{suffix}",
+            "event": {
+                "type": "message",
+                "channel": "D-SMOKE",
+                "channel_type": "im",
+                "user": "U-SMOKE",
+                "text": "Hello from Slack skill smoke.",
+                "client_msg_id": f"slack-smoke-{suffix}",
+            },
+        }
+    if channel_id == "telegram":
+        return {
+            "update_id": int(suffix[:6], 16),
+            "message": {
+                "message_id": int(suffix[-6:], 16),
+                "chat": {"id": "420001", "type": "private"},
+                "from": {"id": "7001", "is_bot": False},
+                "text": "Hello from Telegram skill smoke.",
+            },
+        }
+    if channel_id == "discord":
+        return {
+            "id": f"discord-smoke-{suffix}",
+            "channel_id": "990001",
+            "conversation_type": "dm",
+            "author": {"id": "discord-user", "bot": False},
+            "content": "Hello from Discord skill smoke.",
+            "requires_response": True,
+        }
+    if channel_id == "whatsapp":
+        return {"from": "+15555550100", "id": f"whatsapp-smoke-{suffix}", "text": "Hello from WhatsApp skill smoke."}
+    return {"conversation_id": "smoke-room", "sender_id": "user-smoke", "text": f"Hello from {channel_id}."}
 
 
 def _smoke_core_surfaces(record, tools: dict[str, Any], config: AgentConfig) -> None:
@@ -177,6 +307,80 @@ def _smoke_core_surfaces(record, tools: dict[str, Any], config: AgentConfig) -> 
     ]
     for section, tool_name, payload in scenarios:
         result = tools[tool_name].execute(payload, config)
+        record(section, tool_name, result.status in {ActionStatus.SUCCEEDED, ActionStatus.SKIPPED}, _tool_payload(result))
+
+
+def _smoke_skill_task_surfaces(record, tools: dict[str, Any], config: AgentConfig) -> None:
+    dry_config = AgentConfig(
+        workspace=config.workspace,
+        data_dir=config.data_dir,
+        max_file_bytes=config.max_file_bytes,
+        max_search_results=config.max_search_results,
+        dry_run=True,
+        planner_provider=config.planner_provider,
+        model_provider=config.model_provider,
+        model_name=config.model_name,
+        model_base_url=config.model_base_url,
+        model_api_key_env=config.model_api_key_env,
+        model_timeout_seconds=config.model_timeout_seconds,
+        runtime_secrets=config.runtime_secrets,
+        allowed_read_roots=config.allowed_read_roots,
+        allowed_write_roots=config.allowed_write_roots,
+    ).normalized()
+    scenarios = [
+        ("capability_surfaces", "tool_describe", {"record_id": "tool:channel_message_prepare"}),
+        ("capability_surfaces", "tool_search", {"query": "voice response", "limit": 5}),
+        ("computer_use", "browser_live_status", {}),
+        ("computer_use", "os_active_window", {}),
+        ("speech", "voice_response_prepare", {"text": "Humungousaur voice skill smoke.", "reason": "Prepare a voice artifact without playback.", "tts_provider": "artifact"}),
+        ("speech", "voice_responses", {"limit": 5}),
+        ("codex_delegation", "codex_capability_status", {"include_tools": True, "limit": 20}),
+        (
+            "codex_delegation",
+            "codex_cli_plan",
+            {
+                "objective": "Inspect the repository and summarize the test command without editing files.",
+                "context": "Skill smoke dry-run only.",
+                "working_directory": ".",
+                "preferred_sandbox": "read-only",
+                "max_timeout_seconds": 60,
+            },
+        ),
+        (
+            "taskflow",
+            "autonomous_task_graph_create",
+            {
+                "goal_title": "Skill smoke task graph",
+                "success_criteria": ["Task graph exists"],
+                "tasks": [
+                    {"task_id": "inspect", "title": "Inspect capability", "owner": "planner"},
+                    {"task_id": "verify", "title": "Verify result", "owner": "reviewer", "depends_on": ["inspect"]},
+                ],
+            },
+        ),
+        (
+            "taskflow",
+            "multi_agent_coordinate",
+            {
+                "goal_title": "Skill smoke coordination",
+                "success_criteria": ["Specialist graph exists"],
+                "specialists": [
+                    {"name": "planner", "purpose": "Plan the smoke", "contract": "Return exact verification steps.", "tools": ["tool_describe"]},
+                    {"name": "reviewer", "purpose": "Review the smoke", "contract": "Check evidence before completion.", "tools": ["capability_surface"]},
+                ],
+                "tasks": [
+                    {"task_id": "plan", "title": "Plan smoke", "owner": "planner"},
+                    {"task_id": "review", "title": "Review smoke", "owner": "reviewer", "depends_on": ["plan"]},
+                ],
+            },
+        ),
+        ("taskflow", "multi_agent_board", {"limit": 10}),
+        ("taskflow", "autonomous_queue_status", {"limit": 10}),
+        ("external_cli_companions", "external_integrations_status", {"probe_screenpipe": False}),
+    ]
+    for section, tool_name, payload in scenarios:
+        execution_config = dry_config if tool_name in {"codex_cli_plan"} else config
+        result = tools[tool_name].execute(payload, execution_config)
         record(section, tool_name, result.status in {ActionStatus.SUCCEEDED, ActionStatus.SKIPPED}, _tool_payload(result))
 
 

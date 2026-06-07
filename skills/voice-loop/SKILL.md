@@ -5,6 +5,15 @@ description: Run wake-word audio through STT, the interaction harness, and TTS r
 
 # Voice Loop
 
+## Tool Map
+
+- `voice_provider_status`
+- `voice_transcribe`
+- `conversation_response_prepare`
+- `voice_response_prepare`
+- `voice_speak`
+- `voice_responses`
+
 Use this skill when the assistant receives a wake-word activation, recorded audio, voice transcript, or request to respond aloud.
 
 Workflow:

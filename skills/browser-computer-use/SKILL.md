@@ -5,6 +5,22 @@ description: Use browser, Playwright, and computer-use style tools through obser
 
 # Browser And Computer Use
 
+## Tool Map
+
+- `browser_live_status`
+- `browser_live_open`
+- `browser_live_observe`
+- `browser_live_click`
+- `browser_live_type`
+- `browser_live_screenshot`
+- `browser_live_wait`
+- `os_active_window`
+- `os_observe_ui`
+- `os_click_element`
+- `os_type_text`
+- `os_send_keys`
+- `screenshot_capture`
+
 Use this skill when a task requires web navigation, browser UI testing, desktop GUI observation, or Windows app control.
 
 Workflow:

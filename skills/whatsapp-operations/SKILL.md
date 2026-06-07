@@ -5,6 +5,19 @@ description: Configure and operate WhatsApp through Humungousaur's Cloud API sen
 
 # WhatsApp Operations
 
+## Tool Map
+
+- `channel_manifest`
+- `channel_setup_requirements`
+- `channel_setup_save`
+- `channel_setup_status`
+- `channel_doctor`
+- `channel_listener_status`
+- `channel_webhook_ingest`
+- `channel_message_prepare`
+- `channel_message_send`
+- `channel_outbox`
+
 Use this skill when the task involves WhatsApp onboarding, WhatsApp outbound messages, WhatsApp inbound gateway events, or deciding between Cloud API and personal-account bridge modes.
 
 ## Modes

@@ -5,6 +5,13 @@ description: Delegate bounded repository work to Codex CLI through model-planned
 
 # Codex Delegation
 
+## Tool Map
+
+- `codex_cli_status`
+- `codex_cli_plan`
+- `codex_cli_run`
+- `codex_capability_status`
+
 Use this skill when another Codex run should inspect, implement, or verify a bounded repository task.
 
 Workflow:

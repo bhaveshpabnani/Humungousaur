@@ -5,6 +5,21 @@ description: Operate Humungousaur Gateway chat channels with setup checks, polic
 
 # Humungousaur Channel Gateway
 
+## Tool Map
+
+- `channel_catalog`
+- `channel_manifest`
+- `channel_setup_requirements`
+- `channel_setup_save`
+- `channel_setup_status`
+- `channel_doctor`
+- `channel_listener_status`
+- `channel_listener_tick`
+- `channel_webhook_ingest`
+- `channel_message_prepare`
+- `channel_message_send`
+- `channel_outbox`
+
 Use this skill when the assistant is working with chat apps such as WhatsApp, Slack, Telegram, Discord, Teams, Signal, SMS, WebChat, or voice-call channels.
 
 ## Operating Model

@@ -5,6 +5,18 @@ description: Apply computer-use style interaction loops: observe state, reason o
 
 # OpenAI-Style Computer Use
 
+## Tool Map
+
+- `browser_live_observe`
+- `browser_live_click`
+- `browser_live_type`
+- `browser_live_screenshot`
+- `os_observe_ui`
+- `os_click_element`
+- `os_type_text`
+- `os_send_keys`
+- `screenshot_capture`
+
 Use this skill for browser or desktop tasks that require visual or accessibility-driven interaction.
 
 ## Loop

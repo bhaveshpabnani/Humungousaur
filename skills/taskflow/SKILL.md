@@ -5,6 +5,19 @@ description: Coordinate durable multi-step work with goals, tasks, waits, wakeup
 
 # TaskFlow
 
+## Tool Map
+
+- `cognitive_goal_create`
+- `cognitive_commitment_record`
+- `cognitive_commitment_update`
+- `cognitive_wakeup_schedule`
+- `cognitive_trigger_record`
+- `autonomous_task_graph_create`
+- `autonomous_queue_status`
+- `autonomous_cycle_run`
+- `multi_agent_coordinate`
+- `multi_agent_board`
+
 Use this skill when work should outlive one prompt, wait on external events, delegate subtasks, or require resumable progress.
 
 ## When To Use

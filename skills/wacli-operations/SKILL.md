@@ -5,6 +5,14 @@ description: WhatsApp CLI companion workflow for explicitly requested third-part
 
 # WhatsApp CLI Companion
 
+## Tool Map
+
+- `external_integrations_status`
+- `run_shell_command`
+- `channel_manifest`
+- `channel_message_prepare`
+- `channel_outbox`
+
 Use this skill only when the user explicitly asks to message someone else on WhatsApp or asks to sync/search WhatsApp history through a local CLI.
 
 Do not use this for normal active WhatsApp chats with the assistant. Those go through the Humungousaur channel gateway.

@@ -5,6 +5,21 @@ description: Concrete operations playbook for configuring, testing, and safely u
 
 # Channel Operations
 
+## Tool Map
+
+- `channel_catalog`
+- `channel_manifest`
+- `channel_setup_requirements`
+- `channel_setup_save`
+- `channel_setup_status`
+- `channel_doctor`
+- `channel_listener_status`
+- `channel_listener_tick`
+- `channel_webhook_ingest`
+- `channel_message_prepare`
+- `channel_message_send`
+- `channel_outbox`
+
 Use this skill when the task involves onboarding, diagnosing, or sending through any chat channel.
 
 ## First Checks

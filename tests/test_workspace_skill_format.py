@@ -55,6 +55,7 @@ class WorkspaceSkillFormatTests(unittest.TestCase):
             entries = _tool_map_entries(path)
             missing = [entry for entry in entries if entry not in tool_names and entry not in skill_names]
             with self.subTest(skill=path.parent.name):
+                self.assertTrue(entries, "Every workspace skill must map to native tools or referenced skills.")
                 self.assertFalse(missing, f"Unresolved Tool Map entries: {missing}")
 
 

@@ -5,6 +5,19 @@ description: Configure and operate Slack as a Humungousaur channel, including So
 
 # Slack Operations
 
+## Tool Map
+
+- `channel_manifest`
+- `channel_setup_requirements`
+- `channel_setup_save`
+- `channel_setup_status`
+- `channel_doctor`
+- `channel_listener_status`
+- `channel_webhook_ingest`
+- `channel_message_prepare`
+- `channel_message_send`
+- `channel_outbox`
+
 Use this skill when Slack setup, diagnosis, inbound events, outbound messages, files, reactions, channels, DMs, or MPIMs are involved.
 
 ## Setup

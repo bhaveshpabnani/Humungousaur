@@ -5,6 +5,18 @@ description: Design and inspect Humungousaur tools, skills, plugins, adapters, a
 
 # Humungousaur Capability Surfaces
 
+## Tool Map
+
+- `capability_surface`
+- `tool_search`
+- `tool_describe`
+- `plugin_catalog`
+- `plugin_setup_plan`
+- `plugin_manifests`
+- `channel_catalog`
+- `agent_skill_catalog`
+- `agent_skill_read`
+
 Use this skill when adding, reviewing, or operating broad assistant capabilities.
 
 ## Separation Of Concerns

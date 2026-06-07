@@ -5,6 +5,14 @@ description: Google Workspace CLI operations for Gmail, Calendar, Drive, Contact
 
 # gog
 
+## Tool Map
+
+- `gmail_draft_prepare`
+- `email_draft_prepare`
+- `xlsx_workbook_create`
+- `xlsx_workbook_inspect`
+- `run_shell_command`
+
 Use this skill when the user asks for Gmail, Calendar, Drive, Contacts, Sheets, or Docs work and a local `gog` CLI is available. For Gmail drafting inside Humungousaur, prefer the native `gmail_draft_prepare` artifact tool first; use `gog` only when configured and approved.
 
 ## Setup
