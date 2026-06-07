@@ -14,6 +14,7 @@ from .creative import default_creative_tools
 from .design import default_design_tools
 from .external import default_external_tools
 from .files import default_tools as default_file_tools
+from .github import default_github_tools
 from .memory import default_memory_tools
 from .media import default_media_tools
 from .office import default_office_tools
@@ -69,6 +70,7 @@ def default_tools(config=None) -> dict[str, Tool]:
     tools.update(default_creative_tools())
     tools.update(default_design_tools())
     tools.update(default_external_tools())
+    tools.update(default_github_tools())
     tools.update(default_system_tools())
     tools.update(default_os_tools())
     tools.update(default_travel_tools())

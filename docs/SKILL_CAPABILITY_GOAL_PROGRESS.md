@@ -8,10 +8,10 @@ Smoke test each skill task one by one, identify skills that are only prompt/proc
 
 ## Current Status
 
-- Repository state reviewed after the Google Workspace operation packet slice.
+- Repository state reviewed after the GitHub and CI workflow artifact slice.
 - Current workspace skill count: `132`.
-- Current tool-domain folders: `29`.
-- Latest full skill smoke result: `393` sections, `0` failures.
+- Current tool-domain folders: `33`.
+- Latest full skill smoke result: `424` sections, `0` failures.
 - The goal is still active. The current work proves strong incremental progress, but not exhaustive completion across every skill and external/live integration.
 
 ## Completed Capability Slices
@@ -40,7 +40,8 @@ These slices have been implemented, smoke-tested, regression-tested, committed, 
 | `b2f6679` | Google Workspace operation packets | Native local packets for Calendar, Drive, Docs, Sheets, and Gmail-style Google operations, with OAuth scopes, approval requirements, payload previews, and `not_executed` status. |
 | `49e8598` | Network and DNS safety diagnostics | Native bounded DNS lookup, HTTP endpoint check, and single-port TCP connectivity probe tools. |
 | `51b4d32` | Creative writing and songwriting artifacts | Native creative brief, song structure, and creative revision packet artifacts with originality guardrails. |
-| current slice | Security review artifacts | Native dependency inventory, secret-scan report, prompt-injection review, and approval-policy review artifacts. |
+| `6d13f22` | Security review artifacts | Native dependency inventory, secret-scan report, prompt-injection review, and approval-policy review artifacts. |
+| current slice | GitHub and CI workflow artifacts | Native GitHub issue packets, PR packets, CI failure reports, repo-state reports, artifact inspection, skill docs, and smoke coverage without requiring live GitHub credentials. |
 
 ## Current Native Capability Areas
 
@@ -61,6 +62,7 @@ Humungousaur now has native tool domains for:
 - Design systems and theme packs
 - External integration status surfaces
 - Files, PDFs, OCR, and shell/file utilities
+- GitHub issue/PR/CI/repo-state workflow artifacts
 - Media/storyboard/music/video planning
 - Memory search/write/summary/profile
 - Network/DNS/HTTP/TCP diagnostics
@@ -92,8 +94,8 @@ The recurring verification pattern for each completed slice has been:
 
 Latest verified results:
 
-- Full skill smoke: `416` sections, `0` failures.
-- Full regression after security review slice: `385 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
+- Full skill smoke: `424` sections, `0` failures.
+- Full regression after GitHub and CI workflow slice: `390 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
 - The warnings are from `openpyxl` datetime deprecation during XLSX tests, not from the new skill slices.
 
 ## Still To Do
@@ -134,17 +136,16 @@ Needed work:
 - Admin privilege detection and blocked-state reporting.
 - Before/after diagnostics for approved live changes.
 
-### 4. GitHub And CI Workflows
+### 4. GitHub And CI Live Execution
 
-Current weak signal: several GitHub skills still rely mostly on generic shell/read/write tools.
+Current status: local issue packets, PR packets, CI failure reports, repo-state reports, artifact inspection, docs, and smoke coverage are implemented. Remaining work is live GitHub connector/CLI execution and polling.
 
 Needed work:
 
-- Native issue/PR triage packet artifacts.
-- Native CI failure summary artifact.
-- Native repo state report beyond raw `git` commands.
-- Better smoke tests that do not require live GitHub credentials.
 - Optional live GitHub connector tests when credentials are configured.
+- Current PR/CI polling and status refresh through approved `gh` or connector paths.
+- Approval-gated issue posting, PR opening, PR commenting, labeling, and check summaries.
+- Desktop UX for GitHub account state and live action approval.
 
 ### 5. Security And Dependency Live Scanner Integration
 
@@ -231,9 +232,9 @@ Needed work:
 2. Network/DNS safety diagnostics.
 3. Creative writing/songwriting artifacts.
 4. Security/dependency/prompt-injection artifact tools.
-5. GitHub issue/PR/CI native report packets.
-6. Desktop app settings and runtime flow integration.
-7. Live channel onboarding and smoke tests.
+5. Desktop app settings and runtime flow integration.
+6. Live channel onboarding and smoke tests.
+7. GitHub live connector and CI polling.
 
 ## Definition Of Done For This Goal
 

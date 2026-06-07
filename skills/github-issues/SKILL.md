@@ -20,6 +20,10 @@ Use for issue creation, triage, updates, linking PRs, labeling, milestones, and 
 
 ## Tool Map
 
+- `github_issue_packet_create`
+- `github_artifact_inspect`
+- `secret_scan_report_create`
+- `approval_policy_review_create`
 - `run_shell_command`
 - `read_file`
 - `write_note`
@@ -30,14 +34,17 @@ Use for issue creation, triage, updates, linking PRs, labeling, milestones, and 
 
 1. Identify repo and issue intent.
 2. Gather reproduction or evidence before drafting.
-3. Draft issue title, problem, expected behavior, actual behavior, steps, impact, and evidence.
-4. Use `gh issue` only when configured and the user wants live GitHub action.
-5. For updates, inspect current issue state first.
-6. Report exact created/updated URL or keep as a draft.
+3. Use `github_issue_packet_create` to create a local issue packet with title, problem, expected behavior, actual behavior, steps, impact, labels, and evidence.
+4. Inspect the packet with `github_artifact_inspect` before posting, sharing, or referencing it as a final artifact.
+5. Use `secret_scan_report_create` or an equivalent review before including logs, configs, screenshots, or customer data.
+6. Use `gh issue` only when configured and the user wants live GitHub action.
+7. For updates, inspect current issue state first.
+8. Report exact created/updated URL or keep as a draft.
 
 ## Native Implementation Boundaries
 
-- Use native shell/gh or future Humungousaur GitHub tools.
+- Use native Humungousaur GitHub packet tools first for drafts and triage.
+- Use native shell/gh only for approved live GitHub action.
 - Do not import Hermes GitHub issue scripts.
 - Do not pretend GitHub was updated when only a draft was written.
 
@@ -50,7 +57,7 @@ Use for issue creation, triage, updates, linking PRs, labeling, milestones, and 
 ## Verification
 
 - Live updates require a URL or command output.
-- Drafts should be clearly marked unsent.
+- Drafts should be clearly marked unsent with `live_execution_status: not_executed`.
 - Labels/milestones should match existing repo choices when checked.
 
 ## Failure Modes

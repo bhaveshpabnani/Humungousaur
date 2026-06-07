@@ -112,6 +112,7 @@ def main() -> int:
     _smoke_design(record, tools, config)
     _smoke_visuals(record, tools, config)
     _smoke_security(record, tools, config)
+    _smoke_github(record, tools, config)
     _smoke_channels(record, tools, config)
     _smoke_rss(record, tools, config)
     _smoke_network(record, tools, config)
@@ -974,6 +975,82 @@ def _smoke_security(record, tools: dict[str, Any], config: AgentConfig) -> None:
     record("security", "prompt_injection_review_create", _ok(prompt_review) and prompt_review.output.get("risk_level") == "high", _tool_payload(prompt_review))
     record("security", "prompt_injection_review_inspect", _ok(prompt_inspect) and prompt_inspect.output.get("finding_count") == 1, _tool_payload(prompt_inspect))
     record("security", "approval_policy_review_create", _ok(approval) and approval.output.get("approval_gate_count") == 1, _tool_payload(approval))
+
+
+def _smoke_github(record, tools: dict[str, Any], config: AgentConfig) -> None:
+    issue = tools["github_issue_packet_create"].execute(
+        {
+            "filename": "skill-smoke-github-issue.md",
+            "repo": "owner/repo",
+            "title": "Fix desktop chat 400 response",
+            "problem": "The desktop app sends an invalid stimulus payload.",
+            "labels": ["bug", "desktop"],
+            "severity": "high",
+            "reproduction_steps": ["Open desktop app.", "Send Hi."],
+            "expected_behavior": "Assistant replies normally.",
+            "actual_behavior": "A 400 invalid-input response is shown.",
+            "impact": "Daily chat loop is blocked.",
+            "evidence": ["synthetic screenshot reference"],
+            "reason": "Verify native GitHub issue packet skill capability.",
+        },
+        config,
+    )
+    pr = tools["github_pr_packet_create"].execute(
+        {
+            "filename": "skill-smoke-github-pr.md",
+            "repo": "owner/repo",
+            "title": "Add native GitHub workflow artifacts",
+            "branch": "main",
+            "base_branch": "main",
+            "changes": ["Added issue packet artifact.", "Added CI failure report artifact."],
+            "verification": ["python -m pytest tests/test_github_tools.py -q"],
+            "ci_checks": [{"name": "pytest", "status": "pending"}],
+            "risks": ["Live GitHub posting remains approval-gated."],
+            "reason": "Verify native GitHub PR packet skill capability.",
+        },
+        config,
+    )
+    ci = tools["ci_failure_report_create"].execute(
+        {
+            "filename": "skill-smoke-ci-failure.md",
+            "repo": "owner/repo",
+            "check_name": "pytest",
+            "workflow": "CI",
+            "failure_class": "test",
+            "log_excerpt": "AssertionError: Field 'text' is required.",
+            "suspected_causes": ["Stimulus payload omitted text."],
+            "reproduction_commands": ["python -m pytest tests/test_api.py -q"],
+            "verification": ["Focused API regression."],
+            "reason": "Verify native CI failure report skill capability.",
+        },
+        config,
+    )
+    repo_state = tools["github_repo_state_report_create"].execute(
+        {
+            "filename": "skill-smoke-repo-state.md",
+            "repo": "owner/repo",
+            "branch": "main",
+            "status_summary": "Synthetic changed files provided by smoke.",
+            "changed_files": ["humungousaur/tools/github/implementation.py", "tests/test_github_tools.py"],
+            "recent_commits": ["6d13f22 Add native security review artifacts"],
+            "verification": [{"command": "git status --short", "result": "synthetic smoke input"}],
+            "reason": "Verify native repo-state report skill capability.",
+        },
+        config,
+    )
+    issue_inspect = tools["github_artifact_inspect"].execute({"path": issue.output.get("path", "")}, config) if _ok(issue) else issue
+    pr_inspect = tools["github_artifact_inspect"].execute({"path": pr.output.get("path", "")}, config) if _ok(pr) else pr
+    ci_inspect = tools["github_artifact_inspect"].execute({"path": ci.output.get("path", "")}, config) if _ok(ci) else ci
+    repo_inspect = tools["github_artifact_inspect"].execute({"path": repo_state.output.get("path", "")}, config) if _ok(repo_state) else repo_state
+
+    record("github", "github_issue_packet_create", _ok(issue) and issue.output.get("live_execution_status") == "not_executed" and issue.output.get("evidence_count") == 1, _tool_payload(issue))
+    record("github", "github_issue_packet_inspect", _ok(issue_inspect) and issue_inspect.output.get("artifact_type") == "github_issue_packet", _tool_payload(issue_inspect))
+    record("github", "github_pr_packet_create", _ok(pr) and pr.output.get("change_count") == 2 and pr.output.get("ci_check_count") == 1, _tool_payload(pr))
+    record("github", "github_pr_packet_inspect", _ok(pr_inspect) and pr_inspect.output.get("artifact_type") == "github_pr_packet", _tool_payload(pr_inspect))
+    record("github", "ci_failure_report_create", _ok(ci) and ci.output.get("suspected_cause_count") == 1, _tool_payload(ci))
+    record("github", "ci_failure_report_inspect", _ok(ci_inspect) and ci_inspect.output.get("artifact_type") == "ci_failure_report", _tool_payload(ci_inspect))
+    record("github", "github_repo_state_report_create", _ok(repo_state) and repo_state.output.get("changed_file_count") == 2, _tool_payload(repo_state))
+    record("github", "github_repo_state_report_inspect", _ok(repo_inspect) and repo_inspect.output.get("artifact_type") == "github_repo_state_report", _tool_payload(repo_inspect))
 
 
 def _prepare_script_fixtures(config: AgentConfig) -> None:

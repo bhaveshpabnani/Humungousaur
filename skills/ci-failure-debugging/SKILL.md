@@ -20,6 +20,10 @@ Use when GitHub Actions or other CI checks fail, PR checks are red, logs need in
 
 ## Tool Map
 
+- `ci_failure_report_create`
+- `github_artifact_inspect`
+- `github_pr_packet_create`
+- `github_repo_state_report_create`
 - `run_shell_command`
 - `read_file`
 - `search_workspace`
@@ -32,13 +36,16 @@ Use when GitHub Actions or other CI checks fail, PR checks are red, logs need in
 1. Identify failing check and current commit.
 2. Retrieve logs with `gh` or provided evidence.
 3. Classify failure: test, lint, build, environment, auth, flake, or workflow config.
-4. Reproduce locally when feasible.
-5. Patch root cause, not just CI symptoms.
-6. Run targeted local checks and re-inspect CI status after push if requested.
+4. Create a durable `ci_failure_report_create` artifact with check name, workflow/run URL, log excerpt, suspected causes, reproduction commands, fix plan, verification, and residual risks.
+5. Inspect the report with `github_artifact_inspect` before patching or summarizing.
+6. Reproduce locally when feasible.
+7. Patch root cause, not just CI symptoms.
+8. Run targeted local checks and re-inspect CI status after push if requested.
 
 ## Native Implementation Boundaries
 
 - Use native shell/GitHub CLI and repo tooling.
+- Use native CI failure report artifacts to hold evidence and avoid brittle log-pattern fixes.
 - Do not import external CI-fix scripts.
 - Do not hardcode failure-pattern-to-fix maps.
 
@@ -52,6 +59,7 @@ Use when GitHub Actions or other CI checks fail, PR checks are red, logs need in
 
 - A fixed claim needs passing local command or current CI evidence.
 - If CI cannot be checked, report local-only verification.
+- Local CI reports should show `live_execution_status: not_executed` when no live CI query or update occurred.
 - Keep residual flake risk explicit.
 
 ## Failure Modes

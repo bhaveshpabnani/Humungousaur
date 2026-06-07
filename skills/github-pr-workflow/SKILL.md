@@ -20,6 +20,11 @@ Use for creating branches, committing, pushing, opening PRs, checking PR status,
 
 ## Tool Map
 
+- `github_pr_packet_create`
+- `github_repo_state_report_create`
+- `github_artifact_inspect`
+- `ci_failure_report_create`
+- `approval_policy_review_create`
 - `run_shell_command`
 - `read_file`
 - `search_workspace`
@@ -31,15 +36,19 @@ Use for creating branches, committing, pushing, opening PRs, checking PR status,
 
 1. Confirm repo root and worktree status.
 2. Protect unrelated dirty changes.
-3. Run appropriate tests or diff checks before commit when feasible.
-4. Commit intentionally with scoped files.
-5. Push only when the user requested it.
-6. Open or inspect PR with `gh` only when configured and approved.
-7. Report PR URL, branch, checks, and remaining risk.
+3. Use `github_repo_state_report_create` to record branch, status, changed files, recent commits, verification evidence, and known risk when a durable handoff is useful.
+4. Run appropriate tests or diff checks before commit when feasible.
+5. Commit intentionally with scoped files.
+6. Use `github_pr_packet_create` to prepare a local PR packet with summary, changes, verification, CI checks, review notes, and risks.
+7. Inspect the packet with `github_artifact_inspect` before posting, pushing, or handing off.
+8. Push only when the user requested it.
+9. Open or inspect PR with `gh` only when configured and approved.
+10. Report PR URL, branch, checks, and remaining risk.
 
 ## Native Implementation Boundaries
 
-- Use native shell/Git/gh commands through Humungousaur tooling or the current Codex environment.
+- Use native Humungousaur GitHub packets for summaries and repo-state handoffs.
+- Use native shell/Git/gh commands through Humungousaur tooling or the current Codex environment only for live Git operations.
 - Do not import Hermes GitHub workflow scripts.
 - Do not use upstream GitHub helpers as runtime implementation.
 
@@ -53,6 +62,7 @@ Use for creating branches, committing, pushing, opening PRs, checking PR status,
 
 - Git status should be inspected before staging and after commit.
 - Test/CI results should be current.
+- Local PR packets should show `live_execution_status: not_executed` until a live push or PR action is actually performed.
 - PR claims require command output or connector evidence.
 
 ## Failure Modes
