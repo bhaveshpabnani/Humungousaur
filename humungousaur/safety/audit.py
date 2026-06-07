@@ -19,76 +19,87 @@ def _now() -> str:
 class AuditLog:
     def __init__(self, db_path: Path) -> None:
         self.db_path = db_path
+        self._schema_initialized = False
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
 
     def _connect(self) -> sqlite3.Connection:
-        return sqlite3.connect(self.db_path)
+        db_exists = self.db_path.exists()
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        connection = sqlite3.connect(self.db_path)
+        if not db_exists and self._schema_initialized:
+            self._init_schema(connection)
+            connection.commit()
+        return connection
 
     def _init_db(self) -> None:
         with closing(self._connect()) as connection:
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS runs (
-                    run_id TEXT PRIMARY KEY,
-                    request TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    final_response TEXT,
-                    started_at TEXT NOT NULL,
-                    finished_at TEXT,
-                    cancel_requested_at TEXT,
-                    cancel_reason TEXT
-                )
-                """
-            )
-            self._ensure_column(connection, "runs", "cancel_requested_at", "TEXT")
-            self._ensure_column(connection, "runs", "cancel_reason", "TEXT")
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS actions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    run_id TEXT NOT NULL,
-                    tool_name TEXT NOT NULL,
-                    risk_level TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    tool_input TEXT NOT NULL,
-                    result TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    FOREIGN KEY(run_id) REFERENCES runs(run_id)
-                )
-                """
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS plan_traces (
-                    run_id TEXT PRIMARY KEY,
-                    requested_provider TEXT NOT NULL,
-                    used_provider TEXT NOT NULL,
-                    fallback_used INTEGER NOT NULL,
-                    error TEXT,
-                    duration_ms REAL NOT NULL,
-                    steps TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    FOREIGN KEY(run_id) REFERENCES runs(run_id)
-                )
-                """
-            )
-            connection.execute(
-                """
-                CREATE TABLE IF NOT EXISTS run_events (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    run_id TEXT NOT NULL,
-                    event_type TEXT NOT NULL,
-                    message TEXT NOT NULL,
-                    payload TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    FOREIGN KEY(run_id) REFERENCES runs(run_id)
-                )
-                """
-            )
-            connection.execute("CREATE INDEX IF NOT EXISTS idx_run_events_run_id ON run_events(run_id)")
-            connection.execute("CREATE INDEX IF NOT EXISTS idx_run_events_created_at ON run_events(created_at)")
+            self._init_schema(connection)
             connection.commit()
+        self._schema_initialized = True
+
+    def _init_schema(self, connection: sqlite3.Connection) -> None:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS runs (
+                run_id TEXT PRIMARY KEY,
+                request TEXT NOT NULL,
+                status TEXT NOT NULL,
+                final_response TEXT,
+                started_at TEXT NOT NULL,
+                finished_at TEXT,
+                cancel_requested_at TEXT,
+                cancel_reason TEXT
+            )
+            """
+        )
+        self._ensure_column(connection, "runs", "cancel_requested_at", "TEXT")
+        self._ensure_column(connection, "runs", "cancel_reason", "TEXT")
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS actions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id TEXT NOT NULL,
+                tool_name TEXT NOT NULL,
+                risk_level TEXT NOT NULL,
+                status TEXT NOT NULL,
+                tool_input TEXT NOT NULL,
+                result TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(run_id) REFERENCES runs(run_id)
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS plan_traces (
+                run_id TEXT PRIMARY KEY,
+                requested_provider TEXT NOT NULL,
+                used_provider TEXT NOT NULL,
+                fallback_used INTEGER NOT NULL,
+                error TEXT,
+                duration_ms REAL NOT NULL,
+                steps TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(run_id) REFERENCES runs(run_id)
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS run_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                message TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(run_id) REFERENCES runs(run_id)
+            )
+            """
+        )
+        connection.execute("CREATE INDEX IF NOT EXISTS idx_run_events_run_id ON run_events(run_id)")
+        connection.execute("CREATE INDEX IF NOT EXISTS idx_run_events_created_at ON run_events(created_at)")
 
     def _ensure_column(self, connection: sqlite3.Connection, table: str, column: str, definition: str) -> None:
         columns = {row[1] for row in connection.execute(f"PRAGMA table_info({table})").fetchall()}

@@ -18,6 +18,7 @@ from .productivity import default_productivity_tools
 from .skills import default_skill_tools
 from .system import default_system_tools
 from .voice import default_voice_tools
+from .writing import default_writing_tools
 from .workflow import default_workflow_tools
 
 __all__ = ["Tool", "default_tools"]
@@ -56,6 +57,7 @@ def default_tools(config=None) -> dict[str, Tool]:
     tools.update(default_system_tools())
     tools.update(default_os_tools())
     tools.update(default_voice_tools())
+    tools.update(default_writing_tools())
     tools.update(default_workflow_tools())
     tools.update(default_memory_tools())
     tools.update(default_office_tools())

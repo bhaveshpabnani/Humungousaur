@@ -22,6 +22,8 @@ Use for team updates, exec summaries, incident notes, rollout announcements, FAQ
 
 ## Tool Map
 
+- `writing_draft_create`
+- `writing_draft_inspect`
 - `read_file`
 - `write_note`
 - `memory_write`
@@ -36,8 +38,9 @@ Use for team updates, exec summaries, incident notes, rollout announcements, FAQ
 2. Separate verified facts from assumptions and open questions.
 3. Choose a format: short update, FAQ, incident note, announcement, newsletter, or decision memo.
 4. Draft in a concise, direct style with clear next actions.
-5. Prepare a channel message or note when delivery/persistence is requested.
-6. Use approval gates before external-visible or team-visible posting.
+5. Save a durable unsent draft with `writing_draft_create` when persistence is useful.
+6. Prepare a channel message or note when delivery/persistence is requested.
+7. Use approval gates before external-visible or team-visible posting.
 
 ## Native Implementation Boundaries
 

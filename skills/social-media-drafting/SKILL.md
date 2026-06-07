@@ -22,6 +22,8 @@ Use for LinkedIn posts, X/Twitter-style threads, community updates, launch posts
 
 ## Tool Map
 
+- `writing_draft_create`
+- `writing_draft_inspect`
 - `write_note`
 - `memory_write`
 - `read_file`
@@ -36,7 +38,7 @@ Use for LinkedIn posts, X/Twitter-style threads, community updates, launch posts
 2. Extract verified facts and decide what should stay private.
 3. Draft one strong version and optional shorter/warmer/more formal variants.
 4. Avoid unsupported claims, protected lyrics, private data, and impersonation.
-5. Save reusable drafts when requested.
+5. Save reusable drafts with `writing_draft_create` when requested.
 6. Do not post automatically; use native browser/channel actions only after explicit approval.
 
 ## Native Implementation Boundaries

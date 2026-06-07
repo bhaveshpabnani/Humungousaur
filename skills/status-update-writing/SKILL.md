@@ -21,6 +21,8 @@ Use when the user asks for current status, daily update, project update, standup
 
 ## Tool Map
 
+- `writing_draft_create`
+- `writing_draft_inspect`
 - `cognitive_state`
 - `cognitive_commitment_status`
 - `cognitive_interaction_review`
@@ -36,7 +38,8 @@ Use when the user asks for current status, daily update, project update, standup
 3. List completed work only when verified by files, tests, commits, or tool results.
 4. Separate "done", "in progress", "blocked", "not started", and "next".
 5. Keep updates short unless the user asks for detailed audit.
-6. Prepare channel-ready versions only after checking audience and approval needs.
+6. Save status drafts with `writing_draft_create` when the update should be reused or sent later.
+7. Prepare channel-ready versions only after checking audience and approval needs.
 
 ## Native Implementation Boundaries
 

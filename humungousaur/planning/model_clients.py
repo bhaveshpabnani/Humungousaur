@@ -130,7 +130,6 @@ class OpenAIResponsesClient(ModelClient):
         return text
 
     def _urlopen_json(self, request: urllib.request.Request) -> dict[str, Any]:
-        last_exc: Exception | None = None
         for _attempt in range(3):
             try:
                 with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
@@ -141,9 +140,8 @@ class OpenAIResponsesClient(ModelClient):
                     continue
                 raise
             except (urllib.error.URLError, http.client.HTTPException, TimeoutError) as exc:
-                last_exc = exc
-        assert last_exc is not None
-        raise last_exc
+                raise exc
+        raise RuntimeError("OpenAI Responses request retry loop ended unexpectedly.")
 
     def _extract_error_message(self, detail: str) -> str:
         try:
@@ -250,7 +248,6 @@ class OpenAICompatibleChatClient(ModelClient):
             },
             method="POST",
         )
-        last_exc: Exception | None = None
         for _attempt in range(3):
             try:
                 with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
@@ -261,9 +258,8 @@ class OpenAICompatibleChatClient(ModelClient):
                     continue
                 raise
             except (urllib.error.URLError, http.client.HTTPException, TimeoutError) as exc:
-                last_exc = exc
-        assert last_exc is not None
-        raise last_exc
+                raise exc
+        raise RuntimeError(f"{self.name} request retry loop ended unexpectedly.")
 
     def _json_schema_format(self, schema: dict[str, Any]) -> dict[str, Any]:
         return {

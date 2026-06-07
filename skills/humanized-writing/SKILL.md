@@ -20,6 +20,8 @@ Use for emails, docs, posts, scripts, messages, summaries, and rewriting AI-soun
 
 ## Tool Map
 
+- `writing_draft_create`
+- `writing_draft_inspect`
 - `doc-coauthoring`
 - `internal-comms-writing`
 - `social-media-drafting`
@@ -33,11 +35,12 @@ Use for emails, docs, posts, scripts, messages, summaries, and rewriting AI-soun
 3. Remove generic phrasing, filler, and over-explanation.
 4. Add concrete transitions and natural rhythm.
 5. Offer variants when tone is ambiguous.
-6. Check final text against constraints.
+6. Save approval-safe rewrite drafts with `writing_draft_create` when the user wants a durable artifact.
+7. Check final text against constraints.
 
 ## Native Implementation Boundaries
 
-- Use Humungousaur writing skills and memory only.
+- Use Humungousaur writing draft tools, writing skills, and memory only.
 - Do not import Hermes humanizer scripts.
 - Do not imitate a specific person without user-provided style context and permission.
 

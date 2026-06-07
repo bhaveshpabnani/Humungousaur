@@ -97,6 +97,7 @@ def main() -> int:
     _smoke_productivity(record, tools, config)
     _smoke_office(record, tools, config)
     _smoke_analysis(record, tools, config)
+    _smoke_writing(record, tools, config)
     _smoke_channels(record, tools, config)
     _smoke_core_surfaces(record, tools, config)
     _smoke_skill_task_surfaces(record, tools, config)
@@ -221,6 +222,43 @@ def _smoke_analysis(record, tools: dict[str, Any], config: AgentConfig) -> None:
     record("analysis", "chart_artifact_create", _ok(chart), _tool_payload(chart))
     record("analysis", "chart_artifact_inspect", _ok(chart_inspect) and chart_inspect.output.get("point_count") == 3, _tool_payload(chart_inspect))
     record("analysis", "business_report_create", _ok(report), _tool_payload(report))
+
+
+def _smoke_writing(record, tools: dict[str, Any], config: AgentConfig) -> None:
+    draft = tools["writing_draft_create"].execute(
+        {
+            "filename": "skill-smoke-status.md",
+            "draft_type": "status_update",
+            "title": "Skill Smoke Status Update",
+            "audience": "Product team",
+            "tone": "clear and concise",
+            "body": "Done: native writing draft artifacts are covered by smoke tests.\nNext: continue one-by-one skill capability hardening.",
+            "variants": [{"label": "short", "body": "Writing draft artifacts are now smoke-tested."}],
+            "must_keep_facts": ["The draft is not sent."],
+            "source_refs": ["scripts/smoke_skills.py"],
+            "approval_required": True,
+            "reason": "Verify writing draft creation.",
+        },
+        config,
+    )
+    inspected = tools["writing_draft_inspect"].execute({"path": draft.output.get("path", "")}, config) if _ok(draft) else draft
+    followup = tools["meeting_followup_packet_create"].execute(
+        {
+            "filename": "skill-smoke-followup.md",
+            "meeting_title": "Skill Smoke Planning",
+            "summary": "The assistant should keep hardening skills with native tools and smoke tests.",
+            "action_items": [{"task": "Run expanded skill smoke", "owner": "Humungousaur", "due": "current run", "evidence": "goal continuation"}],
+            "draft_messages": [{"channel_id": "slack", "conversation_id": "D-SMOKE", "text": "Skill smoke is ready for review after approval."}],
+            "reminders": [{"title": "Review next skill cluster", "scheduled_for": "2026-06-08T09:00:00Z", "reason": "Continue hardening"}],
+            "open_questions": ["Which skill family should be made native next?"],
+            "source_refs": ["active thread goal"],
+            "reason": "Verify meeting follow-up packet creation.",
+        },
+        config,
+    )
+    record("writing", "writing_draft_create", _ok(draft) and draft.output.get("send_status") == "not_sent", _tool_payload(draft))
+    record("writing", "writing_draft_inspect", _ok(inspected) and inspected.output.get("variant_count") == 1, _tool_payload(inspected))
+    record("writing", "meeting_followup_packet_create", _ok(followup) and followup.output.get("send_status") == "not_sent", _tool_payload(followup))
 
 
 def _prepare_script_fixtures(config: AgentConfig) -> None:

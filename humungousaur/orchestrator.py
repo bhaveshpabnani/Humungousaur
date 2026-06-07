@@ -81,7 +81,7 @@ class AgentOrchestrator:
         self.audit.log_run_event(run_id, "run_started", "Run started.", {"request": request})
         if self._cancel_requested(run_id, is_cancel_requested):
             return self._finish_cancelled(run_id, request, results)
-        planning_context = self._planning_context()
+        planning_context = {} if self.config.planner_provider == "explicit" else self._planning_context()
         self.audit.log_run_event(
             run_id,
             "planning_context_collected",

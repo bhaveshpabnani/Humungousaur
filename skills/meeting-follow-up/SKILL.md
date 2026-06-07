@@ -22,6 +22,9 @@ Use after a meeting summary, call transcript, standup, planning conversation, or
 
 ## Tool Map
 
+- `meeting_followup_packet_create`
+- `writing_draft_create`
+- `writing_draft_inspect`
 - `cognitive_commitment_record`
 - `cognitive_commitment_update`
 - `cognitive_trigger_record`
@@ -34,10 +37,11 @@ Use after a meeting summary, call transcript, standup, planning conversation, or
 
 1. Start from verified meeting evidence, not memory alone.
 2. Separate internal tracking from external-visible follow-ups.
-3. Record tasks or reminders only for explicit action items or user-approved follow-ups.
-4. Draft messages with `channel_message_prepare`; do not send without approval and configured channel support.
-5. Create notes or documents when the user wants a durable record.
-6. End with a clear checklist of recorded, drafted, and still-unconfirmed items.
+3. Create a durable unsent follow-up packet with `meeting_followup_packet_create` when there are multiple actions, reminders, or draft messages.
+4. Record tasks or reminders only for explicit action items or user-approved follow-ups.
+5. Draft messages with `channel_message_prepare`; do not send without approval and configured channel support.
+6. Create notes or documents when the user wants a durable record.
+7. End with a clear checklist of recorded, drafted, and still-unconfirmed items.
 
 ## Safety And Boundaries
 

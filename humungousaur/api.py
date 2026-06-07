@@ -438,8 +438,11 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                         args=(run_config, request, run_id, bool(payload.get("approve_high_risk", False))),
                         daemon=True,
                     )
-                    worker.start()
                     self._send_json({"run_id": run_id, "status": ActionStatus.PLANNED.value}, HTTPStatus.ACCEPTED)
+                    if isinstance(self.server, HumungousaurAPIServer):
+                        self.server.start_background_worker(worker)
+                    else:
+                        worker.start()
                     return
                 if path == "/autonomous/cycles":
                     run_config = request_config(effective_config(), payload)
@@ -653,10 +656,40 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
     return HumungousaurAPIHandler
 
 
-def create_api_server(config: AgentConfig, host: str = "127.0.0.1", port: int = 8765) -> ThreadingHTTPServer:
+class HumungousaurAPIServer(ThreadingHTTPServer):
+    def __init__(self, server_address: tuple[str, int], handler_class: type[BaseHTTPRequestHandler]) -> None:
+        super().__init__(server_address, handler_class)
+        self._background_threads: list[threading.Thread] = []
+        self._background_threads_lock = threading.Lock()
+
+    def start_background_worker(self, worker: threading.Thread) -> None:
+        with self._background_threads_lock:
+            self._background_threads = [thread for thread in self._background_threads if thread.is_alive()]
+            self._background_threads.append(worker)
+        worker.start()
+
+    def join_background_workers(self, timeout_seconds: float = 10.0) -> None:
+        deadline = time.monotonic() + max(0.0, timeout_seconds)
+        while True:
+            with self._background_threads_lock:
+                alive = [thread for thread in self._background_threads if thread.is_alive()]
+                self._background_threads = alive
+            if not alive:
+                return
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return
+            alive[0].join(timeout=min(0.25, remaining))
+
+    def server_close(self) -> None:
+        self.join_background_workers()
+        super().server_close()
+
+
+def create_api_server(config: AgentConfig, host: str = "127.0.0.1", port: int = 8765) -> HumungousaurAPIServer:
     if host not in {"127.0.0.1", "localhost", "::1"}:
         raise ValueError("Humungousaur API binds to loopback hosts only by default.")
-    return ThreadingHTTPServer((host, port), make_handler(config))
+    return HumungousaurAPIServer((host, port), make_handler(config))
 
 
 def _append_request_log(config: AgentConfig, entry: dict[str, Any], lock: threading.Lock) -> None:
