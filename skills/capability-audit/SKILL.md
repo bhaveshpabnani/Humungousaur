@@ -18,6 +18,7 @@ Use before large architecture changes, after adding tools/skills/plugins, when d
 - `capability_surface` records.
 - Tool catalog and descriptions.
 - Workspace skill catalog and memory skills.
+- Per-skill capability audit matrix.
 - Plugin and channel catalogs.
 - Provider readiness for OpenAI, Groq, Ollama, voice, browser, and OS tools.
 - Recent smoke test artifacts.
@@ -28,6 +29,7 @@ Use before large architecture changes, after adding tools/skills/plugins, when d
 - `tool_search`
 - `tool_describe`
 - `agent_skill_catalog`
+- `agent_skill_capability_audit`
 - `plugin_catalog`
 - `channel_catalog`
 - `voice_provider_status`
@@ -37,11 +39,12 @@ Use before large architecture changes, after adding tools/skills/plugins, when d
 ## Workflow
 
 1. Gather the current capability surface with records included when useful.
-2. Count tools, skills, channels, providers, plugins, and notable missing surfaces.
-3. Verify readiness for local services and cloud providers before claiming availability.
-4. Compare current capabilities to the user's requested architecture or shortlist.
-5. Identify gaps as missing, partially wired, untested, blocked by credentials, or blocked by policy.
-6. Recommend the next implementation batch with verification steps.
+2. Run `agent_skill_capability_audit` when the question includes skill completeness, prompt-only skills, live readiness, or smoke coverage.
+3. Count tools, skills, channels, providers, plugins, and notable missing surfaces.
+4. Verify readiness for local services and cloud providers before claiming availability.
+5. Compare current capabilities to the user's requested architecture or shortlist.
+6. Identify gaps as missing, partially wired, untested, blocked by credentials, or blocked by policy.
+7. Recommend the next implementation batch with verification steps.
 
 ## Safety And Boundaries
 
@@ -52,6 +55,7 @@ Use before large architecture changes, after adding tools/skills/plugins, when d
 ## Verification
 
 - Capability counts should come from current tool output.
+- Skill completeness should cite the per-skill audit artifact.
 - Readiness claims should cite status tool or smoke artifact evidence.
 - Missing skills should be listed by exact target name where possible.
 

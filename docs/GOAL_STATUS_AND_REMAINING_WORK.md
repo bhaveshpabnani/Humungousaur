@@ -18,8 +18,9 @@ The core standard for this goal is:
 
 - Branch: `main`.
 - Last fully pushed capability commit before this slice: `e35444f Add native GitHub workflow artifacts`.
-- Latest documented full skill smoke: `428` sections, `0` failures.
-- Latest documented full regression: `391 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
+- Latest documented full skill smoke: `429` sections, `0` failures.
+- Latest documented full regression: `392 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
+- Latest per-skill audit matrix: `132` skills audited, `90` native-capable or script-backed, `42` thin-tool-map skills needing deeper detail, `0` prompt-only, `0` unresolved Tool Map entries.
 - Current tool-domain folders observed: `33`.
 - Current skills observed: more than `130`.
 - Current working tree note: desktop channel operations have been implemented and tested in this slice; final commit/push status should be checked with `git status` and `git log`.
@@ -55,6 +56,7 @@ These areas have native implementation, skill wiring, smoke/regression coverage,
 | Security review artifacts | Done | Dependency inventory, secret-scan report, prompt-injection review, and approval-policy review artifacts. |
 | GitHub and CI workflow artifacts | Done | Native GitHub issue packets, PR packets, CI failure reports, repo-state reports, artifact inspection, skill docs, and smoke coverage without requiring live GitHub credentials. |
 | Desktop channel operations | Done locally in this slice | Windows app allowlist/group allowlist onboarding, outbound channel message preparation, approval-gated send flow, API channel-message routes, and API regression coverage. |
+| Per-skill capability audit matrix | Done | Native `agent_skill_capability_audit` tool writes Markdown/JSON audit artifacts, classifies every workspace skill, resolves Tool Maps against native tools/skills, and runs in full skill smoke. |
 | Workflow support tools | Done | Diff, JSON-only task, typed approval workflow, output compaction, tool search/catalog, and canvas/A2UI style surfaces are represented as native capability areas. |
 | Voice provider surfaces | Done as tool surfaces | Voice provider status, transcription, response preparation, speech, response listing, Deepgram, ElevenLabs, Windows SAPI, and local Whisper provider paths are represented. |
 | OS and browser control surfaces | Done as native surfaces | Browser, screen, keyboard, mouse, window, app, clipboard, and virtual desktop tool surfaces exist. |
@@ -78,9 +80,9 @@ These areas have code and skills, but they are not yet finished as daily-use, li
 
 ## Still To Do
 
-### 1. Build The Per-Skill Audit Matrix
+### 1. Resolve Per-Skill Audit Findings
 
-- For every skill, classify it as prompt-only, native packet, native artifact, live-capable, live-tested, or blocked.
+- Use the generated per-skill audit matrix to target the `42` thin-tool-map skills.
 - Add missing task-specific smoke for each high-value skill.
 - Flag skills whose tool maps pass but whose workflow is still too abstract.
 

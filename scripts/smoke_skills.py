@@ -18,7 +18,14 @@ if str(REPO_ROOT) not in sys.path:
 from humungousaur.config import AgentConfig
 from humungousaur.schemas import ActionStatus, ToolResult
 from humungousaur.tools import default_tools
-from humungousaur.tools.skill_tools import AgentSkillCatalogTool, AgentSkillReadTool, AgentSkillScriptCatalogTool, AgentSkillScriptReadTool, AgentSkillScriptRunTool
+from humungousaur.tools.skill_tools import (
+    AgentSkillCapabilityAuditTool,
+    AgentSkillCatalogTool,
+    AgentSkillReadTool,
+    AgentSkillScriptCatalogTool,
+    AgentSkillScriptReadTool,
+    AgentSkillScriptRunTool,
+)
 
 
 def main() -> int:
@@ -65,6 +72,23 @@ def main() -> int:
                 "has_tool_map": bool(tool_map),
             },
         )
+
+    audit = AgentSkillCapabilityAuditTool().execute(
+        {
+            "filename": "skill-smoke-capability-audit.md",
+            "reason": "Generate the per-skill capability matrix during full skill smoke.",
+        },
+        config,
+    )
+    record(
+        "skills",
+        "capability_audit_matrix",
+        audit.status == ActionStatus.SUCCEEDED
+        and audit.output.get("summary", {}).get("skill_count", 0) >= 100
+        and Path(audit.output.get("path", "")).exists()
+        and Path(audit.output.get("json_path", "")).exists(),
+        _tool_payload(audit),
+    )
 
     script_catalog = AgentSkillScriptCatalogTool().execute({"limit": 300}, config)
     scripts = script_catalog.output.get("scripts", []) if script_catalog.status == ActionStatus.SUCCEEDED else []

@@ -11,7 +11,8 @@ Smoke test each skill task one by one, identify skills that are only prompt/proc
 - Repository state reviewed during the desktop channel-onboarding integration slice.
 - Current workspace skill count: `132`.
 - Current tool-domain folders: `33`.
-- Latest full skill smoke result: `428` sections, `0` failures.
+- Latest full skill smoke result: `429` sections, `0` failures.
+- Latest per-skill audit matrix: `132` skills audited, `90` native-capable or script-backed, `42` thin-tool-map skills needing deeper workflow/safety/verification detail, `0` prompt-only, `0` unresolved Tool Map entries.
 - The goal is still active. The current work proves strong incremental progress, but not exhaustive completion across every skill and external/live integration.
 
 ## Completed Capability Slices
@@ -46,6 +47,7 @@ These slices have been implemented, smoke-tested, regression-tested, committed, 
 | current slice | Desktop channel onboarding | Backend channel setup requirements endpoint plus Windows app provider-specific required secrets, setup steps, delivery/policy/runtime summaries, and setup doctor results. |
 | current slice | Channel integration smoke | Native non-sending channel readiness report covering setup/status, doctor blockers, prepared outbox, dry-run send wiring, listener state, API route, app button, skill docs, and smoke coverage. |
 | current slice | Desktop runtime and approvals | Windows app Runtime page with recent runs, pending approvals, timeline details, approve/reject actions, and run cancellation. |
+| current slice | Per-skill capability audit matrix | Native skill audit tool writes Markdown/JSON artifacts, resolves exact Tool Maps, classifies all 132 workspace skills, and is now part of full skill smoke. |
 
 ## Current Native Capability Areas
 
@@ -79,6 +81,7 @@ Humungousaur now has native tool domains for:
 - Research citation/literature artifacts
 - Security/dependency/secret/prompt-injection review artifacts
 - Skills, scripts, skill catalog/read/run surfaces
+- Skill capability audit matrix artifacts
 - System health/status
 - Travel planning
 - Visual diagram/infographic artifacts
@@ -99,8 +102,8 @@ The recurring verification pattern for each completed slice has been:
 
 Latest verified results:
 
-- Full skill smoke after channel integration smoke slice: `428` sections, `0` failures.
-- Full regression after channel integration smoke slice: `391 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
+- Full skill smoke after per-skill audit matrix slice: `429` sections, `0` failures.
+- Full regression after per-skill audit matrix slice: `392 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
 - The warnings are from `openpyxl` datetime deprecation during XLSX tests, not from the new skill slices.
 
 ## Still To Do
@@ -209,15 +212,15 @@ Needed work:
 - Bot loop protection tests.
 - Ambient room context tests for channels that support it.
 
-### 10. Exhaustive Skill Audit
+### 10. Resolve Exhaustive Skill Audit Findings
 
-Current weak signal: the skill smoke proves tool maps and representative workflows, but not every possible task inside all 132 skills.
+Current status: the native audit matrix now proves Tool Map resolution and implementation classification across all 132 skills. It currently reports 90 native-capable/script-backed skills, 42 thin-tool-map skills, 0 prompt-only skills, and 0 unresolved Tool Map entries.
 
 Needed work:
 
-- Create a per-skill audit matrix with status: prompt-only, native packet, native artifact, live-capable, live-tested.
-- Add task-specific smoke for each skill, not only representative grouped smoke.
-- Flag skills whose tool maps pass but whose user-facing workflow is still too abstract.
+- Improve the 42 thin-tool-map skills with richer workflow, safety, boundary, and verification detail.
+- Add task-specific smoke for each high-value skill, not only representative grouped smoke.
+- Flag live-capable skills that still lack credentialed/live smoke evidence.
 - Prioritize high-value assistant skills first: Google Workspace, channels, desktop/OS/browser, voice, coding/delegation, security, memory/cognition.
 
 ## Open Questions To Explore

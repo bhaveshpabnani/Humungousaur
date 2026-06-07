@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -20,6 +21,7 @@ SKILL_SCRIPT_READ_LIMIT = 200_000
 SKILL_SCRIPT_OUTPUT_LIMIT = 20_000
 SKILL_SCRIPT_TIMEOUT_SECONDS = 60
 SKILL_SCRIPT_METADATA_PREFIX = "# humungousaur-skill-script:"
+SKILL_AUDIT_LIMIT = 300
 
 
 class AgentSkillCatalogTool(Tool):
@@ -290,6 +292,69 @@ class AgentSkillScriptRunTool(Tool):
         )
 
 
+class AgentSkillCapabilityAuditTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="agent_skill_capability_audit",
+            description=(
+                "Create a per-skill capability audit matrix for workspace SKILL.md packs. "
+                "The audit checks exact Tool Map entries, native tool coverage, skill references, bundled scripts, "
+                "safety/verification sections, and implementation status evidence."
+            ),
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema(
+                {
+                    "skill_id": {"type": "string", "description": "Optional exact workspace skill id to audit."},
+                    "filename": {"type": "string", "description": "Optional Markdown filename for the audit artifact."},
+                    "reason": {"type": "string", "description": "Why the skill capability matrix is being generated."},
+                }
+            ),
+            capability_group="skills",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        normalized = config.normalized()
+        skill_id = str(tool_input.get("skill_id") or "").strip()
+        skills = discover_workspace_skills(normalized)
+        if skill_id:
+            skills = [skill for skill in skills if skill.skill_id == skill_id]
+            if not skills:
+                return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, f"Unknown workspace skill_id: {skill_id}")
+        from humungousaur.tools import default_tools
+
+        tool_names = set(default_tools(normalized))
+        skill_names = {skill.name for skill in discover_workspace_skills(normalized)}
+        rows = [_skill_audit_row(skill, tool_names, skill_names) for skill in skills[:SKILL_AUDIT_LIMIT]]
+        summary = _skill_audit_summary(rows)
+        audit_dir = normalized.data_dir / "skill_audits"
+        audit_dir.mkdir(parents=True, exist_ok=True)
+        filename = _safe_audit_filename(str(tool_input.get("filename") or "skill-capability-audit.md"))
+        markdown_path = audit_dir / filename
+        json_path = markdown_path.with_suffix(".json")
+        payload = {
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "reason": str(tool_input.get("reason") or ""),
+            "source": "workspace_skill_capability_audit",
+            "workspace": str(normalized.workspace),
+            "summary": summary,
+            "skills": rows,
+        }
+        markdown_path.write_text(_render_skill_audit_markdown(payload), encoding="utf-8")
+        json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Audited {len(rows)} workspace skill(s); {summary['needs_attention_count']} need attention.",
+            {
+                "path": str(markdown_path),
+                "json_path": str(json_path),
+                "summary": summary,
+                "skills": rows,
+            },
+        )
+
+
 class WorkspaceSkillRef:
     def __init__(self, *, skill_id: str, name: str, description: str, path: Path, relative_path: str) -> None:
         self.skill_id = skill_id
@@ -354,6 +419,7 @@ def default_skill_tools() -> dict[str, Tool]:
         AgentSkillScriptCatalogTool(),
         AgentSkillScriptReadTool(),
         AgentSkillScriptRunTool(),
+        AgentSkillCapabilityAuditTool(),
     ]
     return {tool.name: tool for tool in tools}
 
@@ -433,6 +499,218 @@ def discover_scripts_for_skill(skill: WorkspaceSkillRef) -> list[WorkspaceSkillS
             )
         )
     return scripts
+
+
+def _skill_audit_row(skill: WorkspaceSkillRef, tool_names: set[str], skill_names: set[str]) -> dict[str, Any]:
+    content = skill.path.read_text(encoding="utf-8")
+    tool_map = _section_list_entries(content, "tool map")
+    native_tools = [entry for entry in tool_map if entry in tool_names]
+    skill_refs = [entry for entry in tool_map if entry in skill_names]
+    unresolved = [entry for entry in tool_map if entry not in tool_names and entry not in skill_names]
+    sections = _section_names(content)
+    scripts = [script.summary() for script in discover_scripts_for_skill(skill)]
+    has_safety = any(name in sections for name in {"safety and approval", "safety", "approval"})
+    has_verification = "verification" in sections
+    has_workflow = any(name in sections for name in {"workflow", "procedure", "operating model", "setup workflow", "testing a channel"})
+    has_boundaries = any(name in sections for name in {"native implementation boundaries", "implementation boundaries", "delivery truth"})
+    implementation_status = _skill_implementation_status(
+        native_tools=native_tools,
+        skill_refs=skill_refs,
+        unresolved=unresolved,
+        script_count=len(scripts),
+        has_safety=has_safety,
+        has_verification=has_verification,
+        has_workflow=has_workflow,
+    )
+    needs_attention = bool(unresolved) or not tool_map or implementation_status in {"prompt_only", "thin_tool_map"} or not has_verification
+    return {
+        "skill_id": skill.skill_id,
+        "name": skill.name,
+        "relative_path": skill.relative_path,
+        "description": skill.description,
+        "tool_map_count": len(tool_map),
+        "native_tool_count": len(native_tools),
+        "skill_ref_count": len(skill_refs),
+        "script_count": len(scripts),
+        "unresolved_tool_count": len(unresolved),
+        "implementation_status": implementation_status,
+        "has_workflow": has_workflow,
+        "has_safety": has_safety,
+        "has_verification": has_verification,
+        "has_boundaries": has_boundaries,
+        "needs_attention": needs_attention,
+        "tool_map": tool_map,
+        "native_tools": native_tools,
+        "skill_refs": skill_refs,
+        "unresolved_entries": unresolved,
+        "scripts": scripts,
+        "recommended_next_action": _recommended_skill_action(implementation_status, unresolved, has_verification),
+    }
+
+
+def _section_names(content: str) -> set[str]:
+    names: set[str] = set()
+    for line in content.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("## "):
+            continue
+        names.add(stripped.lstrip("#").strip().lower())
+    return names
+
+
+def _section_list_entries(content: str, section_name: str) -> list[str]:
+    entries: list[str] = []
+    in_section = False
+    wanted = section_name.strip().lower()
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            current = stripped.lstrip("#").strip().lower()
+            in_section = current == wanted
+            continue
+        if in_section and stripped.startswith("#"):
+            break
+        if not in_section or not stripped.startswith("-"):
+            continue
+        entry = _backtick_value(stripped)
+        if entry:
+            entries.append(entry)
+    return entries
+
+
+def _backtick_value(text: str) -> str:
+    start = text.find("`")
+    if start < 0:
+        return ""
+    end = text.find("`", start + 1)
+    if end < 0:
+        return ""
+    return text[start + 1 : end].strip()
+
+
+def _skill_implementation_status(
+    *,
+    native_tools: list[str],
+    skill_refs: list[str],
+    unresolved: list[str],
+    script_count: int,
+    has_safety: bool,
+    has_verification: bool,
+    has_workflow: bool,
+) -> str:
+    if unresolved:
+        return "unresolved_tool_map"
+    if not native_tools and not script_count:
+        return "prompt_only" if not skill_refs else "skill_ref_only"
+    if script_count and native_tools:
+        return "native_tools_and_scripts"
+    if script_count:
+        return "native_script_capable"
+    if native_tools and has_workflow and has_safety and has_verification:
+        return "native_capable"
+    if native_tools:
+        return "thin_tool_map"
+    return "unknown"
+
+
+def _recommended_skill_action(implementation_status: str, unresolved: list[str], has_verification: bool) -> str:
+    if unresolved:
+        return "Resolve Tool Map entries to native tools, scripts, or explicit referenced skills."
+    if implementation_status == "prompt_only":
+        return "Add native tools, scripts, operation packets, or concrete artifact creation for this skill."
+    if implementation_status == "skill_ref_only":
+        return "Add a direct native capability path or explain why this skill is only a composition wrapper."
+    if not has_verification:
+        return "Add a Verification section and representative smoke coverage."
+    if implementation_status == "thin_tool_map":
+        return "Add workflow, safety, boundary, and verification detail around the native tools."
+    return "Keep current native path and add live/credentialed smoke when external setup is available."
+
+
+def _skill_audit_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    status_counts: dict[str, int] = {}
+    for row in rows:
+        status = str(row.get("implementation_status", "unknown"))
+        status_counts[status] = status_counts.get(status, 0) + 1
+    return {
+        "skill_count": len(rows),
+        "native_capable_count": sum(1 for row in rows if str(row.get("implementation_status", "")).startswith("native")),
+        "script_capable_count": sum(1 for row in rows if int(row.get("script_count", 0) or 0) > 0),
+        "prompt_only_count": status_counts.get("prompt_only", 0),
+        "unresolved_tool_map_count": status_counts.get("unresolved_tool_map", 0),
+        "needs_attention_count": sum(1 for row in rows if row.get("needs_attention")),
+        "status_counts": status_counts,
+    }
+
+
+def _safe_audit_filename(value: str) -> str:
+    cleaned = "".join(char if char.isalnum() or char in {"-", "_", "."} else "-" for char in value.strip())
+    if not cleaned:
+        cleaned = "skill-capability-audit.md"
+    if not cleaned.endswith(".md"):
+        cleaned += ".md"
+    return cleaned[:120]
+
+
+def _render_skill_audit_markdown(payload: dict[str, Any]) -> str:
+    summary = payload["summary"]
+    lines = [
+        "# Skill Capability Audit",
+        "",
+        f"Created: {payload['created_at']}",
+        f"Workspace: `{payload['workspace']}`",
+        f"Reason: {payload.get('reason', '')}",
+        "",
+        "## Summary",
+        "",
+        f"- Skills audited: {summary['skill_count']}",
+        f"- Native capable: {summary['native_capable_count']}",
+        f"- Script capable: {summary['script_capable_count']}",
+        f"- Prompt only: {summary['prompt_only_count']}",
+        f"- Unresolved Tool Maps: {summary['unresolved_tool_map_count']}",
+        f"- Needs attention: {summary['needs_attention_count']}",
+        "",
+        "## Status Counts",
+        "",
+    ]
+    for status, count in sorted(summary["status_counts"].items()):
+        lines.append(f"- {status}: {count}")
+    lines.extend(
+        [
+            "",
+            "## Matrix",
+            "",
+            "| Skill | Status | Native Tools | Scripts | Unresolved | Attention | Next Action |",
+            "| --- | --- | ---: | ---: | ---: | --- | --- |",
+        ]
+    )
+    for row in payload["skills"]:
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _md_cell(str(row["name"])),
+                    _md_cell(str(row["implementation_status"])),
+                    str(row["native_tool_count"]),
+                    str(row["script_count"]),
+                    str(row["unresolved_tool_count"]),
+                    "yes" if row["needs_attention"] else "no",
+                    _md_cell(str(row["recommended_next_action"])),
+                ]
+            )
+            + " |"
+        )
+    lines.extend(["", "## Attention Items", ""])
+    for row in [item for item in payload["skills"] if item.get("needs_attention")]:
+        lines.append(f"- `{row['name']}`: {row['recommended_next_action']}")
+    if not any(item.get("needs_attention") for item in payload["skills"]):
+        lines.append("- None.")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _md_cell(value: str) -> str:
+    return value.replace("|", "\\|").replace("\n", " ")[:240]
 
 
 def _skill_metadata(path: Path) -> dict[str, str]:

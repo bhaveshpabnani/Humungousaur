@@ -7,6 +7,7 @@ from humungousaur.schemas import ActionStatus
 from humungousaur.tools.skill_tools import (
     AgentSkillCatalogTool,
     AgentSkillImportTool,
+    AgentSkillCapabilityAuditTool,
     AgentSkillReadTool,
     AgentSkillScriptCatalogTool,
     AgentSkillScriptReadTool,
@@ -27,7 +28,11 @@ class SkillToolTests(unittest.TestCase):
                 "name: gateway-test\n"
                 "description: Test gateway workflow.\n"
                 "---\n"
-                "# Gateway Test\n\nUse structured channel metadata.\n",
+                "# Gateway Test\n\nUse structured channel metadata.\n\n"
+                "## Tool Map\n\n- `channel_catalog`\n\n"
+                "## Workflow\n\nInspect the channel catalog.\n\n"
+                "## Safety And Approval\n\nRead-only catalog checks.\n\n"
+                "## Verification\n\nConfirm catalog output.\n",
                 encoding="utf-8",
             )
             (scripts_dir / "status.py").write_text(
@@ -56,6 +61,12 @@ class SkillToolTests(unittest.TestCase):
                 {"script_id": script_id, "input": {"message": "hello"}, "reason": "test native skill capability"},
                 config,
             )
+            audit = AgentSkillCapabilityAuditTool().execute(
+                {"filename": "skill-audit.md", "reason": "test audit matrix"},
+                config,
+            )
+            audit_path_exists = Path(audit.output["path"]).exists()
+            audit_json_path_exists = Path(audit.output["json_path"]).exists()
 
         self.assertEqual(catalog.status, ActionStatus.SUCCEEDED)
         self.assertEqual(catalog.output["workspace_skills"][0]["name"], "gateway-test")
@@ -72,6 +83,50 @@ class SkillToolTests(unittest.TestCase):
         self.assertEqual(script_run.status, ActionStatus.SUCCEEDED)
         self.assertTrue(script_run.output["json"]["ok"])
         self.assertEqual(script_run.output["json"]["message"], "hello")
+        self.assertEqual(audit.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(audit.output["summary"]["skill_count"], 1)
+        self.assertEqual(audit.output["skills"][0]["implementation_status"], "native_tools_and_scripts")
+        self.assertEqual(audit.output["skills"][0]["native_tools"], ["channel_catalog"])
+        self.assertEqual(audit.output["skills"][0]["script_count"], 1)
+        self.assertTrue(audit_path_exists)
+        self.assertTrue(audit_json_path_exists)
+
+    def test_skill_capability_audit_flags_unresolved_and_prompt_only_skills(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            native_dir = workspace / "skills" / "native-skill"
+            prompt_dir = workspace / "skills" / "prompt-only"
+            missing_dir = workspace / "skills" / "missing-tool"
+            native_dir.mkdir(parents=True)
+            prompt_dir.mkdir(parents=True)
+            missing_dir.mkdir(parents=True)
+            (native_dir / "SKILL.md").write_text(
+                "---\nname: native-skill\ndescription: Native skill.\n---\n"
+                "# Native Skill\n\n## Tool Map\n\n- `read_file`\n\n## Workflow\n\nRead evidence.\n\n"
+                "## Safety And Approval\n\nRead-only.\n\n## Verification\n\nConfirm output.\n",
+                encoding="utf-8",
+            )
+            (prompt_dir / "SKILL.md").write_text(
+                "---\nname: prompt-only\ndescription: Prompt only skill.\n---\n"
+                "# Prompt Only\n\n## Tool Map\n\n- `native-skill`\n\n## Workflow\n\nThink carefully.\n",
+                encoding="utf-8",
+            )
+            (missing_dir / "SKILL.md").write_text(
+                "---\nname: missing-tool\ndescription: Missing tool skill.\n---\n"
+                "# Missing Tool\n\n## Tool Map\n\n- `missing_native_tool`\n\n## Verification\n\nCheck mapping.\n",
+                encoding="utf-8",
+            )
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts").normalized()
+
+            audit = AgentSkillCapabilityAuditTool().execute({"reason": "test"}, config)
+
+        rows = {row["name"]: row for row in audit.output["skills"]}
+        self.assertEqual(audit.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(rows["native-skill"]["implementation_status"], "native_capable")
+        self.assertEqual(rows["prompt-only"]["implementation_status"], "skill_ref_only")
+        self.assertEqual(rows["missing-tool"]["implementation_status"], "unresolved_tool_map")
+        self.assertTrue(rows["missing-tool"]["needs_attention"])
+        self.assertEqual(audit.output["summary"]["unresolved_tool_map_count"], 1)
 
 
 if __name__ == "__main__":
