@@ -22,6 +22,9 @@ Use for data summaries, educational graphics, product explainers, reports, and o
 
 - `data-visualization`
 - `business-reporting`
+- `infographic_plan_create`
+- `infographic_plan_inspect`
+- `diagram_artifact_create`
 - `canvas_a2ui_create`
 - `web-artifact-builder`
 - `brand-guidelines`
@@ -32,14 +35,17 @@ Use for data summaries, educational graphics, product explainers, reports, and o
 2. Verify data and source context.
 3. Build hierarchy: title, main number, sections, visual marks, notes.
 4. Choose charts/icons/layout that clarify.
-5. Create a canvas/web artifact or detailed spec.
-6. Verify readability and data correctness.
+5. Use `infographic_plan_create` for a local plan with metrics, sections, visual marks, accessibility notes, and source refs.
+6. Use `infographic_plan_inspect` before reporting or turning the plan into a canvas/web artifact.
+7. Create a canvas/web artifact or detailed spec when useful.
+8. Verify readability and data correctness.
 
 ## Native Implementation Boundaries
 
 - Use Humungousaur visualization/canvas/web tools.
 - Do not import Hermes infographic scripts.
 - Use generated assets only through approved native workflows.
+- Native infographic plans must preserve source refs and draft/review/final status.
 
 ## Safety And Approval
 
@@ -51,6 +57,7 @@ Use for data summaries, educational graphics, product explainers, reports, and o
 
 - Check numbers against source.
 - Verify artifact path/render.
+- Inspect infographic plan artifacts for metric count, section count, and accessibility notes.
 - Mark draft versus final.
 
 ## Failure Modes

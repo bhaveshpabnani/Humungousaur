@@ -107,6 +107,7 @@ def main() -> int:
     _smoke_commerce(record, tools, config)
     _smoke_personal(record, tools, config)
     _smoke_design(record, tools, config)
+    _smoke_visuals(record, tools, config)
     _smoke_channels(record, tools, config)
     _smoke_rss(record, tools, config)
     _smoke_core_surfaces(record, tools, config)
@@ -643,6 +644,69 @@ def _smoke_design(record, tools: dict[str, Any], config: AgentConfig) -> None:
     record("design", "brand_guidelines_inspect", _ok(brand_inspect) and brand_inspect.output.get("color_count") == 2, _tool_payload(brand_inspect))
     record("design", "theme_pack_create", _ok(theme) and theme.output.get("token_count", 0) >= 2, _tool_payload(theme))
     record("design", "theme_pack_inspect", _ok(theme_inspect) and theme_inspect.output.get("contrast_check_count") == 1, _tool_payload(theme_inspect))
+
+
+def _smoke_visuals(record, tools: dict[str, Any], config: AgentConfig) -> None:
+    diagram = tools["diagram_artifact_create"].execute(
+        {
+            "filename": "skill-smoke-agent-flow.md",
+            "title": "Skill Smoke Agent Flow",
+            "diagram_type": "component",
+            "status": "current",
+            "nodes": [
+                {"id": "stimulus", "label": "Stimulus", "kind": "input", "notes": "User or channel event."},
+                {"id": "agent", "label": "Agent", "kind": "reasoning", "notes": "Plans and selects tools."},
+                {"id": "tool", "label": "Tool", "kind": "capability", "notes": "Executes native action."},
+            ],
+            "edges": [
+                {"from": "stimulus", "to": "agent", "label": "activates", "evidence": "skill smoke fixture"},
+                {"from": "agent", "to": "tool", "label": "calls", "evidence": "tool registry"},
+            ],
+            "evidence_refs": ["scripts/smoke_skills.py synthetic fixture"],
+            "unknowns": ["No live UI render in this smoke."],
+            "reason": "Verify native architecture diagram artifact support.",
+        },
+        config,
+    )
+    diagram_inspect = tools["diagram_artifact_inspect"].execute({"path": diagram.output.get("path", "")}, config) if _ok(diagram) else diagram
+    excalidraw = tools["excalidraw_diagram_create"].execute(
+        {
+            "filename": "skill-smoke-agent-flow.excalidraw",
+            "title": "Skill Smoke Agent Flow Sketch",
+            "status": "draft",
+            "nodes": [
+                {"id": "stimulus", "label": "Stimulus", "x": 60, "y": 80},
+                {"id": "agent", "label": "Agent", "x": 340, "y": 80},
+                {"id": "tool", "label": "Tool", "x": 620, "y": 80},
+            ],
+            "edges": [{"from": "stimulus", "to": "agent", "label": "activates"}, {"from": "agent", "to": "tool", "label": "calls"}],
+            "evidence_refs": ["scripts/smoke_skills.py synthetic fixture"],
+            "reason": "Verify native Excalidraw-compatible JSON generation.",
+        },
+        config,
+    )
+    infographic = tools["infographic_plan_create"].execute(
+        {
+            "filename": "skill-smoke-infographic.md",
+            "title": "Skill Smoke Capability Snapshot",
+            "audience": "Product owner",
+            "key_message": "Native tools can produce source-backed visual planning artifacts.",
+            "status": "ready_for_review",
+            "metrics": [{"label": "Visual tools", "value": "5", "unit": "tools", "source": "default_tools registry", "notes": "Synthetic smoke count."}],
+            "sections": [{"title": "Flow", "body": "Show stimulus, agent reasoning, and native tool execution."}],
+            "visual_marks": ["large count", "simple flow", "source note"],
+            "accessibility_notes": ["Do not rely on color alone for state."],
+            "source_refs": ["scripts/smoke_skills.py synthetic fixture"],
+            "reason": "Verify native infographic planning support.",
+        },
+        config,
+    )
+    infographic_inspect = tools["infographic_plan_inspect"].execute({"path": infographic.output.get("path", "")}, config) if _ok(infographic) else infographic
+    record("visuals", "diagram_artifact_create", _ok(diagram) and diagram.output.get("node_count") == 3, _tool_payload(diagram))
+    record("visuals", "diagram_artifact_inspect", _ok(diagram_inspect) and diagram_inspect.output.get("edge_count") == 2, _tool_payload(diagram_inspect))
+    record("visuals", "excalidraw_diagram_create", _ok(excalidraw) and excalidraw.output.get("element_count", 0) >= 7, _tool_payload(excalidraw))
+    record("visuals", "infographic_plan_create", _ok(infographic) and infographic.output.get("metric_count") == 1, _tool_payload(infographic))
+    record("visuals", "infographic_plan_inspect", _ok(infographic_inspect) and infographic_inspect.output.get("accessibility_note_count") == 1, _tool_payload(infographic_inspect))
 
 
 def _prepare_script_fixtures(config: AgentConfig) -> None:

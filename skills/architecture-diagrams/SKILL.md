@@ -23,6 +23,9 @@ Use for agent architecture, API flows, deployment maps, data pipelines, sequence
 - `codebase-inspection`
 - `read_file`
 - `search_workspace`
+- `diagram_artifact_create`
+- `diagram_artifact_inspect`
+- `excalidraw_diagram_create`
 - `canvas_a2ui_create`
 - `canvas_a2ui_render`
 - `write_note`
@@ -32,15 +35,18 @@ Use for agent architecture, API flows, deployment maps, data pipelines, sequence
 1. Inspect the actual system path.
 2. Choose diagram type: component, sequence, data-flow, deployment, or state.
 3. Include only evidenced components or clearly mark proposed ones.
-4. Use readable labels and direction.
-5. Render/verify artifacts when using canvas.
-6. Add a short explanation of key flows and unknowns.
+4. Use `diagram_artifact_create` for local Markdown, JSON, and Mermaid sidecars with typed nodes, edges, evidence refs, and status.
+5. Use `diagram_artifact_inspect` before reporting the diagram.
+6. Use `excalidraw_diagram_create` only when a hand-drawn compatible file is requested.
+7. Render/verify artifacts when using canvas.
+8. Add a short explanation of key flows and unknowns.
 
 ## Native Implementation Boundaries
 
 - Use Humungousaur markdown/canvas/file tools.
 - Do not import Hermes architecture-diagram scripts.
 - Do not make diagrams from stale assumptions.
+- Native diagram artifacts must mark `current`, `proposed`, or `draft` status explicitly.
 
 ## Safety And Approval
 
@@ -51,6 +57,7 @@ Use for agent architecture, API flows, deployment maps, data pipelines, sequence
 
 - Map diagram nodes to files/docs.
 - Verify rendered artifact if generated.
+- Inspect diagram artifacts for node count, edge count, evidence refs, and unknowns.
 - Mark proposed/future architecture.
 
 ## Failure Modes

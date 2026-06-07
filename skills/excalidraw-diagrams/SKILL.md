@@ -20,6 +20,9 @@ Use for informal system maps, whiteboard-style flows, teaching diagrams, and con
 
 ## Tool Map
 
+- `excalidraw_diagram_create`
+- `diagram_artifact_create`
+- `diagram_artifact_inspect`
 - `canvas_a2ui_create`
 - `canvas_a2ui_render`
 - `architecture-diagrams`
@@ -30,8 +33,8 @@ Use for informal system maps, whiteboard-style flows, teaching diagrams, and con
 
 1. Define the diagram message.
 2. Create a simple element/relationship list.
-3. Check for native Excalidraw artifact support.
-4. If absent, create a canvas/markdown diagram spec.
+3. Use `excalidraw_diagram_create` for Humungousaur-owned Excalidraw-compatible JSON.
+4. Use `diagram_artifact_create` when a Markdown/Mermaid spec is clearer than a sketch file.
 5. Verify generated artifacts.
 6. Keep labels readable and sparse.
 
@@ -40,6 +43,7 @@ Use for informal system maps, whiteboard-style flows, teaching diagrams, and con
 - Do not import Hermes Excalidraw scripts.
 - Excalidraw JSON generation must be Humungousaur-owned.
 - Use upstream examples only as reference.
+- Mark generated sketches as `draft`, `proposed`, or `current`.
 
 ## Safety And Approval
 
@@ -50,8 +54,9 @@ Use for informal system maps, whiteboard-style flows, teaching diagrams, and con
 ## Verification
 
 - Artifact path or spec note proves output.
+- Excalidraw output must be valid JSON with `type: excalidraw` and generated elements.
 - Check element labels and relationships.
-- State if Excalidraw-native export is not implemented.
+- Inspect companion diagram artifacts when produced.
 
 ## Failure Modes
 

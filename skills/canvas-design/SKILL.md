@@ -22,6 +22,9 @@ Use for static visual designs, node maps, workflow diagrams, concept boards, and
 
 - `canvas_a2ui_create`
 - `canvas_a2ui_render`
+- `diagram_artifact_create`
+- `diagram_artifact_inspect`
+- `infographic_plan_create`
 - `data-visualization`
 - `architecture-diagrams`
 - `write_note`
@@ -30,16 +33,18 @@ Use for static visual designs, node maps, workflow diagrams, concept boards, and
 
 1. Define the canvas purpose.
 2. Convert content into typed nodes and edges.
-3. Create the canvas with stable layout.
-4. Render SVG/HTML when useful.
-5. Verify artifact paths.
-6. Iterate based on clarity, not decoration.
+3. Use `diagram_artifact_create` first when evidence, status, Mermaid, or source traceability needs to be preserved.
+4. Create the canvas with stable layout.
+5. Render SVG/HTML when useful.
+6. Verify artifact paths.
+7. Iterate based on clarity, not decoration.
 
 ## Native Implementation Boundaries
 
 - Use Humungousaur A2UI canvas tools.
 - Do not import Anthropic canvas-design code.
 - Add richer canvas renderers as native tools only.
+- Use native diagram or infographic artifacts for specs that should survive beyond the rendered canvas.
 
 ## Safety And Approval
 
@@ -50,6 +55,7 @@ Use for static visual designs, node maps, workflow diagrams, concept boards, and
 ## Verification
 
 - Canvas create/render results prove artifacts.
+- Diagram or infographic inspect results prove source-backed plans.
 - Check node labels and edge direction.
 - Report if visual QA was not performed.
 
