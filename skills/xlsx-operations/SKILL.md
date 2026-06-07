@@ -21,6 +21,8 @@ Use for spreadsheet analysis, CSV/XLSX cleaning, formulas, tables, summaries, wo
 ## Tool Map
 
 - `read_file`
+- `xlsx_workbook_create`
+- `xlsx_workbook_inspect`
 - `python_interpreter`
 - `python_interpreter_artifact`
 - `write_note`
@@ -31,7 +33,7 @@ Use for spreadsheet analysis, CSV/XLSX cleaning, formulas, tables, summaries, wo
 
 1. Confirm file type and path boundary.
 2. Determine whether analysis, cleanup, formatting, or artifact creation is needed.
-3. Use approved Python for data inspection when appropriate.
+3. Use `xlsx_workbook_create` for new Excel artifacts and `xlsx_workbook_inspect` for workbook verification before falling back to approved Python.
 4. Preserve formulas, headers, types, and source rows.
 5. Verify outputs through artifact inspection or summaries.
 6. Report missing native Excel adapter gaps.
@@ -40,7 +42,7 @@ Use for spreadsheet analysis, CSV/XLSX cleaning, formulas, tables, summaries, wo
 
 - Do not import Anthropic XLSX skill code or Hermes spreadsheet scripts.
 - Use Humungousaur-owned interpreter/tool paths only.
-- Add dedicated spreadsheet tools with schemas/tests when needed.
+- Use the Humungousaur-owned `xlsx_workbook_create` and `xlsx_workbook_inspect` tools for basic workbook creation and verification; add additional native spreadsheet tools with schemas/tests when needed.
 
 ## Safety And Approval
 
@@ -52,6 +54,7 @@ Use for spreadsheet analysis, CSV/XLSX cleaning, formulas, tables, summaries, wo
 
 - Validate row/column counts and key formulas.
 - Confirm artifact path and generated file status.
+- Confirm workbook inspection reports expected sheet names, dimensions, sample rows, and formulas.
 - Report any package/tool limitations.
 
 ## Failure Modes

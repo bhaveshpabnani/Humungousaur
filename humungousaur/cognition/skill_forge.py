@@ -205,10 +205,12 @@ def forged_skill_packs(config: AgentConfig, *, limit: int = 50) -> list[dict[str
         try:
             relative = path.relative_to(normalized.workspace).as_posix()
             metadata = _frontmatter(path)
+            title = _heading_title(path)
             packs.append(
                 {
                     "skill_id": f"workspace:{relative}",
                     "name": metadata.get("name") or path.parent.name,
+                    "display_name": title or metadata.get("name") or path.parent.name,
                     "description": metadata.get("description", ""),
                     "path": str(path.resolve()),
                     "relative_path": relative,
@@ -409,6 +411,17 @@ def _frontmatter(path: Path) -> dict[str, str]:
         if key in {"name", "description"}:
             metadata[key] = value.strip().strip("'\"")[:500]
     return metadata
+
+
+def _heading_title(path: Path) -> str:
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines()[:120]:
+            stripped = line.strip()
+            if stripped.startswith("# "):
+                return stripped[2:].strip()[:500]
+    except OSError:
+        return ""
+    return ""
 
 
 def _unique_dir(root: Path, slug: str) -> Path:

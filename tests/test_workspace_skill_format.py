@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from humungousaur.config import AgentConfig
+from humungousaur.tools import default_tools
 from humungousaur.tools.skill_tools import AgentSkillCatalogTool
 
 
@@ -45,6 +46,17 @@ class WorkspaceSkillFormatTests(unittest.TestCase):
         self.assertEqual(result.output["source"], "workspace")
         self.assertGreaterEqual(len(result.output["workspace_skills"]), 17)
 
+    def test_workspace_skill_tool_maps_resolve_to_native_tools_or_skills(self) -> None:
+        config = AgentConfig(workspace=REPO_ROOT, data_dir=REPO_ROOT / "artifacts").normalized()
+        tool_names = set(default_tools(config))
+        skill_names = {path.parent.name for path in (REPO_ROOT / "skills").rglob("SKILL.md")}
+
+        for path in sorted((REPO_ROOT / "skills").rglob("SKILL.md")):
+            entries = _tool_map_entries(path)
+            missing = [entry for entry in entries if entry not in tool_names and entry not in skill_names]
+            with self.subTest(skill=path.parent.name):
+                self.assertFalse(missing, f"Unresolved Tool Map entries: {missing}")
+
 
 def _frontmatter(path: Path) -> dict[str, str]:
     lines = path.read_text(encoding="utf-8").splitlines()
@@ -60,6 +72,23 @@ def _frontmatter(path: Path) -> dict[str, str]:
         key, value = stripped.split(":", 1)
         metadata[key.strip()] = value.strip().strip("'\"")
     return metadata
+
+
+def _tool_map_entries(path: Path) -> list[str]:
+    entries: list[str] = []
+    in_tool_map = False
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.strip().lower().startswith("## tool map"):
+            in_tool_map = True
+            continue
+        if in_tool_map and line.startswith("## "):
+            break
+        if not in_tool_map:
+            continue
+        match = re.match(r"\s*-\s+`([^`]+)`", line)
+        if match:
+            entries.append(match.group(1))
+    return entries
 
 
 if __name__ == "__main__":

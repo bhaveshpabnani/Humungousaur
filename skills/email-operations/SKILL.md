@@ -24,6 +24,8 @@ Use for email drafts, inbox summaries from pasted/exported email, follow-up word
 
 - `read_file`
 - `write_note`
+- `email_draft_prepare`
+- `gmail_draft_prepare`
 - `memory_write`
 - `cognitive_commitment_record`
 - `cognitive_trigger_record`
@@ -38,12 +40,13 @@ Use for email drafts, inbox summaries from pasted/exported email, follow-up word
 3. Extract sender, recipients, subject, dates, asks, commitments, deadlines, and risks.
 4. Draft concise emails with subject, greeting, body, ask, closing, and optional alternatives.
 5. Record commitments or reminders only when explicit and desired.
-6. For real sending, report the missing native adapter or route through a future Humungousaur-owned email tool with approval.
+6. For Gmail-style drafting, use `gmail_draft_prepare` with explicit recipients, subject, body, and reason; verify the draft artifact path.
+7. For real sending, report the missing native send adapter or route through a future Humungousaur-owned email send tool with approval.
 
 ## Native Implementation Boundaries
 
 - Do not use Hermes Himalaya, Gmail scripts, OpenClaw plugins, or external mail packages as the skill implementation.
-- If implementing email tools later, create Humungousaur-owned Gmail/Outlook/IMAP/SMTP adapters with schemas, approvals, tests, and redaction.
+- Drafting is natively supported through Humungousaur-owned draft artifact tools. Sending still requires a future Humungousaur-owned Gmail/Outlook/IMAP/SMTP adapter with schemas, approvals, tests, and redaction.
 - Do not scrape a mail UI with OS/browser tools unless the user explicitly asks and approves that path.
 
 ## Safety And Approval
@@ -56,6 +59,7 @@ Use for email drafts, inbox summaries from pasted/exported email, follow-up word
 
 - A summary should cite the provided email evidence.
 - A draft should clearly be marked as draft unless a native send tool returns sent.
+- A Gmail draft preparation task should return a local JSON artifact, body file, `send_status: not_sent`, and `approval_required_for_send: true`.
 - Adapter gaps should be listed as gaps, not working features.
 
 ## Failure Modes

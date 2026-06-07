@@ -1865,7 +1865,7 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertEqual(result.status, ActionStatus.SUCCEEDED)
             self.assertIn(".umang/skills", result.output["pack"]["relative_path"])
             self.assertTrue(Path(result.output["pack"]["path"]).exists())
-            self.assertEqual(packs.output["packs"][0]["name"], "Voice follow-up loop")
+            self.assertEqual(packs.output["packs"][0]["display_name"], "Voice follow-up loop")
             self.assertEqual(memory_skills[0].name, "Voice follow-up loop")
 
     def test_automation_daemon_configure_status_and_tick_runs_due_work(self) -> None:

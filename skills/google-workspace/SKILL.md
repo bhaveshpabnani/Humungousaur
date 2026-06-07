@@ -23,7 +23,7 @@ Use for Gmail, Calendar, Drive, Docs, Sheets, shared files, meeting invites, and
 - `tool_search`
 - `capability_surface`
 - `email-operations`
-- `browser-live-testing`
+- `live-browser-testing`
 - `doc-coauthoring`
 - `xlsx-operations`
 - `message-approval-policy`

@@ -503,6 +503,9 @@ class AgentOrchestrator:
             result for result in results
             if result.tool_name not in {"conversation_response_prepare", "write_note"}
         ]
+        productivity_response = self._direct_productivity_response(operational_results)
+        if productivity_response:
+            return productivity_response
         for result in reversed(results):
             if result.tool_name != "conversation_response_prepare" or result.status != ActionStatus.SUCCEEDED:
                 continue
@@ -527,6 +530,56 @@ class AgentOrchestrator:
                 lines.append(f"Audio: {redact_secrets(audio_path)}")
             return "\n".join(lines)
         return ""
+
+    def _direct_productivity_response(self, results: list[ToolResult]) -> str:
+        for result in reversed(results):
+            if result.tool_name not in {"email_draft_prepare", "gmail_draft_prepare"} or result.status != ActionStatus.SUCCEEDED:
+                continue
+            draft = result.output.get("draft", {})
+            if not isinstance(draft, dict):
+                draft = {}
+            lines = [
+                "Prepared Gmail draft." if result.tool_name == "gmail_draft_prepare" else "Prepared email draft.",
+                "Status: not sent; sending still requires explicit approval.",
+            ]
+            recipients = ", ".join(str(item) for item in draft.get("to", []) if item)
+            if recipients:
+                lines.append(f"To: {redact_secrets(recipients)}")
+            subject = str(draft.get("subject") or "").strip()
+            if subject:
+                lines.append(f"Subject: {redact_secrets(subject)}")
+            path = str(result.output.get("path") or "").strip()
+            body_path = str(result.output.get("body_path") or "").strip()
+            if path:
+                lines.append(f"Draft artifact: {redact_secrets(path)}")
+            if body_path:
+                lines.append(f"Body file: {redact_secrets(body_path)}")
+            return "\n".join(lines)
+        created = next((result for result in results if result.tool_name == "xlsx_workbook_create" and result.status == ActionStatus.SUCCEEDED), None)
+        inspected = next((result for result in results if result.tool_name == "xlsx_workbook_inspect" and result.status == ActionStatus.SUCCEEDED), None)
+        if created is None:
+            return ""
+        path = str(created.output.get("path") or "").strip()
+        lines = ["Created XLSX workbook."]
+        if path:
+            lines.append(f"Workbook: {redact_secrets(path)}")
+        sheets = created.output.get("sheets", [])
+        if isinstance(sheets, list) and sheets:
+            lines.append(
+                "Sheets: "
+                + ", ".join(
+                    f"{item.get('name')} ({item.get('rows')} rows, {item.get('columns')} columns)"
+                    for item in sheets
+                    if isinstance(item, dict)
+                )
+            )
+        if inspected is not None:
+            inspected_sheets = inspected.output.get("sheets", [])
+            formula_count = 0
+            if isinstance(inspected_sheets, list):
+                formula_count = sum(len(item.get("formulas", [])) for item in inspected_sheets if isinstance(item, dict))
+            lines.append(f"Inspection: succeeded; formulas found: {formula_count}.")
+        return "\n".join(lines)
 
     def _result_for_response(self, result: ToolResult) -> dict[str, object]:
         payload: dict[str, object] = {

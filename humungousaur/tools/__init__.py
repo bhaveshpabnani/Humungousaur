@@ -12,12 +12,31 @@ from .files import default_tools as default_file_tools
 from .memory import default_memory_tools
 from .os_control import default_os_tools
 from .plugins import default_plugin_tools
+from .productivity import default_productivity_tools
 from .skills import default_skill_tools
 from .system import default_system_tools
 from .voice import default_voice_tools
 from .workflow import default_workflow_tools
 
 __all__ = ["Tool", "default_tools"]
+
+
+class _ToolAlias(Tool):
+    def __init__(self, alias: str, target: Tool) -> None:
+        super().__init__(
+            name=alias,
+            description=f"Alias for {target.name}: {target.description}",
+            risk_level=target.risk_level,
+            requires_approval=target.requires_approval,
+            input_schema=target.input_schema,
+            capability_group=target.capability_group,
+        )
+        self._target = target
+
+    def execute(self, tool_input, config):
+        result = self._target.execute(tool_input, config)
+        result.tool_name = self.name
+        return result
 
 
 def default_tools(config=None) -> dict[str, Tool]:
@@ -38,4 +57,20 @@ def default_tools(config=None) -> dict[str, Tool]:
     tools.update(default_memory_tools())
     tools.update(default_skill_tools())
     tools.update(default_plugin_tools(config, set(tools)))
+    tools.update(default_productivity_tools())
+    _add_aliases(
+        tools,
+        {
+            "fetch_webpage": "fetch_web_page",
+            "research_webpages": "research_web_pages",
+            "active_window": "os_active_window",
+        },
+    )
     return tools
+
+
+def _add_aliases(tools: dict[str, Tool], aliases: dict[str, str]) -> None:
+    for alias, target_name in aliases.items():
+        target = tools.get(target_name)
+        if target is not None and alias not in tools:
+            tools[alias] = _ToolAlias(alias, target)

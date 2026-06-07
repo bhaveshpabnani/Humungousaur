@@ -5,7 +5,7 @@ description: Google Workspace CLI operations for Gmail, Calendar, Drive, Contact
 
 # gog
 
-Use this skill when the user asks for Gmail, Calendar, Drive, Contacts, Sheets, or Docs work and a local `gog` CLI is available.
+Use this skill when the user asks for Gmail, Calendar, Drive, Contacts, Sheets, or Docs work and a local `gog` CLI is available. For Gmail drafting inside Humungousaur, prefer the native `gmail_draft_prepare` artifact tool first; use `gog` only when configured and approved.
 
 ## Setup
 
@@ -24,6 +24,12 @@ Use this skill when the user asks for Gmail, Calendar, Drive, Contacts, Sheets, 
 - Keep OAuth tokens out of prompts and logs.
 
 ## Gmail
+
+Native draft artifact:
+
+```json
+{"tool_name":"gmail_draft_prepare","tool_input":{"to":["person@example.com"],"subject":"Subject","body":"Body text","reason":"Prepare an approval-ready Gmail draft."}}
+```
 
 Search:
 
