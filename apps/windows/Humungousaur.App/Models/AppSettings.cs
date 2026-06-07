@@ -7,7 +7,7 @@ public sealed class AppSettings
     public string PythonPath { get; set; } = "";
     public int Port { get; set; } = 8765;
     public string Planner { get; set; } = "model";
-    public string ModelProvider { get; set; } = "groq";
+    public string ModelProvider { get; set; } = "openai";
     public string ModelName { get; set; } = "";
     public string ModelBaseUrl { get; set; } = "";
     public string ModelApiKey { get; set; } = "";

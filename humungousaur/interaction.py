@@ -73,6 +73,12 @@ class InteractionHarness:
         approve_high_risk: bool = False,
     ) -> HarnessResult:
         normalized = normalize_stimulus(stimulus)
+        if approve_high_risk:
+            normalized.metadata = {
+                **normalized.metadata,
+                "approve_high_risk": True,
+                "run_level_approval": "high_risk_tools_approved_for_this_request",
+            }
         cognitive = CognitiveRecorder(self.config)
         cognitive_event, cognitive_decision, cognitive_goal_id, cognitive_task_id = cognitive.begin_stimulus(
             source=normalized.source,
@@ -95,6 +101,14 @@ class InteractionHarness:
                     speak=decision.should_speak,
                     metadata=normalized.metadata,
                 )
+        elif decision.direct_response and (decision.should_prepare_voice or decision.should_speak):
+            voice_result = self._emit_voice_response(
+                text=decision.direct_response,
+                stimulus_id=normalized.stimulus_id,
+                run_id="",
+                speak=decision.should_speak,
+                metadata=normalized.metadata,
+            )
         cognitive.finish_stimulus(
             event_id=cognitive_event.event_id,
             decision=cognitive_decision,
@@ -247,7 +261,8 @@ def decide_interaction(stimulus: Stimulus, response_mode: str | None = None) -> 
 
 def harness_decision_from_cognitive(decision: CognitiveDecision, stimulus: Stimulus) -> HarnessDecision:
     should_run = bool(decision.should_run_agent)
-    mode = _normalized_response_mode(decision.response_mode, stimulus) if should_run else "silent"
+    direct_response = decision.direct_response.strip()
+    mode = _normalized_response_mode(decision.response_mode, stimulus) if (should_run or direct_response) else "silent"
     request = decision.request.strip() if should_run else ""
     if should_run and not request:
         request = stimulus.text.strip()
@@ -258,9 +273,9 @@ def harness_decision_from_cognitive(decision: CognitiveDecision, stimulus: Stimu
         reason=decision.reason,
         should_run_agent=should_run,
         should_record_activity=bool(decision.should_record_event),
-        should_prepare_voice=should_run and mode in {"voice_prepare", "voice_speak"},
-        should_speak=should_run and mode == "voice_speak",
-        direct_response=decision.direct_response if not should_run else "",
+        should_prepare_voice=(should_run or bool(direct_response)) and mode in {"voice_prepare", "voice_speak"},
+        should_speak=(should_run or bool(direct_response)) and mode == "voice_speak",
+        direct_response=direct_response if not should_run else "",
     )
 
 

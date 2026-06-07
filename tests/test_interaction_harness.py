@@ -112,6 +112,42 @@ class InteractionHarnessTests(unittest.TestCase):
             self.assertIn("response_id", result.voice_result)
             self.assertEqual(len(listed), 1)
 
+    def test_model_direct_voice_response_prepares_spoken_response(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", planner_provider="model").normalized()
+            cognitive_response = json.dumps(
+                {
+                    "action": "respond",
+                    "request": "",
+                    "response_mode": "voice_prepare",
+                    "reason": "Model can answer directly.",
+                    "should_run_agent": False,
+                    "should_record_event": False,
+                    "memory_action": "none",
+                    "focus_goal_id": "",
+                    "create_goal_title": "",
+                    "create_task_title": "",
+                    "stay_warm": False,
+                    "next_wakeup_seconds": None,
+                    "direct_response": "I am online and ready for voice interaction.",
+                }
+            )
+
+            with patch("humungousaur.cognition.recorder.build_model_client", return_value=StaticModelClient(cognitive_response)):
+                result = InteractionHarness(config).handle(
+                    {"source": "user_text", "text": "Say you are online.", "metadata": {"response_mode": "voice_prepare"}},
+                    response_mode="voice_prepare",
+                )
+            listed = list_voice_responses(config)
+
+            self.assertEqual(result.decision.response_mode, "voice_prepare")
+            self.assertFalse(result.decision.should_run_agent)
+            self.assertIsNone(result.run)
+            self.assertIsNotNone(result.voice_result)
+            self.assertEqual(result.voice_result["text"], "I am online and ready for voice interaction.")
+            self.assertEqual(len(listed), 1)
+
     def test_decision_helpers_normalize_and_ignore_empty_input(self) -> None:
         stimulus = normalize_stimulus({"source": "unknown", "text": ""})
         decision = decide_interaction(stimulus)

@@ -14,7 +14,7 @@ public sealed class AgentApiClient
         WriteIndented = true,
     };
 
-    private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(60) };
+    private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(300) };
     private Uri _baseUri = new("http://127.0.0.1:8765");
 
     public void SetBaseUrl(string baseUrl)

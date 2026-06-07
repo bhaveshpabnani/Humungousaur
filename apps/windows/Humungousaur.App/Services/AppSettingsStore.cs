@@ -62,6 +62,13 @@ public sealed class AppSettingsStore
             settings.ApiBaseUrl = $"http://127.0.0.1:{settings.Port}";
         }
 
+        if (string.IsNullOrWhiteSpace(settings.ModelProvider) ||
+            (settings.ModelProvider.Equals("groq", StringComparison.OrdinalIgnoreCase) &&
+             string.IsNullOrWhiteSpace(settings.ModelApiKey)))
+        {
+            settings.ModelProvider = "openai";
+        }
+
         return settings;
     }
 
