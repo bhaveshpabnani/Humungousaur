@@ -101,6 +101,7 @@ def main() -> int:
     _smoke_analysis(record, tools, config)
     _smoke_writing(record, tools, config)
     _smoke_content(record, tools, config)
+    _smoke_research(record, tools, config)
     _smoke_channels(record, tools, config)
     _smoke_rss(record, tools, config)
     _smoke_core_surfaces(record, tools, config)
@@ -367,6 +368,65 @@ def _smoke_content(record, tools: dict[str, Any], config: AgentConfig) -> None:
         _ok(inspected) and inspected.output.get("action_item_count") == 1 and inspected.output.get("source_type") == "meeting",
         _tool_payload(inspected),
     )
+
+
+def _smoke_research(record, tools: dict[str, Any], config: AgentConfig) -> None:
+    bibliography = tools["citation_bibliography_create"].execute(
+        {
+            "filename": "skill-smoke-bibliography.md",
+            "title": "Skill Smoke Bibliography",
+            "target_style": "mixed",
+            "entries": [
+                {
+                    "type": "article",
+                    "title": "Attention Is All You Need",
+                    "authors": ["Vaswani, Ashish", "Shazeer, Noam"],
+                    "year": "2017",
+                    "venue": "NeurIPS",
+                    "url": "https://example.com/attention",
+                    "source_refs": ["synthetic smoke metadata"],
+                    "verified_fields": ["title", "authors", "year", "venue"],
+                    "uncertain_fields": ["url"],
+                }
+            ],
+            "global_source_refs": ["scripts/smoke_skills.py"],
+            "reason": "Verify native citation cleanup and bibliography artifact creation.",
+        },
+        config,
+    )
+    bibliography_inspect = tools["citation_bibliography_inspect"].execute({"path": bibliography.output.get("path", "")}, config) if _ok(bibliography) else bibliography
+    literature = tools["literature_set_create"].execute(
+        {
+            "filename": "skill-smoke-literature-set.md",
+            "title": "Skill Smoke Literature Set",
+            "research_question": "How should Humungousaur preserve research evidence?",
+            "inclusion_criteria": ["Metadata has source references."],
+            "papers": [
+                {
+                    "paper_id": "p1",
+                    "title": "Tool Use Smoke Paper",
+                    "authors": ["Example, Ada"],
+                    "year": "2026",
+                    "venue": "Local Smoke",
+                    "relevance": "Exercises literature-set artifacts without live web search.",
+                    "evidence_level": "metadata",
+                    "themes": ["tool use"],
+                    "source_refs": ["synthetic smoke metadata"],
+                }
+            ],
+            "themes": [{"name": "Tool use", "summary": "Structured evidence is kept inspectable.", "paper_ids": ["p1"]}],
+            "gaps": ["Run live scholarly adapters when added."],
+            "limitations": ["Synthetic smoke metadata."],
+            "source_refs": ["scripts/smoke_skills.py"],
+            "reason": "Verify native research paper search/writing artifact support.",
+        },
+        config,
+    )
+    literature_inspect = tools["literature_set_inspect"].execute({"path": literature.output.get("path", "")}, config) if _ok(literature) else literature
+    record("research", "citation_bibliography_create", _ok(bibliography) and bibliography.output.get("entry_count") == 1, _tool_payload(bibliography))
+    record("research", "citation_bibliography_inspect", _ok(bibliography_inspect) and bibliography_inspect.output.get("uncertain_entry_count") == 1, _tool_payload(bibliography_inspect))
+    record("research", "literature_set_create", _ok(literature) and literature.output.get("paper_count") == 1, _tool_payload(literature))
+    record("research", "literature_set_inspect", _ok(literature_inspect) and literature_inspect.output.get("theme_count") == 1, _tool_payload(literature_inspect))
 
 
 def _prepare_script_fixtures(config: AgentConfig) -> None:

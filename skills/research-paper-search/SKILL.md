@@ -25,6 +25,9 @@ Use for arXiv-style searches, paper lists, related work, literature reviews, met
 - `rss_feed_read`
 - `read_pdf`
 - `summarize_pdfs`
+- `literature_set_create`
+- `literature_set_inspect`
+- `citation_bibliography_create`
 - `web-data-extraction`
 - `write_note`
 
@@ -32,16 +35,17 @@ Use for arXiv-style searches, paper lists, related work, literature reviews, met
 
 1. Define search question and inclusion criteria.
 2. Use current web evidence for changing paper lists.
-3. Extract title, authors, venue/date, abstract, link, and relevance.
+3. Extract title, authors, venue/date, abstract, link, source references, evidence level, and relevance.
 4. Read/summarize PDFs when provided and accessible.
-5. Group papers by theme/method and note gaps.
-6. Save a literature note when requested.
+5. Use `literature_set_create` to preserve papers, themes, gaps, limitations, and source references as an inspectable artifact.
+6. Use `literature_set_inspect` and optionally `citation_bibliography_create` before reporting or drafting a literature note.
 
 ## Native Implementation Boundaries
 
 - Do not import Hermes arXiv or OpenClaw academic plugins.
 - Add scholarly API adapters natively when needed.
 - Avoid fabricating citations.
+- Literature-set artifacts are local evidence organization, not proof of live scholarly search by themselves.
 
 ## Safety And Approval
 
@@ -53,6 +57,7 @@ Use for arXiv-style searches, paper lists, related work, literature reviews, met
 
 - Cite source URLs and dates where possible.
 - Confirm PDF extraction succeeded before summarizing details.
+- Inspect literature-set artifacts for paper/theme/gap counts.
 - Note search limitations.
 
 ## Failure Modes

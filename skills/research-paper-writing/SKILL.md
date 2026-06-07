@@ -25,6 +25,9 @@ Use for ML/research papers, abstracts, related-work sections, experiment narrati
 - `research-paper-search`
 - `doc-coauthoring`
 - `citation-and-bib-cleanup`
+- `literature_set_create`
+- `literature_set_inspect`
+- `citation_bibliography_inspect`
 - `write_note`
 
 ## Workflow
@@ -32,15 +35,16 @@ Use for ML/research papers, abstracts, related-work sections, experiment narrati
 1. Clarify contribution and target venue.
 2. Build outline before prose.
 3. Separate claims from evidence and speculation.
-4. Integrate citations with accurate positioning.
+4. Integrate citations with accurate positioning and inspect bibliography/literature artifacts when available.
 5. Draft sections and revise for clarity, limitations, and reproducibility.
-6. Check consistency across abstract, method, results, and conclusion.
+6. Check consistency across abstract, method, results, conclusion, citations, and evidence artifacts.
 
 ## Native Implementation Boundaries
 
 - Use Humungousaur writing/search/file tools.
 - Do not import Hermes research-paper-writing scripts.
 - Do not invent experiments or citations.
+- Treat `literature_set_create` and `citation_bibliography_create` outputs as evidence artifacts, not as permission to fabricate missing results.
 
 ## Safety And Approval
 
@@ -53,6 +57,7 @@ Use for ML/research papers, abstracts, related-work sections, experiment narrati
 - Contribution claims should map to evidence.
 - Citations should be backed by sources.
 - Results should match tables/logs.
+- Literature and bibliography artifacts should inspect successfully before final paper claims rely on them.
 
 ## Failure Modes
 

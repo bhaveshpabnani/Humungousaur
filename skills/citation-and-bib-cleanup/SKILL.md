@@ -24,15 +24,17 @@ Use for BibTeX cleanup, citation lists, related-work references, DOI/arXiv metad
 - `fetch_webpage`
 - `read_pdf`
 - `research-paper-search`
+- `citation_bibliography_create`
+- `citation_bibliography_inspect`
 - `write_note`
 
 ## Workflow
 
 1. Parse existing entries and identify missing fields.
 2. Verify metadata from source pages or PDFs.
-3. Normalize authors, title casing, venues, dates, URLs, and identifiers.
-4. Flag uncertain or conflicting fields.
-5. Produce cleaned references in requested style.
+3. Normalize authors, titles, venues, dates, URLs, identifiers, source references, and uncertainty labels in structured fields.
+4. Use `citation_bibliography_create` to produce Markdown, JSON metadata, and BibTeX artifacts from explicit evidence.
+5. Use `citation_bibliography_inspect` to verify entry counts, uncertainty counts, and preview text before responding.
 6. Do not fabricate unavailable metadata.
 
 ## Native Implementation Boundaries
@@ -40,6 +42,7 @@ Use for BibTeX cleanup, citation lists, related-work references, DOI/arXiv metad
 - Use Humungousaur web/PDF/search tools.
 - Do not import OpenClaw abstract searcher or citation scripts.
 - Dedicated DOI/arXiv adapters must be native.
+- Bibliography creation is artifact-only; it does not claim live DOI/arXiv verification unless source evidence is provided.
 
 ## Safety And Approval
 
@@ -51,6 +54,7 @@ Use for BibTeX cleanup, citation lists, related-work references, DOI/arXiv metad
 
 - Each cleaned entry should have source evidence.
 - Unverified fields should be marked.
+- Inspect the bibliography artifact and BibTeX sidecar.
 - Formatting should match requested style.
 
 ## Failure Modes
