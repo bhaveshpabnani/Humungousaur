@@ -23,6 +23,8 @@ Use for podcast notes, voice memos, recorded calls, YouTube transcripts, trainin
 
 - `voice_transcribe`
 - `read_file`
+- `transcript_summary_create`
+- `transcript_summary_inspect`
 - `summarize_pdfs`
 - `write_note`
 - `memory_write`
@@ -34,8 +36,8 @@ Use for podcast notes, voice memos, recorded calls, YouTube transcripts, trainin
 1. Determine whether transcription is needed or text is already available.
 2. For local audio, transcribe with `local-whisper` by default.
 3. Preserve source metadata and transcript provenance.
-4. Summarize at the requested level: brief, detailed, action-oriented, or publishable.
-5. Extract decisions, tasks, risks, quotes, and open questions when useful.
+4. Use `transcript_summary_create` for the local structured artifact: summary, key points, decisions, tasks, risks, quotes, open questions, timestamps, and limitations.
+5. Use `transcript_summary_inspect` before reporting completion or passing the artifact to notes/memory tools.
 6. Record durable memory or commitments only when supported and desired.
 
 ## Safety And Boundaries
@@ -43,10 +45,12 @@ Use for podcast notes, voice memos, recorded calls, YouTube transcripts, trainin
 - Do not summarize copyrighted media by reproducing long verbatim sections.
 - Do not send private audio to cloud transcription without explicit choice.
 - Do not run upstream media tools directly as implementation.
+- The native summary tool accepts provided transcripts or allowed local transcript files; audio transcription remains provider-mediated through `voice_transcribe`.
 
 ## Verification
 
 - Confirm transcript source and provider.
+- Inspect the transcript summary artifact and report its path, source, and limitations.
 - Check that summary preserves important caveats and speaker uncertainty.
 - Verify any saved note or memory entry.
 

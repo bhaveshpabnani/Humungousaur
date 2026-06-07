@@ -100,6 +100,7 @@ def main() -> int:
     _smoke_office(record, tools, config)
     _smoke_analysis(record, tools, config)
     _smoke_writing(record, tools, config)
+    _smoke_content(record, tools, config)
     _smoke_channels(record, tools, config)
     _smoke_rss(record, tools, config)
     _smoke_core_surfaces(record, tools, config)
@@ -297,6 +298,47 @@ def _smoke_writing(record, tools: dict[str, Any], config: AgentConfig) -> None:
     record("writing", "writing_draft_create", _ok(draft) and draft.output.get("send_status") == "not_sent", _tool_payload(draft))
     record("writing", "writing_draft_inspect", _ok(inspected) and inspected.output.get("variant_count") == 1, _tool_payload(inspected))
     record("writing", "meeting_followup_packet_create", _ok(followup) and followup.output.get("send_status") == "not_sent", _tool_payload(followup))
+
+
+def _smoke_content(record, tools: dict[str, Any], config: AgentConfig) -> None:
+    transcript_path = config.data_dir / "script-fixtures" / "skill-smoke-transcript.txt"
+    transcript_path.write_text(
+        "\n".join(
+            [
+                "00:00 Host: Today we test native transcript summary artifacts.",
+                "00:31 Lead: Decision is to wire YouTube, audio, and meeting skills to content tools.",
+                "01:04 Lead: Action item is to run focused and full smoke tests.",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    summary = tools["transcript_summary_create"].execute(
+        {
+            "filename": "skill-smoke-transcript-summary.md",
+            "title": "Skill Smoke Transcript Summary",
+            "source_type": "meeting",
+            "transcript_path": str(transcript_path),
+            "transcript_provider": "provided-fixture",
+            "language": "en",
+            "summary": "The fixture records a decision to wire spoken-media skills to native content tools and a follow-up to run verification.",
+            "key_points": ["Transcript summaries preserve source metadata and timestamp evidence."],
+            "decisions": ["Wire YouTube, audio, and meeting skills to content tools."],
+            "action_items": [{"task": "Run focused and full smoke tests", "owner": "Humungousaur", "evidence": "01:04"}],
+            "open_questions": ["Which spoken-media provider should be expanded next?"],
+            "limitations": ["Synthetic transcript fixture."],
+            "output_format": "meeting notes",
+            "reason": "Verify native transcript/audio/video summary skill capability.",
+        },
+        config,
+    )
+    inspected = tools["transcript_summary_inspect"].execute({"path": summary.output.get("path", "")}, config) if _ok(summary) else summary
+    record("content", "transcript_summary_create", _ok(summary) and summary.output.get("segment_count") == 3, _tool_payload(summary))
+    record(
+        "content",
+        "transcript_summary_inspect",
+        _ok(inspected) and inspected.output.get("action_item_count") == 1 and inspected.output.get("source_type") == "meeting",
+        _tool_payload(inspected),
+    )
 
 
 def _prepare_script_fixtures(config: AgentConfig) -> None:

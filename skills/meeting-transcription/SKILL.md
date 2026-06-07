@@ -24,6 +24,8 @@ Use for meeting recordings, voice notes, call transcripts, Teams/Zoom notes, sta
 
 - `voice_transcribe`
 - `read_file`
+- `transcript_summary_create`
+- `transcript_summary_inspect`
 - `write_note`
 - `memory_write`
 - `cognitive_commitment_record`
@@ -35,20 +37,22 @@ Use for meeting recordings, voice notes, call transcripts, Teams/Zoom notes, sta
 1. Decide whether the input is audio, transcript text, or a meeting summary artifact.
 2. For audio, use `voice_transcribe` with local STT by default.
 3. Preserve transcript path, provider, language, and confidence when available.
-4. Extract topics, decisions, action items, owners, due dates, blockers, unresolved questions, and follow-ups.
-5. Record commitments only when action items are explicit enough and user intent allows it.
-6. Write a meeting note or prepare a concise voice summary when requested.
+4. Use `transcript_summary_create` to preserve topics, decisions, action items, owners, due dates, blockers, unresolved questions, follow-ups, timestamps, and limitations.
+5. Use `transcript_summary_inspect` before writing a note, recording commitments, or preparing a spoken summary.
+6. Record commitments only when action items are explicit enough and user intent allows it.
 
 ## Safety And Boundaries
 
 - Do not transcribe private meeting audio without user permission.
 - Do not infer owners or due dates from ambiguous statements.
 - Do not depend on Hermes Teams pipeline code; implement meeting workflows through Humungousaur tools.
+- Transcript-summary artifacts remain prepared locally until the user asks to share, send, or persist derived commitments.
 
 ## Verification
 
 - Confirm transcript source and STT provider.
 - Check action items against exact transcript evidence.
+- Inspect the transcript summary artifact and verify decision/action/open-question counts.
 - Verify saved notes or commitments exist before reporting them.
 
 ## Failure Modes

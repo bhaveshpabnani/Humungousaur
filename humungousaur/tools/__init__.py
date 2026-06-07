@@ -6,6 +6,7 @@ from .capabilities import default_capability_tools
 from .channels import default_channel_tools
 from .code import default_code_tools
 from .codex import default_codex_tools
+from .content import default_content_tools
 from .conversation import default_conversation_tools
 from .cognition import default_cognition_tools
 from .external import default_external_tools
@@ -51,6 +52,7 @@ def default_tools(config=None) -> dict[str, Tool]:
     tools.update(default_channel_tools())
     tools.update(default_code_tools())
     tools.update(default_codex_tools())
+    tools.update(default_content_tools())
     tools.update(default_conversation_tools())
     tools.update(default_cognition_tools())
     tools.update(default_external_tools())

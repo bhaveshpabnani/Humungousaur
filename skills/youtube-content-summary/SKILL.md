@@ -25,6 +25,8 @@ Use for YouTube videos, talks, tutorials, demos, lectures, podcasts with video, 
 - `browser_live_observe`
 - `audio-content-summary`
 - `voice_transcribe`
+- `transcript_summary_create`
+- `transcript_summary_inspect`
 - `write_note`
 
 ## Workflow
@@ -32,8 +34,8 @@ Use for YouTube videos, talks, tutorials, demos, lectures, podcasts with video, 
 1. Determine whether transcript text is available.
 2. If only audio/video file is provided, use native transcription where supported.
 3. Preserve title, URL, timestamps, and transcript provenance.
-4. Summarize into the requested format: notes, tasks, blog, thread, or study guide.
-5. Avoid long verbatim reproduction.
+4. Use `transcript_summary_create` to create a local Markdown/JSON artifact with summary, key points, action items, chapters, limitations, and transcript preview.
+5. Use `transcript_summary_inspect` to verify the artifact before responding.
 6. Save reusable notes when requested.
 
 ## Native Implementation Boundaries
@@ -41,6 +43,7 @@ Use for YouTube videos, talks, tutorials, demos, lectures, podcasts with video, 
 - Do not import Hermes YouTube content scripts.
 - Do not use unofficial downloaders unless the user explicitly approves and policy allows.
 - Add transcript/video adapters natively if needed.
+- The native transcript summary artifact is local and does not publish, download, or post video content.
 
 ## Safety And Approval
 
@@ -52,6 +55,7 @@ Use for YouTube videos, talks, tutorials, demos, lectures, podcasts with video, 
 
 - State transcript source and whether full transcript was available.
 - Include timestamps when provided.
+- Verify the `transcript_summary_create` result path and inspect count fields.
 - Note limitations when transcript access failed.
 
 ## Failure Modes
