@@ -20,6 +20,8 @@ public sealed partial class MainWindow : Window
     private AppSettings _settings = new();
     private List<ChannelInfo> _channels = [];
     private List<ToolInfo> _tools = [];
+    private List<RuntimeRunItem> _runs = [];
+    private List<ApprovalItem> _approvals = [];
     private bool _autonomyCycleRunning;
 
     public MainWindow()
@@ -58,6 +60,7 @@ public sealed partial class MainWindow : Window
         await RefreshToolsAsync();
         await RefreshAutonomyAsync();
         await RefreshOutboxAsync();
+        await RefreshRuntimeAsync();
     }
 
     private async Task RefreshHealthAsync()
@@ -166,6 +169,31 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception exc)
         {
+            AddProcessLine(exc.Message);
+        }
+    }
+
+    private async Task RefreshRuntimeAsync()
+    {
+        try
+        {
+            _runs = await _api.GetRunsAsync();
+            _approvals = await _api.GetApprovalsAsync();
+            RuntimeRunList.ItemsSource = _runs;
+            ApprovalList.ItemsSource = _approvals;
+            if (_approvals.Count > 0 && ApprovalList.SelectedIndex < 0)
+            {
+                ApprovalList.SelectedIndex = 0;
+            }
+            else if (_runs.Count > 0 && RuntimeRunList.SelectedIndex < 0)
+            {
+                RuntimeRunList.SelectedIndex = 0;
+            }
+            RuntimeDetailText.Text = $"Runs {_runs.Count}; pending approvals {_approvals.Count}.";
+        }
+        catch (Exception exc)
+        {
+            RuntimeDetailText.Text = exc.Message;
             AddProcessLine(exc.Message);
         }
     }
@@ -559,6 +587,102 @@ public sealed partial class MainWindow : Window
 
     private async void RefreshAutonomyButton_Click(object sender, RoutedEventArgs e) => await RefreshAutonomyAsync();
 
+    private async void RefreshRuntimeButton_Click(object sender, RoutedEventArgs e) => await RefreshRuntimeAsync();
+
+    private async void RuntimeRunList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (RuntimeRunList.SelectedItem is not RuntimeRunItem run)
+        {
+            return;
+        }
+
+        try
+        {
+            var timeline = await _api.GetRunTimelineAsync(run.RunId);
+            RuntimeDetailText.Text = FormatRunDetail(run, timeline);
+        }
+        catch (Exception exc)
+        {
+            RuntimeDetailText.Text = exc.Message;
+        }
+    }
+
+    private void ApprovalList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ApprovalList.SelectedItem is ApprovalItem approval)
+        {
+            RuntimeDetailText.Text = FormatApprovalDetail(approval);
+        }
+    }
+
+    private async void ApproveSelectedButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (ApprovalList.SelectedItem is not ApprovalItem approval)
+        {
+            ShowNotice("Select an approval first.", InfoBarSeverity.Warning);
+            return;
+        }
+
+        try
+        {
+            var note = string.IsNullOrWhiteSpace(ApprovalNoteBox.Text) ? "Approved from Windows app." : ApprovalNoteBox.Text.Trim();
+            var result = await _api.ApproveAsync(approval.ApprovalToken, note);
+            RuntimeDetailText.Text = AgentApiClient.Pretty(result);
+            ShowNotice($"Approved {approval.ToolName}.", InfoBarSeverity.Success);
+            await RefreshRuntimeAsync();
+        }
+        catch (Exception exc)
+        {
+            RuntimeDetailText.Text = exc.Message;
+            ShowNotice("Approval failed.", InfoBarSeverity.Error);
+        }
+    }
+
+    private async void RejectSelectedButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (ApprovalList.SelectedItem is not ApprovalItem approval)
+        {
+            ShowNotice("Select an approval first.", InfoBarSeverity.Warning);
+            return;
+        }
+
+        try
+        {
+            var note = string.IsNullOrWhiteSpace(ApprovalNoteBox.Text) ? "Rejected from Windows app." : ApprovalNoteBox.Text.Trim();
+            var result = await _api.RejectAsync(approval.ApprovalToken, note);
+            RuntimeDetailText.Text = AgentApiClient.Pretty(result);
+            ShowNotice($"Rejected {approval.ToolName}.", InfoBarSeverity.Warning);
+            await RefreshRuntimeAsync();
+        }
+        catch (Exception exc)
+        {
+            RuntimeDetailText.Text = exc.Message;
+            ShowNotice("Rejection failed.", InfoBarSeverity.Error);
+        }
+    }
+
+    private async void CancelRunButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (RuntimeRunList.SelectedItem is not RuntimeRunItem run)
+        {
+            ShowNotice("Select a run first.", InfoBarSeverity.Warning);
+            return;
+        }
+
+        try
+        {
+            var result = await _api.CancelRunAsync(run.RunId, "Cancelled from Windows app.");
+            RuntimeDetailText.Text = AgentApiClient.Pretty(result);
+            ShowNotice("Run cancellation requested.", InfoBarSeverity.Warning);
+            await RefreshRuntimeAsync();
+        }
+        catch (Exception exc)
+        {
+            RuntimeDetailText.Text = exc.Message;
+            ShowNotice("Run cancellation failed.", InfoBarSeverity.Error);
+        }
+    }
+
     private void ToolSearchBox_TextChanged(object sender, TextChangedEventArgs e) => RenderTools();
 
     private void SaveSettingsButton_Click(object sender, RoutedEventArgs e)
@@ -583,6 +707,7 @@ public sealed partial class MainWindow : Window
         ChannelsPage.Visibility = tag == "channels" ? Visibility.Visible : Visibility.Collapsed;
         VoicePage.Visibility = tag == "voice" ? Visibility.Visible : Visibility.Collapsed;
         AutonomyPage.Visibility = tag == "autonomy" ? Visibility.Visible : Visibility.Collapsed;
+        RuntimePage.Visibility = tag == "runtime" ? Visibility.Visible : Visibility.Collapsed;
         ToolsPage.Visibility = tag == "tools" ? Visibility.Visible : Visibility.Collapsed;
         SettingsPage.Visibility = tag == "settings" ? Visibility.Visible : Visibility.Collapsed;
     }
@@ -874,6 +999,49 @@ public sealed partial class MainWindow : Window
         {
             return node.ToJsonString();
         }
+    }
+
+    private static string FormatRunDetail(RuntimeRunItem run, IReadOnlyList<JsonObject> timeline)
+    {
+        var lines = new List<string>
+        {
+            $"Run: {run.RunId}",
+            $"Status: {run.Status}",
+            $"Started: {run.StartedAt}",
+            $"Finished: {run.FinishedAt ?? ""}",
+            $"Request: {run.Request}",
+            "",
+            "Final Response:",
+            run.FinalResponse ?? "",
+            "",
+            "Timeline:",
+        };
+        lines.AddRange(timeline.Select(item =>
+        {
+            var eventType = item["event_type"]?.GetValue<string>() ?? "event";
+            var summary = item["summary"]?.GetValue<string>() ?? "";
+            return $"- {eventType}: {summary}";
+        }));
+        return string.Join(Environment.NewLine, lines);
+    }
+
+    private static string FormatApprovalDetail(ApprovalItem approval)
+    {
+        return string.Join(
+            Environment.NewLine,
+            [
+                $"Approval: {approval.ApprovalToken}",
+                $"Status: {approval.Status}",
+                $"Risk: {approval.RiskLevel}",
+                $"Tool: {approval.ToolName}",
+                $"Run: {approval.RunId}",
+                $"Created: {approval.CreatedAt}",
+                $"Reason: {approval.Reason}",
+                $"Request: {approval.Request}",
+                "",
+                "Tool Input:",
+                approval.ToolInput?.ToJsonString() ?? "{}",
+            ]);
     }
 
     private static string FormatInline(IReadOnlyCollection<string> values)

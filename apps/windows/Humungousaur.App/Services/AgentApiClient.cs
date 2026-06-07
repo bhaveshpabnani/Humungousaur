@@ -140,6 +140,36 @@ public sealed class AgentApiClient
         return await GetAsync<OutboxEnvelope>("channels/outbox") ?? new OutboxEnvelope();
     }
 
+    public async Task<List<RuntimeRunItem>> GetRunsAsync()
+    {
+        return await GetAsync<List<RuntimeRunItem>>("runs?limit=20") ?? [];
+    }
+
+    public async Task<List<JsonObject>> GetRunTimelineAsync(string runId)
+    {
+        return await GetAsync<List<JsonObject>>($"runs/{Uri.EscapeDataString(runId)}/timeline?limit=80") ?? [];
+    }
+
+    public async Task<List<ApprovalItem>> GetApprovalsAsync(string status = "pending")
+    {
+        return await GetAsync<List<ApprovalItem>>($"approvals?status={Uri.EscapeDataString(status)}&limit=20") ?? [];
+    }
+
+    public Task<JsonObject> ApproveAsync(string approvalToken, string note)
+    {
+        return PostJsonObjectAsync($"approvals/{Uri.EscapeDataString(approvalToken)}/approve", new JsonObject { ["note"] = note });
+    }
+
+    public Task<JsonObject> RejectAsync(string approvalToken, string note)
+    {
+        return PostJsonObjectAsync($"approvals/{Uri.EscapeDataString(approvalToken)}/reject", new JsonObject { ["note"] = note });
+    }
+
+    public Task<JsonObject> CancelRunAsync(string runId, string reason)
+    {
+        return PostJsonObjectAsync($"runs/{Uri.EscapeDataString(runId)}/cancel", new JsonObject { ["reason"] = reason });
+    }
+
     public Task<JsonObject> SendStimulusAsync(string text, string source, string responseMode, AppSettings settings)
     {
         var payload = RuntimePayload(settings);

@@ -69,6 +69,11 @@
                         <FontIcon Glyph="&#xE9D9;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem Content="Runtime" Tag="runtime">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE9F5;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
                 <NavigationViewItem Content="Tools" Tag="tools">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE713;" />
@@ -434,6 +439,80 @@
                             <TextBlock x:Name="AutonomyStatusText" TextWrapping="WrapWholeWords" FontFamily="Consolas" />
                         </ScrollViewer>
                     </Border>
+                </Grid>
+
+                <Grid x:Name="RuntimePage" Margin="0,44,0,0" Visibility="Collapsed" ColumnSpacing="14">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="330" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid RowSpacing="10">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Runtime" FontSize="28" FontWeight="SemiBold" />
+                            <TextBlock Text="Runs, approvals, and execution evidence." Opacity="0.68" />
+                        </StackPanel>
+                        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
+                            <Button Content="Refresh" Click="RefreshRuntimeButton_Click" />
+                            <Button Content="Cancel run" Click="CancelRunButton_Click" />
+                        </StackPanel>
+                        <ListView x:Name="RuntimeRunList" Grid.Row="2" SelectionChanged="RuntimeRunList_SelectionChanged">
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,5">
+                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                                        <TextBlock Text="{Binding Subtitle}" TextTrimming="CharacterEllipsis" Opacity="0.64" FontSize="12" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </Grid>
+                    <Grid Grid.Column="1" RowSpacing="10">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="220" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Approvals" FontSize="28" FontWeight="SemiBold" />
+                            <TextBlock Text="Review high-risk actions before the agent executes them." Opacity="0.68" />
+                        </StackPanel>
+                        <Border Grid.Row="1" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="12">
+                            <ListView x:Name="ApprovalList" SelectionChanged="ApprovalList_SelectionChanged">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="0,5">
+                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding Subtitle}" TextTrimming="CharacterEllipsis" Opacity="0.64" FontSize="12" />
+                                            <TextBlock Text="{Binding ShortToken}" Opacity="0.54" FontSize="11" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </Border>
+                        <Grid Grid.Row="2" ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="ApprovalNoteBox" PlaceholderText="Approval note" />
+                            <Button Grid.Column="1" Content="Approve" Click="ApproveSelectedButton_Click" />
+                            <Button Grid.Column="2" Content="Reject" Click="RejectSelectedButton_Click" />
+                            <Button Grid.Column="3" Content="Refresh" Click="RefreshRuntimeButton_Click" />
+                        </Grid>
+                        <Border Grid.Row="3" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="14">
+                            <ScrollViewer>
+                                <TextBlock x:Name="RuntimeDetailText" TextWrapping="WrapWholeWords" FontFamily="Consolas" />
+                            </ScrollViewer>
+                        </Border>
+                    </Grid>
                 </Grid>
 
                 <Grid x:Name="ToolsPage" Margin="0,44,0,0" Visibility="Collapsed" ColumnSpacing="14">

@@ -45,6 +45,7 @@ These slices have been implemented, smoke-tested, regression-tested, committed, 
 | current slice | Desktop channel-operations integration | Windows app allowlist/group allowlist onboarding, outbound channel message preparation, approval-gated send flow, API channel-message routes, and API regression coverage. |
 | current slice | Desktop channel onboarding | Backend channel setup requirements endpoint plus Windows app provider-specific required secrets, setup steps, delivery/policy/runtime summaries, and setup doctor results. |
 | current slice | Channel integration smoke | Native non-sending channel readiness report covering setup/status, doctor blockers, prepared outbox, dry-run send wiring, listener state, API route, app button, skill docs, and smoke coverage. |
+| current slice | Desktop runtime and approvals | Windows app Runtime page with recent runs, pending approvals, timeline details, approve/reject actions, and run cancellation. |
 
 ## Current Native Capability Areas
 
@@ -63,7 +64,7 @@ Humungousaur now has native tool domains for:
 - Cognition, memory curation, persona evolution, automations, and multi-agent coordination
 - Creative writing, songwriting, and revision artifacts
 - Design systems and theme packs
-- Desktop app channel setup requirements, setup doctor, non-sending channel smoke, allowlists, runtime settings, voice settings, and outbound channel operations
+- Desktop app channel setup requirements, setup doctor, non-sending channel smoke, allowlists, runtime settings, runtime runs/timelines, approval actions, voice settings, and outbound channel operations
 - External integration status surfaces
 - Files, PDFs, OCR, and shell/file utilities
 - GitHub issue/PR/CI/repo-state workflow artifacts
@@ -186,13 +187,13 @@ Needed work:
 
 ### 8. Desktop App End-To-End
 
-Current status: the Windows app exposes runtime start/stop, provider/model settings, voice settings, provider-aware channel setup requirements, channel setup doctor, non-sending channel integration smoke, channel allowlists, listener status, inbound preview, prepared outbound messages, and approval-gated channel sends. Remaining work is full live validation and richer daily-use panels.
+Current status: the Windows app exposes runtime start/stop, recent runs, timeline details, approval approve/reject actions, run cancellation, provider/model settings, voice settings, provider-aware channel setup requirements, channel setup doctor, non-sending channel integration smoke, channel allowlists, listener status, inbound preview, prepared outbound messages, and approval-gated channel sends. Remaining work is full live validation and richer daily-use panels.
 
 Needed work:
 
 - Runtime start/stop/status from the app.
 - Voice wakeup/STT/agent/TTS end-to-end through the app.
-- Tool execution visibility and approval UX.
+- Tool execution visibility, run timelines, cancellation, and approval UX.
 - Full app smoke with chat message, voice message, channel message, OS/browser task, and response.
 
 ### 9. Live Channel Integrations

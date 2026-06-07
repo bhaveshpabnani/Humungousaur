@@ -90,6 +90,65 @@ public sealed class OutboxEnvelope
     public List<JsonObject> Messages { get; set; } = [];
 }
 
+public sealed class RuntimeRunItem
+{
+    [JsonPropertyName("run_id")]
+    public string RunId { get; set; } = "";
+
+    [JsonPropertyName("request")]
+    public string Request { get; set; } = "";
+
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "";
+
+    [JsonPropertyName("started_at")]
+    public string StartedAt { get; set; } = "";
+
+    [JsonPropertyName("finished_at")]
+    public string? FinishedAt { get; set; }
+
+    [JsonPropertyName("final_response")]
+    public string? FinalResponse { get; set; }
+
+    public string Title => $"{Status}  {ShortRunId}";
+    public string Subtitle => string.IsNullOrWhiteSpace(Request) ? ShortRunId : Request;
+    public string ShortRunId => RunId.Length <= 12 ? RunId : RunId[..12];
+}
+
+public sealed class ApprovalItem
+{
+    [JsonPropertyName("approval_token")]
+    public string ApprovalToken { get; set; } = "";
+
+    [JsonPropertyName("run_id")]
+    public string RunId { get; set; } = "";
+
+    [JsonPropertyName("request")]
+    public string Request { get; set; } = "";
+
+    [JsonPropertyName("tool_name")]
+    public string ToolName { get; set; } = "";
+
+    [JsonPropertyName("tool_input")]
+    public JsonObject? ToolInput { get; set; }
+
+    [JsonPropertyName("risk_level")]
+    public string RiskLevel { get; set; } = "";
+
+    [JsonPropertyName("reason")]
+    public string Reason { get; set; } = "";
+
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "";
+
+    [JsonPropertyName("created_at")]
+    public string CreatedAt { get; set; } = "";
+
+    public string Title => $"{ToolName}  {RiskLevel}";
+    public string Subtitle => string.IsNullOrWhiteSpace(Reason) ? Request : Reason;
+    public string ShortToken => ApprovalToken.Length <= 12 ? ApprovalToken : ApprovalToken[..12];
+}
+
 public sealed class ChatLogItem
 {
     public string Speaker { get; init; } = "";

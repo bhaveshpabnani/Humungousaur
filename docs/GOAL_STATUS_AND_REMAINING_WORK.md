@@ -66,7 +66,7 @@ These areas have code and skills, but they are not yet finished as daily-use, li
 
 | Area | Current State | Still Needed |
 | --- | --- | --- |
-| Desktop Windows app | App structure exists under `apps/`; runtime settings, provider/model settings, voice settings, provider-aware channel setup requirements, channel allowlists, setup doctor, listener status, inbound preview, prepared outbound messages, and approval-gated sends are now represented in the app. | Run the WinUI app end to end, validate live chat, provider selection, channel onboarding, approvals, voice, and runtime start/stop from the app. |
+| Desktop Windows app | App structure exists under `apps/`; runtime settings, provider/model settings, voice settings, provider-aware channel setup requirements, channel allowlists, setup doctor, listener status, inbound preview, prepared outbound messages, approval-gated sends, recent runs, timelines, approval decisions, and run cancellation are now represented in the app. | Run the WinUI app end to end, validate live chat, provider selection, channel onboarding, approvals, voice, and runtime start/stop from the app. |
 | Voice wakeup to spoken response | Native voice tools exist, and local/provider STT/TTS surfaces are wired. | Run continuous wake word, STT, agent turn, tool execution, TTS, and playback in one live Windows flow. |
 | OpenAI/Groq/Ollama provider path | Provider clients and smoke flows exist; OpenAI is currently the practical default for live smoke. | Reconfirm configured desktop settings, local Ollama model health, context-window fit, fallback policy, and live model-specific failures. |
 | Local speech models | Local Whisper/faster-whisper paths reference the separate `voice-wakeup` assets. | Confirm installed local model paths, test actual transcription on current machine, add local TTS if the installed assets include it. |
@@ -91,6 +91,7 @@ These areas have code and skills, but they are not yet finished as daily-use, li
 - Channel onboarding should continue using backend channel manifests as the source of truth for required fields, required secrets, delivery mode, policy, listener mode, and doctor findings.
 - Desktop channel checks should use `channel_integration_smoke` for non-sending readiness evidence before any live provider-specific smoke.
 - Add richer tool execution visibility.
+- Keep approvals, run status, timelines, approve/reject decisions, and cancellation visible from the Windows app.
 - Run live app smoke against the local API.
 
 ### 3. Run Full Daily Assistant End-To-End Smoke
