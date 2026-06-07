@@ -22,6 +22,7 @@ Use for arXiv-style searches, paper lists, related work, literature reviews, met
 
 - `research_webpages`
 - `fetch_webpage`
+- `rss_feed_read`
 - `read_pdf`
 - `summarize_pdfs`
 - `web-data-extraction`

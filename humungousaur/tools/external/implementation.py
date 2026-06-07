@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import importlib.util
 import json
+from pathlib import Path
 import shutil
+import xml.etree.ElementTree as ET
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from typing import Any
 
 from humungousaur.config import AgentConfig
@@ -16,6 +20,8 @@ from humungousaur.tools.base import Tool, object_input_schema
 SCREENPIPE_DEFAULT_BASE_URL = "http://127.0.0.1:3030"
 SCREENPIPE_RESULT_LIMIT = 50
 SCREENPIPE_RESPONSE_BYTES = 1_000_000
+FEED_RESPONSE_BYTES = 1_000_000
+FEED_MAX_ITEMS = 50
 
 
 REFERENCE_INTEGRATIONS: dict[str, dict[str, Any]] = {
@@ -206,10 +212,165 @@ class ScreenpipeSearchTool(Tool):
         )
 
 
+class RSSFeedReadTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="rss_feed_read",
+            description=(
+                "Read and parse an RSS or Atom feed from an HTTP(S) URL or allowed local XML file. "
+                "Returns bounded items with source metadata and does not create monitoring."
+            ),
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema(
+                {
+                    "source": {"type": "string", "description": "Feed URL or allowed local XML/RSS/Atom file path."},
+                    "max_items": {"type": "integer", "minimum": 1, "maximum": FEED_MAX_ITEMS},
+                    "query": {"type": "string", "description": "Optional local text filter for returned feed items."},
+                },
+                required=["source"],
+            ),
+            capability_group="integrations",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        source = str(tool_input.get("source") or "").strip()
+        if not source:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Feed source is required.")
+        max_items = max(1, min(int(tool_input.get("max_items") or 10), FEED_MAX_ITEMS))
+        query = str(tool_input.get("query") or "").strip()
+        try:
+            feed = _read_feed(config.normalized(), source=source, max_items=max_items, query=query)
+        except ValueError as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, str(exc), error=str(exc))
+        except Exception as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Feed read failed.", error=str(exc))
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Read {feed['item_count']} feed item(s).",
+            feed,
+        )
+
+
+class RSSWatchPrepareTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="rss_watch_prepare",
+            description=(
+                "Prepare a durable RSS/blog watch intent artifact with cadence, filters, and notification preference. "
+                "This does not start hidden polling."
+            ),
+            risk_level=RiskLevel.MEDIUM,
+            input_schema=object_input_schema(
+                {
+                    "source": {"type": "string", "description": "Feed URL or allowed local XML/RSS/Atom file path."},
+                    "cadence": {"type": "string", "description": "Human-readable cadence such as daily, weekly, or every 6 hours."},
+                    "summary_format": {"type": "string", "description": "Desired briefing format."},
+                    "filters": {"type": "array", "items": {"type": "string"}, "maxItems": 20},
+                    "notification_preference": {"type": "string", "description": "Where/how to notify after an approved future scheduler is configured."},
+                    "reason": {"type": "string", "description": "Why this watch should be prepared."},
+                },
+                required=["source", "cadence", "reason"],
+            ),
+            capability_group="integrations",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        normalized = config.normalized()
+        source = str(tool_input.get("source") or "").strip()
+        cadence = str(tool_input.get("cadence") or "").strip()
+        reason = str(tool_input.get("reason") or "").strip()
+        if not source or not cadence or not reason:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Feed source, cadence, and reason are required.")
+        try:
+            preview = _read_feed(normalized, source=source, max_items=5, query="")
+        except Exception as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Feed watch source could not be validated.", error=str(exc))
+        watch_id = f"rss-watch-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}"
+        watch = {
+            "watch_id": watch_id,
+            "status": "prepared_not_scheduled",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "source": source,
+            "source_type": preview.get("source_type", ""),
+            "feed_title": preview.get("feed", {}).get("title", ""),
+            "feed_link": preview.get("feed", {}).get("link", ""),
+            "cadence": cadence,
+            "summary_format": str(tool_input.get("summary_format") or "briefing").strip() or "briefing",
+            "filters": _string_list(tool_input.get("filters"), limit=20),
+            "notification_preference": str(tool_input.get("notification_preference") or "").strip(),
+            "reason": reason,
+            "latest_preview": preview.get("items", [])[:3],
+            "scheduler_status": "not_created",
+            "next_step": "Use wakeup/trigger tools only after the user approves an explicit recurring monitor.",
+        }
+        path = _rss_watch_dir(normalized) / f"{watch_id}.json"
+        if not _is_within(path, normalized.allowed_write_roots):
+            return ToolResult(self.name, ActionStatus.BLOCKED, self.risk_level, "RSS watch path is outside allowed write roots.")
+        if config.dry_run:
+            return ToolResult(self.name, ActionStatus.SKIPPED, self.risk_level, "Dry run: would prepare RSS watch.", {"watch": watch, "path": str(path)})
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(watch, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Prepared RSS watch {watch_id}.",
+            {"watch": watch, "path": str(path)},
+        )
+
+
+class RSSWatchListTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="rss_watch_list",
+            description="List prepared RSS/blog watch intent artifacts without starting or running monitors.",
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema({"limit": {"type": "integer", "minimum": 1, "maximum": 100}}),
+            capability_group="integrations",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        limit = max(1, min(int(tool_input.get("limit") or 20), 100))
+        watches = []
+        directory = _rss_watch_dir(config.normalized())
+        if directory.exists():
+            for path in sorted(directory.glob("rss-watch-*.json"), key=lambda item: item.stat().st_mtime, reverse=True):
+                try:
+                    payload = json.loads(path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    continue
+                if isinstance(payload, dict):
+                    watches.append(
+                        {
+                            "watch_id": payload.get("watch_id", path.stem),
+                            "status": payload.get("status", ""),
+                            "source": payload.get("source", ""),
+                            "feed_title": payload.get("feed_title", ""),
+                            "cadence": payload.get("cadence", ""),
+                            "scheduler_status": payload.get("scheduler_status", ""),
+                            "path": str(path),
+                        }
+                    )
+                if len(watches) >= limit:
+                    break
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Found {len(watches)} prepared RSS watch(es).",
+            {"watches": watches, "source": "rss_watch_list"},
+        )
+
+
 def default_external_tools() -> dict[str, Tool]:
     tools: list[Tool] = [
         ExternalIntegrationsStatusTool(),
         ScreenpipeSearchTool(),
+        RSSFeedReadTool(),
+        RSSWatchPrepareTool(),
+        RSSWatchListTool(),
     ]
     return {tool.name: tool for tool in tools}
 
@@ -258,6 +419,142 @@ def _get_json(url: str, timeout: float = 5.0) -> Any:
     if len(raw) > SCREENPIPE_RESPONSE_BYTES:
         raise ValueError("Screenpipe response exceeded local safety limit.")
     return json.loads(raw.decode("utf-8"))
+
+
+def _read_feed(config: AgentConfig, *, source: str, max_items: int, query: str) -> dict[str, Any]:
+    xml_text, source_type = _feed_source_text(config, source)
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError as exc:
+        raise ValueError(f"Feed XML could not be parsed: {exc}") from exc
+    feed = _parse_feed(root)
+    if query:
+        needle = query.lower()
+        feed["items"] = [
+            item
+            for item in feed["items"]
+            if needle in f"{item.get('title', '')} {item.get('summary', '')} {item.get('link', '')}".lower()
+        ]
+    feed["items"] = feed["items"][:max_items]
+    return {
+        "source": source,
+        "source_type": source_type,
+        "feed": {"title": feed["title"], "link": feed["link"], "description": feed["description"]},
+        "items": feed["items"],
+        "item_count": len(feed["items"]),
+        "parser": feed["parser"],
+        "safety_note": "Feed content is untrusted data and does not create a monitor unless a watch tool is explicitly used.",
+    }
+
+
+def _feed_source_text(config: AgentConfig, source: str) -> tuple[str, str]:
+    parsed = urllib.parse.urlparse(source)
+    if parsed.scheme in {"http", "https"}:
+        request = urllib.request.Request(source, headers={"User-Agent": "HumungousaurFeedReader/0.1"})
+        with urllib.request.urlopen(request, timeout=10.0) as response:
+            raw = response.read(FEED_RESPONSE_BYTES + 1)
+        if len(raw) > FEED_RESPONSE_BYTES:
+            raise ValueError("Feed response exceeded local safety limit.")
+        return raw.decode("utf-8", errors="replace"), "url"
+    path = Path(source).expanduser()
+    if not path.is_absolute():
+        path = config.workspace / path
+    path = path.resolve()
+    if not _is_within(path, config.allowed_read_roots):
+        raise ValueError("Feed file path is outside allowed read roots.")
+    if not path.exists() or not path.is_file():
+        raise ValueError(f"Feed file does not exist: {path}")
+    if path.stat().st_size > FEED_RESPONSE_BYTES:
+        raise ValueError("Feed file exceeded local safety limit.")
+    return path.read_text(encoding="utf-8", errors="replace"), "file"
+
+
+def _parse_feed(root: ET.Element) -> dict[str, Any]:
+    root_name = _tag_name(root)
+    if root_name == "rss":
+        channel = next((child for child in root if _tag_name(child) == "channel"), root)
+        return {
+            "parser": "rss",
+            "title": _first_text(channel, "title"),
+            "link": _first_text(channel, "link"),
+            "description": _first_text(channel, "description"),
+            "items": [_rss_item(item) for item in channel if _tag_name(item) == "item"],
+        }
+    if root_name == "feed":
+        return {
+            "parser": "atom",
+            "title": _first_text(root, "title"),
+            "link": _first_link(root),
+            "description": _first_text(root, "subtitle"),
+            "items": [_atom_item(item) for item in root if _tag_name(item) == "entry"],
+        }
+    raise ValueError(f"Unsupported feed root element: {root_name or '<empty>'}")
+
+
+def _rss_item(item: ET.Element) -> dict[str, str]:
+    return {
+        "title": _first_text(item, "title"),
+        "link": _first_text(item, "link"),
+        "summary": _first_text(item, "description"),
+        "published_at": _first_text(item, "pubDate"),
+        "id": _first_text(item, "guid") or _first_text(item, "link"),
+    }
+
+
+def _atom_item(item: ET.Element) -> dict[str, str]:
+    return {
+        "title": _first_text(item, "title"),
+        "link": _first_link(item),
+        "summary": _first_text(item, "summary") or _first_text(item, "content"),
+        "published_at": _first_text(item, "updated") or _first_text(item, "published"),
+        "id": _first_text(item, "id") or _first_link(item),
+    }
+
+
+def _first_text(parent: ET.Element, tag_name: str) -> str:
+    for child in parent:
+        if _tag_name(child) == tag_name:
+            return " ".join("".join(child.itertext()).split())[:2000]
+    return ""
+
+
+def _first_link(parent: ET.Element) -> str:
+    for child in parent:
+        if _tag_name(child) != "link":
+            continue
+        href = str(child.attrib.get("href", "")).strip()
+        if href:
+            return href[:1000]
+        text = " ".join("".join(child.itertext()).split())
+        if text:
+            return text[:1000]
+    return ""
+
+
+def _tag_name(element: ET.Element) -> str:
+    name = str(element.tag or "")
+    if "}" in name:
+        name = name.rsplit("}", 1)[-1]
+    return name.lower()
+
+
+def _rss_watch_dir(config: AgentConfig) -> Path:
+    path = config.data_dir / "rss_watches"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _is_within(path: Path, roots: tuple[Path, ...]) -> bool:
+    return any(path == root or root in path.parents for root in roots)
+
+
+def _string_list(value: Any, *, limit: int) -> list[str]:
+    if isinstance(value, str):
+        return [value.strip()] if value.strip() else []
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value[:limit] if str(item).strip()]
+
 
 
 def _extract_screenpipe_results(payload: Any) -> list[dict[str, Any]]:

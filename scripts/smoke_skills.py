@@ -101,6 +101,7 @@ def main() -> int:
     _smoke_analysis(record, tools, config)
     _smoke_writing(record, tools, config)
     _smoke_channels(record, tools, config)
+    _smoke_rss(record, tools, config)
     _smoke_core_surfaces(record, tools, config)
     _smoke_skill_task_surfaces(record, tools, config)
 
@@ -413,6 +414,27 @@ def _smoke_channels(record, tools: dict[str, Any], config: AgentConfig) -> None:
         )
 
 
+def _smoke_rss(record, tools: dict[str, Any], config: AgentConfig) -> None:
+    feed_path = config.data_dir / "script-fixtures" / "skill-smoke-feed.xml"
+    feed_path.write_text(_rss_smoke_feed(), encoding="utf-8")
+    read = tools["rss_feed_read"].execute({"source": str(feed_path), "max_items": 5, "query": "native"}, config)
+    watch = tools["rss_watch_prepare"].execute(
+        {
+            "source": str(feed_path),
+            "cadence": "daily",
+            "summary_format": "briefing",
+            "filters": ["native", "skills"],
+            "notification_preference": "prepared note",
+            "reason": "Verify RSS/blog monitoring skill watch preparation.",
+        },
+        config,
+    )
+    listed = tools["rss_watch_list"].execute({"limit": 5}, config)
+    record("rss", "rss_feed_read", _ok(read) and read.output.get("item_count") == 1, _tool_payload(read))
+    record("rss", "rss_watch_prepare", _ok(watch) and watch.output["watch"]["status"] == "prepared_not_scheduled", _tool_payload(watch))
+    record("rss", "rss_watch_list", _ok(listed) and bool(listed.output.get("watches")), _tool_payload(listed))
+
+
 def _channel_defaults(channel_id: str) -> dict[str, str]:
     return {
         "slack": {"conversation_id": "D-SMOKE", "conversation_type": "im"},
@@ -500,6 +522,32 @@ def _channel_webhook_payload(channel_id: str) -> dict[str, Any]:
     if channel_id == "whatsapp":
         return {"from": "+15555550100", "id": f"whatsapp-smoke-{suffix}", "text": "Hello from WhatsApp skill smoke."}
     return {"conversation_id": "smoke-room", "sender_id": "user-smoke", "text": f"Hello from {channel_id}."}
+
+
+def _rss_smoke_feed() -> str:
+    return """<?xml version="1.0"?>
+<rss version="2.0">
+  <channel>
+    <title>Humungousaur Skill Feed</title>
+    <link>https://example.com/skills</link>
+    <description>Skill smoke updates</description>
+    <item>
+      <title>Native RSS skill support</title>
+      <link>https://example.com/skills/rss</link>
+      <description>Native feed parsing and prepared watches are available.</description>
+      <pubDate>Sun, 07 Jun 2026 09:00:00 GMT</pubDate>
+      <guid>native-rss</guid>
+    </item>
+    <item>
+      <title>Other update</title>
+      <link>https://example.com/skills/other</link>
+      <description>General smoke item.</description>
+      <pubDate>Sat, 06 Jun 2026 09:00:00 GMT</pubDate>
+      <guid>other</guid>
+    </item>
+  </channel>
+</rss>
+"""
 
 
 def _smoke_core_surfaces(record, tools: dict[str, Any], config: AgentConfig) -> None:

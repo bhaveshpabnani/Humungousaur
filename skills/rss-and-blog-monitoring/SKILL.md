@@ -22,6 +22,9 @@ Use for RSS feeds, blog updates, release notes, newsletters, changelogs, and sch
 
 - `fetch_webpage`
 - `research_webpages`
+- `rss_feed_read`
+- `rss_watch_prepare`
+- `rss_watch_list`
 - `activity_ingest`
 - `memory_write`
 - `cognitive_trigger_record`
@@ -30,16 +33,18 @@ Use for RSS feeds, blog updates, release notes, newsletters, changelogs, and sch
 ## Workflow
 
 1. Identify sources and cadence.
-2. Fetch or inspect current source content.
+2. Use `rss_feed_read` for RSS or Atom feeds; use `fetch_webpage`/`research_webpages` for ordinary blog pages.
 3. Summarize changes with source links and dates.
-4. Record durable watch intent only when the user wants ongoing monitoring.
-5. Use trigger/automation tools for scheduled checks if supported.
-6. Report missing native RSS parser/monitor adapter when needed.
+4. Record durable watch intent with `rss_watch_prepare` only when the user wants ongoing monitoring.
+5. Inspect existing prepared watches with `rss_watch_list`.
+6. Use trigger/automation tools for scheduled checks only after explicit approval.
+7. Report missing scheduler/credential gaps separately from feed parsing.
 
 ## Native Implementation Boundaries
 
 - Do not import Hermes blogwatcher or OpenClaw RSS plugins.
-- Monitoring must use Humungousaur-owned triggers/adapters.
+- Feed parsing and watch preparation must use Humungousaur-owned tools.
+- Prepared watch artifacts do not start polling.
 - Do not silently run background polling.
 
 ## Safety And Approval
@@ -51,7 +56,7 @@ Use for RSS feeds, blog updates, release notes, newsletters, changelogs, and sch
 ## Verification
 
 - Source links and timestamps prove current summary.
-- Trigger IDs prove scheduled monitoring.
+- RSS watch paths prove prepared intent; trigger IDs prove scheduled monitoring.
 - Missing adapter status should be explicit.
 
 ## Failure Modes

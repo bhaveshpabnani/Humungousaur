@@ -23,6 +23,7 @@ Use for extracting tables, lists, links, product facts, docs snippets, page summ
 
 - `fetch_webpage`
 - `research_webpages`
+- `rss_feed_read`
 - `browser_open`
 - `browser_observe`
 - `browser_extract`
@@ -35,7 +36,7 @@ Use for extracting tables, lists, links, product facts, docs snippets, page summ
 ## Workflow
 
 1. Clarify the exact data fields and acceptable sources.
-2. Fetch or open the page with a native browser tool.
+2. Fetch/open the page with a native browser tool, or use `rss_feed_read` when the source is RSS/Atom.
 3. Extract structured fields with URLs and page titles attached.
 4. Use multiple sources when accuracy depends on current or disputed facts.
 5. Summarize rather than reproduce long copyrighted text.
