@@ -60,6 +60,21 @@ class StaticModelClient(ModelClient):
 
 
 @dataclass(slots=True)
+class FallbackModelClient(ModelClient):
+    clients: list[ModelClient]
+    name: str = "fallback"
+
+    def complete_json(self, prompt: str, schema: dict[str, Any]) -> str:
+        errors: list[str] = []
+        for client in self.clients:
+            try:
+                return client.complete_json(prompt, schema)
+            except ModelClientError as exc:
+                errors.append(f"{client.name}: {redact_secrets(str(exc))}")
+        raise ModelClientError("All model providers failed: " + " | ".join(errors))
+
+
+@dataclass(slots=True)
 class OpenAIResponsesClient(ModelClient):
     model: str
     api_key: str | None = None

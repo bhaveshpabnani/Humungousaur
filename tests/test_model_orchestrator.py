@@ -4,9 +4,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 from humungousaur.config import AgentConfig
+from humungousaur.interaction import HarnessDecision, HarnessResult, Stimulus, harness_result_to_dict
 from humungousaur.orchestrator import AgentOrchestrator
+from humungousaur.planning.providers import ModelPlanProvider
 from humungousaur.planning.model_factory import auto_model_provider
-from humungousaur.planning.model_clients import OpenAICompatibleChatClient
+from humungousaur.planning.model_clients import FallbackModelClient, ModelClient, OpenAICompatibleChatClient
+from humungousaur.tools.conversation.implementation import ConversationResponsePrepareTool
 
 
 class ModelOrchestratorTests(unittest.TestCase):
@@ -109,6 +112,25 @@ class ModelOrchestratorTests(unittest.TestCase):
             self.assertEqual(client.model, "desktop-model")
             self.assertEqual(client.api_key, "gsk-desktop")
 
+    def test_groq_provider_uses_openai_fallback_when_available(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(
+                workspace=workspace,
+                data_dir=workspace / "artifacts",
+                planner_provider="model",
+                model_provider="groq",
+            )
+
+            with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}, clear=True):
+                client = AgentOrchestrator(config)._build_model_client()
+
+            self.assertIsInstance(client, FallbackModelClient)
+            assert isinstance(client, FallbackModelClient)
+            self.assertEqual(client.name, "groq-chat->openai-responses")
+            self.assertEqual(client.clients[0].name, "groq-chat")
+            self.assertEqual(client.clients[1].name, "openai-responses")
+
     def test_conversation_response_tool_returns_direct_user_response(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)
@@ -120,6 +142,81 @@ class ModelOrchestratorTests(unittest.TestCase):
 
             self.assertEqual(result.final_response, "Hey, I am here.")
             self.assertEqual(result.results[0].tool_name, "conversation_response_prepare")
+
+    def test_harness_payload_includes_direct_response_without_run(self) -> None:
+        payload = harness_result_to_dict(
+            HarnessResult(
+                stimulus=Stimulus(text="Hi"),
+                decision=HarnessDecision(
+                    decision="respond",
+                    request="",
+                    response_mode="text",
+                    reason="No tool run needed.",
+                    should_run_agent=False,
+                    should_record_activity=False,
+                    should_prepare_voice=False,
+                    should_speak=False,
+                    direct_response="Hello.",
+                ),
+            )
+        )
+
+        self.assertIsNone(payload["run"])
+        self.assertEqual(payload["response"], "Hello.")
+
+    def test_model_planner_repairs_tool_input_schema_before_execution(self) -> None:
+        tool = ConversationResponsePrepareTool()
+        provider = ModelPlanProvider(
+            _SequenceModelClient(
+                [
+                    '{"steps":[{"tool_name":"conversation_response_prepare","tool_input":{},"reason":"reply"}]}',
+                    '{"steps":[{"tool_name":"conversation_response_prepare","tool_input":{"text":"Hi there.","reason":"Direct greeting."},"reason":"reply"}]}',
+                ]
+            ),
+            allowed_tools={tool.name},
+            tool_catalog={
+                tool.name: {
+                    "description": tool.description,
+                    "risk_level": tool.risk_level.value,
+                    "requires_approval": tool.requires_approval,
+                    "input_schema": tool.input_schema,
+                    "capability_group": tool.capability_group,
+                }
+            },
+        )
+
+        plan = provider.plan("Hi")
+
+        self.assertEqual(plan.used_provider, "model:sequence:repair")
+        self.assertEqual(plan.steps[0].tool_input["text"], "Hi there.")
+
+    def test_model_planner_repairs_tool_input_when_plan_repair_stays_invalid(self) -> None:
+        tool = ConversationResponsePrepareTool()
+        invalid_plan = '{"steps":[{"tool_name":"conversation_response_prepare","tool_input":{},"reason":"reply"}]}'
+        provider = ModelPlanProvider(
+            _SequenceModelClient(
+                [
+                    invalid_plan,
+                    invalid_plan,
+                    '{"tool_input":{"text":"Hello from repaired input.","reason":"Direct response."},"reason":"Filled required tool input."}',
+                ]
+            ),
+            allowed_tools={tool.name},
+            tool_catalog={
+                tool.name: {
+                    "description": tool.description,
+                    "risk_level": tool.risk_level.value,
+                    "requires_approval": tool.requires_approval,
+                    "input_schema": tool.input_schema,
+                    "capability_group": tool.capability_group,
+                }
+            },
+        )
+
+        plan = provider.plan("Hi")
+
+        self.assertEqual(plan.used_provider, "model:sequence:repair")
+        self.assertEqual(plan.steps[0].tool_input["text"], "Hello from repaired input.")
 
     def test_ollama_provider_defaults_to_local_openai_endpoint(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -156,6 +253,18 @@ class ModelOrchestratorTests(unittest.TestCase):
             patch("humungousaur.planning.model_factory.ollama_available", return_value=True),
         ):
             self.assertEqual(auto_model_provider(), "openai-responses")
+
+class _SequenceModelClient(ModelClient):
+    name = "sequence"
+
+    def __init__(self, responses: list[str]) -> None:
+        self.responses = responses
+
+    def complete_json(self, prompt: str, schema: dict) -> str:
+        del prompt, schema
+        if not self.responses:
+            raise AssertionError("No model responses left.")
+        return self.responses.pop(0)
 
 
 if __name__ == "__main__":

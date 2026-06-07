@@ -48,6 +48,7 @@ class HarnessDecision:
     should_record_activity: bool
     should_prepare_voice: bool
     should_speak: bool
+    direct_response: str = ""
 
 
 @dataclass(slots=True)
@@ -259,6 +260,7 @@ def harness_decision_from_cognitive(decision: CognitiveDecision, stimulus: Stimu
         should_record_activity=bool(decision.should_record_event),
         should_prepare_voice=should_run and mode in {"voice_prepare", "voice_speak"},
         should_speak=should_run and mode == "voice_speak",
+        direct_response=decision.direct_response if not should_run else "",
     )
 
 
@@ -271,8 +273,10 @@ def harness_result_to_dict(result: HarnessResult) -> dict[str, Any]:
     }
     if result.run is not None:
         payload["run"] = asdict(result.run)
+        payload["response"] = result.run.final_response
     else:
         payload["run"] = None
+        payload["response"] = result.decision.direct_response
     return payload
 
 

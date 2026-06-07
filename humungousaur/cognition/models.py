@@ -641,6 +641,7 @@ class CognitiveDecision:
     create_task_title: str | None = None
     stay_warm: bool = False
     next_wakeup_seconds: int | None = None
+    direct_response: str = ""
 
 
 @dataclass(slots=True)

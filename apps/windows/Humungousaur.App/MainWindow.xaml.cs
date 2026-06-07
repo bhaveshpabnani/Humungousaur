@@ -188,7 +188,8 @@ public sealed partial class MainWindow : Window
         try
         {
             var result = await _api.SendStimulusAsync(text, source, responseMode, _settings);
-            var response = result["run"]?["final_response"]?.GetValue<string>()
+            var response = result["response"]?.GetValue<string>()
+                ?? result["run"]?["final_response"]?.GetValue<string>()
                 ?? result["decision"]?["reason"]?.GetValue<string>()
                 ?? AgentApiClient.Pretty(result);
             AddChat("Humungousaur", response, "assistant");
