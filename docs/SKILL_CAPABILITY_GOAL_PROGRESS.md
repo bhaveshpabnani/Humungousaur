@@ -39,7 +39,8 @@ These slices have been implemented, smoke-tested, regression-tested, committed, 
 | `045cb2f` | Presentation planning | Native presentation plan create/inspect tools with audience, goal, narrative arc, slide plan, visual intent, speaker notes, evidence refs, risks, and status. |
 | `b2f6679` | Google Workspace operation packets | Native local packets for Calendar, Drive, Docs, Sheets, and Gmail-style Google operations, with OAuth scopes, approval requirements, payload previews, and `not_executed` status. |
 | `49e8598` | Network and DNS safety diagnostics | Native bounded DNS lookup, HTTP endpoint check, and single-port TCP connectivity probe tools. |
-| current slice | Creative writing and songwriting artifacts | Native creative brief, song structure, and creative revision packet artifacts with originality guardrails. |
+| `51b4d32` | Creative writing and songwriting artifacts | Native creative brief, song structure, and creative revision packet artifacts with originality guardrails. |
+| current slice | Security review artifacts | Native dependency inventory, secret-scan report, prompt-injection review, and approval-policy review artifacts. |
 
 ## Current Native Capability Areas
 
@@ -69,6 +70,7 @@ Humungousaur now has native tool domains for:
 - Plugin discovery
 - Productivity operations including Gmail draft, XLSX, Notion, Airtable, and Google Workspace operation packets
 - Research citation/literature artifacts
+- Security/dependency/secret/prompt-injection review artifacts
 - Skills, scripts, skill catalog/read/run surfaces
 - System health/status
 - Travel planning
@@ -90,8 +92,8 @@ The recurring verification pattern for each completed slice has been:
 
 Latest verified results:
 
-- Full skill smoke: `409` sections, `0` failures.
-- Full regression after creative writing slice: `380 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
+- Full skill smoke: `416` sections, `0` failures.
+- Full regression after security review slice: `385 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
 - The warnings are from `openpyxl` datetime deprecation during XLSX tests, not from the new skill slices.
 
 ## Still To Do
@@ -144,17 +146,16 @@ Needed work:
 - Better smoke tests that do not require live GitHub credentials.
 - Optional live GitHub connector tests when credentials are configured.
 
-### 5. Security And Dependency Review
+### 5. Security And Dependency Live Scanner Integration
 
-Current weak signal: dependency/security skills rely heavily on generic shell/search.
+Current status: native local review artifacts are being added for dependency inventory, secret-scan reports, prompt-injection reviews, and approval policy reviews. Remaining work is live scanner integration and richer repository-wide automation.
 
 Needed work:
 
-- Native dependency inventory artifact.
-- Native secret-scan result artifact.
-- Native prompt-injection/screen-content risk report artifact.
-- Native approval policy review artifact.
-- Smoke tests with fixture files containing safe synthetic risks.
+- Native wrappers for approved external scanners.
+- Repository-wide dependency graph extraction from lockfiles.
+- GitHub/CI integration for security findings.
+- Desktop approval UX for risky install/scanner/network actions.
 
 ### 6. Delegation Skills
 
