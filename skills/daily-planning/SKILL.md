@@ -28,6 +28,8 @@ Use when the user asks to plan a day, morning, evening, sprint, work block, or p
 - `cognitive_commitment_status`
 - `cognitive_trigger_record`
 - `cognitive_briefing_prepare`
+- `daily_plan_create`
+- `daily_plan_inspect`
 - `memory_summary`
 - `activity_search`
 - `voice_response_prepare`
@@ -37,8 +39,8 @@ Use when the user asks to plan a day, morning, evening, sprint, work block, or p
 1. Gather current cognitive state and any explicit user constraints such as time window, energy, location, deadline, or "must do" items.
 2. Review commitments and wakeups before adding new tasks; do not duplicate obligations already tracked.
 3. Ask the model to rank tasks using evidence, user preferences, deadlines, risk, dependencies, and environment constraints.
-4. Convert the plan into a short agenda with clear sections: now, next, later, waiting, and optional reminders.
-5. Record new commitments or wakeups only when the user asks or the instruction is clearly part of the planning request.
+4. Use `daily_plan_create` to preserve must-do items, time blocks, waiting/deferred items, risks, evidence refs, and reminder drafts.
+5. Use `daily_plan_inspect` before responding or before creating any wakeups/commitments.
 6. If responding by voice, prepare a brief spoken summary and leave detailed steps in text or notes.
 
 ## Safety And Boundaries
@@ -46,12 +48,14 @@ Use when the user asks to plan a day, morning, evening, sprint, work block, or p
 - Do not infer private calendar details unless provided by tools or user text.
 - Do not create reminders, messages, purchases, or external actions without explicit approval.
 - Avoid over-scheduling; preserve focus and recovery time when evidence suggests overload.
+- `daily_plan_create` prepares a local plan only; reminder drafts are not scheduled until separate approved wakeup/cognition tools run.
 
 ## Verification
 
 - The final plan should cite the evidence categories used, such as commitments, memory, activity, or environment.
 - Verify that every "must do" item from the user appears in the plan or is explicitly deferred.
 - Check that generated wakeups or commitments have a concrete title and reason.
+- Inspect daily plan artifacts and confirm `prepared_not_scheduled` unless reminders were explicitly created.
 
 ## Failure Modes
 

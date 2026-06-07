@@ -105,6 +105,7 @@ def main() -> int:
     _smoke_media(record, tools, config)
     _smoke_travel(record, tools, config)
     _smoke_commerce(record, tools, config)
+    _smoke_personal(record, tools, config)
     _smoke_channels(record, tools, config)
     _smoke_rss(record, tools, config)
     _smoke_core_surfaces(record, tools, config)
@@ -553,6 +554,50 @@ def _smoke_commerce(record, tools: dict[str, Any], config: AgentConfig) -> None:
     record("commerce", "shopping_comparison_inspect", _ok(comparison_inspect) and comparison_inspect.output.get("product_count") == 1, _tool_payload(comparison_inspect))
     record("commerce", "purchase_intent_prepare", _ok(purchase) and purchase.output.get("purchase_status") == "prepared_not_purchased", _tool_payload(purchase))
     record("commerce", "purchase_intent_inspect", _ok(purchase_inspect) and purchase_inspect.output.get("approval_required") is True, _tool_payload(purchase_inspect))
+
+
+def _smoke_personal(record, tools: dict[str, Any], config: AgentConfig) -> None:
+    contact = tools["contact_note_create"].execute(
+        {
+            "filename": "skill-smoke-contact.md",
+            "person_name": "Ada Example",
+            "role": "Product collaborator",
+            "organization": "Example Labs",
+            "preferred_channel": "email",
+            "facts": [{"fact": "Prefers concise technical summaries.", "evidence": "synthetic smoke fixture", "confidence": "high"}],
+            "preferences": [{"preference": "Likes agendas before calls.", "evidence": "synthetic smoke fixture"}],
+            "followups": [{"title": "Send agenda draft", "due": "tomorrow", "reason": "Prepare for call", "evidence": "synthetic smoke fixture"}],
+            "sensitivity": "medium",
+            "source_refs": ["scripts/smoke_skills.py synthetic fixture"],
+            "reason": "Verify native contact and relationship note artifact support.",
+        },
+        config,
+    )
+    contact_inspect = tools["contact_note_inspect"].execute({"path": contact.output.get("path", "")}, config) if _ok(contact) else contact
+    plan = tools["daily_plan_create"].execute(
+        {
+            "filename": "skill-smoke-daily-plan.md",
+            "title": "Skill Smoke Daily Plan",
+            "date": "2026-06-07",
+            "time_window": "afternoon",
+            "energy": "medium",
+            "evidence_refs": ["active goal continuation", "skill smoke fixture"],
+            "must_do": [{"title": "Run skill smoke", "priority": "high", "evidence": "active goal", "reason": "Verify skill capability coverage"}],
+            "time_blocks": [{"time": "14:00", "focus": "Implement next skill slice", "notes": "Keep edits scoped and tested."}],
+            "waiting": ["User selection for future slice is optional."],
+            "deferred": ["Live external action testing remains approval-gated."],
+            "reminder_drafts": [{"title": "Review next skill family", "when": "next continuation", "reason": "Continue one-by-one hardening"}],
+            "risks": ["Do not claim completion of the full broad goal from one slice."],
+            "summary": "One focused implementation block plus explicit reminder draft, without creating wakeups automatically.",
+            "reason": "Verify native daily planning artifact support.",
+        },
+        config,
+    )
+    plan_inspect = tools["daily_plan_inspect"].execute({"path": plan.output.get("path", "")}, config) if _ok(plan) else plan
+    record("personal", "contact_note_create", _ok(contact) and contact.output.get("memory_status") == "prepared_not_memorized", _tool_payload(contact))
+    record("personal", "contact_note_inspect", _ok(contact_inspect) and contact_inspect.output.get("followup_count") == 1, _tool_payload(contact_inspect))
+    record("personal", "daily_plan_create", _ok(plan) and plan.output.get("plan_status") == "prepared_not_scheduled", _tool_payload(plan))
+    record("personal", "daily_plan_inspect", _ok(plan_inspect) and plan_inspect.output.get("reminder_draft_count") == 1, _tool_payload(plan_inspect))
 
 
 def _prepare_script_fixtures(config: AgentConfig) -> None:

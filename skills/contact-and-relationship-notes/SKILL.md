@@ -24,6 +24,8 @@ Use when the user asks to remember something about a person, prepare for a conve
 - `memory_write`
 - `memory_search`
 - `memory_profile`
+- `contact_note_create`
+- `contact_note_inspect`
 - `cognitive_commitment_record`
 - `cognitive_trigger_record`
 - `write_note`
@@ -33,8 +35,8 @@ Use when the user asks to remember something about a person, prepare for a conve
 
 1. Identify whether the fact is durable, useful, and explicitly evidenced.
 2. Separate factual contact data from subjective interpretations.
-3. Record preferences and follow-ups only when the user intent is clear.
-4. Use commitments/triggers for actionable follow-ups.
+3. Use `contact_note_create` for local evidence-backed contact artifacts with sensitivity, source refs, preferences, follow-ups, and memory boundary.
+4. Use `contact_note_inspect` before recording durable memory, commitments, or triggers.
 5. Before a conversation, retrieve relevant notes and produce a compact prep brief.
 6. Allow correction and forgetting when the user updates or retracts a memory.
 
@@ -43,6 +45,7 @@ Use when the user asks to remember something about a person, prepare for a conve
 - Use Humungousaur memory and commitment tools.
 - Do not import second-brain or CRM plugins from OpenClaw/Hermes.
 - Do not scrape contacts from apps unless the user explicitly asks and a native approved tool path exists.
+- `contact_note_create` is a local artifact tool; durable memory still requires explicit memory/cognition tool action.
 
 ## Safety And Approval
 
@@ -54,6 +57,7 @@ Use when the user asks to remember something about a person, prepare for a conve
 
 - Memory records should include evidence or confidence.
 - Follow-ups should have commitment/trigger IDs when recorded.
+- Inspect contact note artifacts and confirm `prepared_not_memorized` unless durable memory was explicitly recorded.
 - If no relevant memory exists, say so rather than inventing context.
 
 ## Failure Modes
