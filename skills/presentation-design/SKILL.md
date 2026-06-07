@@ -19,26 +19,36 @@ Use for improving decks, slide outlines, executive presentations, talks, pitch d
 
 ## Tool Map
 
+- `presentation_plan_create`
+- `presentation_plan_inspect`
+- `pptx_deck_create`
+- `pptx_deck_inspect`
 - `pptx-operations`
 - `doc-coauthoring`
 - `brand-guidelines`
+- `diagram_artifact_create`
+- `infographic_plan_create`
 - `data-visualization`
 - `write_note`
 
 ## Workflow
 
 1. Clarify audience and decision/action desired.
-2. Shape narrative arc and slide sequence.
-3. Reduce slide text and strengthen visual hierarchy.
-4. Add speaker notes where helpful.
-5. Ensure charts/claims are evidence-backed.
-6. Verify artifact/render when a deck file is produced.
+2. Use `presentation_plan_create` to shape audience, goal, desired action, narrative arc, slide sequence, visual intent, speaker notes, evidence refs, and risks.
+3. Use `presentation_plan_inspect` before creating or reporting deck work.
+4. Reduce slide text and strengthen visual hierarchy.
+5. Add speaker notes where helpful.
+6. Use `pptx_deck_create` only after the plan is coherent or the user explicitly asks for a deck file.
+7. Use `pptx_deck_inspect` after deck generation.
+8. Ensure charts/claims are evidence-backed.
 
 ## Native Implementation Boundaries
 
 - Use Humungousaur writing/PPTX planning/native artifact tools.
 - Do not import Anthropic PPTX/theme code.
 - Dedicated deck generation must be native or approved interpreter work.
+- Presentation plans are local artifacts and must mark `draft`, `ready_for_review`, or `final` status.
+- Generated PPTX decks are not sent, published, or shared unless a separate approved channel/action tool does that.
 
 ## Safety And Approval
 
@@ -49,6 +59,7 @@ Use for improving decks, slide outlines, executive presentations, talks, pitch d
 ## Verification
 
 - Check narrative flow against audience.
+- Inspect presentation plans for slide count, evidence refs, and risks.
 - Verify generated artifacts.
 - Mark draft if visual QA is incomplete.
 

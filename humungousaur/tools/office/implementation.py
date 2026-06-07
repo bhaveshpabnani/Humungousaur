@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from html import escape
+import json
 from pathlib import Path
 import re
 from typing import Any
+from uuid import uuid4
 from zipfile import ZIP_DEFLATED, ZipFile
 import xml.etree.ElementTree as ET
 
@@ -15,6 +18,7 @@ from humungousaur.tools.base import Tool, object_input_schema
 OFFICE_MAX_PARAGRAPHS = 500
 OFFICE_MAX_TABLE_ROWS = 500
 OFFICE_MAX_SLIDES = 80
+OFFICE_MAX_TEXT_CHARS = 20_000
 
 
 class DocxDocumentCreateTool(Tool):
@@ -212,14 +216,201 @@ class PptxDeckInspectTool(Tool):
         )
 
 
+class PresentationPlanCreateTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="presentation_plan_create",
+            description=(
+                "Create a local presentation-design plan with audience, goal, desired action, narrative arc, "
+                "slide sequence, visual intent, speaker notes, evidence refs, and review risks."
+            ),
+            risk_level=RiskLevel.MEDIUM,
+            input_schema=object_input_schema(
+                {
+                    "filename": {"type": "string", "description": "Output markdown filename under data_dir/presentations/plans."},
+                    "title": {"type": "string"},
+                    "audience": {"type": "string"},
+                    "goal": {"type": "string"},
+                    "desired_action": {"type": "string"},
+                    "status": {"type": "string", "enum": ["draft", "ready_for_review", "final"]},
+                    "narrative_arc": {"type": "array", "items": {"type": "string"}},
+                    "slide_plan": {"type": "array", "items": {"type": "object"}},
+                    "design_notes": {"type": "array", "items": {"type": "string"}},
+                    "evidence_refs": {"type": "array", "items": {"type": "string"}},
+                    "risks": {"type": "array", "items": {"type": "string"}},
+                    "reason": {"type": "string"},
+                },
+                required=["title", "audience", "goal", "reason"],
+            ),
+            capability_group="office",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        normalized = config.normalized()
+        title = " ".join(str(tool_input.get("title") or "").split())
+        audience = _bounded_text(tool_input.get("audience"))
+        goal = _bounded_text(tool_input.get("goal"))
+        reason = str(tool_input.get("reason") or "").strip()
+        if not title or not audience or not goal or not reason:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Title, audience, goal, and reason are required.")
+        filename = _safe_filename(str(tool_input.get("filename") or f"presentation-plan-{uuid4().hex[:8]}.md"), ".md")
+        markdown_path = (normalized.data_dir / "presentations" / "plans" / filename).resolve()
+        if not _is_within(markdown_path, normalized.allowed_write_roots):
+            return ToolResult(self.name, ActionStatus.BLOCKED, self.risk_level, "Presentation plan path is outside allowed write roots.")
+        artifact = _presentation_plan_artifact(tool_input, title=title, audience=audience, goal=goal, reason=reason, markdown_path=markdown_path)
+        markdown = _render_presentation_plan(artifact)
+        if config.dry_run:
+            return ToolResult(self.name, ActionStatus.SKIPPED, self.risk_level, f"Dry run: would create presentation plan {markdown_path}.", {"path": str(markdown_path), "artifact": artifact})
+        markdown_path.parent.mkdir(parents=True, exist_ok=True)
+        markdown_path.write_text(markdown, encoding="utf-8")
+        metadata_path = markdown_path.with_suffix(".json")
+        metadata_path.write_text(json.dumps(artifact, indent=2, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Created presentation plan {markdown_path}.",
+            {
+                "path": str(markdown_path),
+                "metadata_path": str(metadata_path),
+                "presentation_plan_id": artifact["presentation_plan_id"],
+                "status": artifact["status"],
+                "slide_count": len(artifact["slide_plan"]),
+                "evidence_ref_count": len(artifact["evidence_refs"]),
+                "source": "presentation_plan_create",
+            },
+        )
+
+
+class PresentationPlanInspectTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="presentation_plan_inspect",
+            description="Inspect a local presentation-design plan for audience, goal, slide count, evidence refs, review risks, and preview text.",
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema(
+                {"path": {"type": "string", "description": "Workspace-relative or allowed absolute presentation plan markdown path."}},
+                required=["path"],
+            ),
+            capability_group="office",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        normalized = config.normalized()
+        path = _resolve_office_path(normalized, str(tool_input.get("path") or ""), subdir="presentations/plans", suffix=".md")
+        if not _is_within(path, normalized.allowed_read_roots + normalized.allowed_write_roots):
+            return ToolResult(self.name, ActionStatus.BLOCKED, self.risk_level, "Presentation plan path is outside allowed roots.")
+        if not path.exists() or path.suffix.lower() != ".md":
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Presentation plan file does not exist.")
+        metadata = _load_json_sidecar(path.with_suffix(".json"))
+        text = path.read_text(encoding="utf-8")
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Inspected presentation plan {path}.",
+            {
+                "path": str(path),
+                "metadata_path": str(path.with_suffix(".json")) if path.with_suffix(".json").exists() else "",
+                "presentation_plan_id": metadata.get("presentation_plan_id", ""),
+                "title": metadata.get("title", ""),
+                "audience": metadata.get("audience", ""),
+                "goal": metadata.get("goal", ""),
+                "status": metadata.get("status", ""),
+                "slide_count": len(metadata.get("slide_plan", [])) if isinstance(metadata.get("slide_plan"), list) else 0,
+                "evidence_ref_count": len(metadata.get("evidence_refs", [])) if isinstance(metadata.get("evidence_refs"), list) else 0,
+                "risk_count": len(metadata.get("risks", [])) if isinstance(metadata.get("risks"), list) else 0,
+                "preview": text[:4000],
+                "source": "presentation_plan_inspect",
+            },
+        )
+
+
 def default_office_tools() -> dict[str, Tool]:
     tools: list[Tool] = [
         DocxDocumentCreateTool(),
         DocxDocumentInspectTool(),
+        PresentationPlanCreateTool(),
+        PresentationPlanInspectTool(),
         PptxDeckCreateTool(),
         PptxDeckInspectTool(),
     ]
     return {tool.name: tool for tool in tools}
+
+
+def _presentation_plan_artifact(tool_input: dict[str, Any], *, title: str, audience: str, goal: str, reason: str, markdown_path: Path) -> dict[str, Any]:
+    status = str(tool_input.get("status") or "draft").strip().lower()
+    if status not in {"draft", "ready_for_review", "final"}:
+        status = "draft"
+    return {
+        "presentation_plan_id": f"presentation-plan-{uuid4().hex[:12]}",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "title": title,
+        "audience": audience,
+        "goal": goal,
+        "desired_action": _bounded_text(tool_input.get("desired_action")),
+        "status": status,
+        "narrative_arc": _string_list(tool_input.get("narrative_arc"))[:OFFICE_MAX_SLIDES],
+        "slide_plan": _slide_plan(tool_input.get("slide_plan")),
+        "design_notes": _string_list(tool_input.get("design_notes"))[:OFFICE_MAX_SLIDES],
+        "evidence_refs": _string_list(tool_input.get("evidence_refs"))[:OFFICE_MAX_SLIDES],
+        "risks": _string_list(tool_input.get("risks"))[:OFFICE_MAX_SLIDES],
+        "reason": reason,
+        "path": str(markdown_path),
+        "safety_note": "Presentation plans are local design artifacts. Claims, metrics, logos, and brand rules must be verified before final deck use.",
+    }
+
+
+def _render_presentation_plan(artifact: dict[str, Any]) -> str:
+    lines = [
+        f"# {artifact['title']}",
+        "",
+        f"Audience: {artifact['audience']}",
+        f"Goal: {artifact['goal']}",
+        f"Desired action: {artifact['desired_action']}",
+        f"Status: {artifact['status']}",
+        "",
+    ]
+    _append_list(lines, "Narrative Arc", artifact["narrative_arc"])
+    if artifact["slide_plan"]:
+        lines.extend(["## Slide Plan", "", "| # | Title | Purpose | Key Points | Visual | Speaker Notes | Evidence |", "| --- | --- | --- | --- | --- | --- | --- |"])
+        for index, slide in enumerate(artifact["slide_plan"], start=1):
+            lines.append(
+                f"| {index} | {slide['title']} | {slide['purpose']} | {'; '.join(slide['key_points'])} | {slide['visual']} | {slide['speaker_notes']} | {'; '.join(slide['evidence_refs'])} |"
+            )
+        lines.append("")
+    _append_list(lines, "Design Notes", artifact["design_notes"])
+    _append_list(lines, "Evidence References", artifact["evidence_refs"])
+    _append_list(lines, "Risks And Review Items", artifact["risks"])
+    lines.extend(["## Safety Note", "", artifact["safety_note"], "", f"Created: {artifact['created_at']}"])
+    return "\n".join(lines) + "\n"
+
+
+def _slide_plan(value: Any) -> list[dict[str, Any]]:
+    slides = []
+    if not isinstance(value, list):
+        return slides
+    for raw in value[:OFFICE_MAX_SLIDES]:
+        if not isinstance(raw, dict):
+            continue
+        title = _bounded_text(raw.get("title"))
+        purpose = _bounded_text(raw.get("purpose"))
+        key_points = _string_list(raw.get("key_points") or raw.get("bullets"))[:20]
+        body = _bounded_text(raw.get("body"))
+        if body and not key_points:
+            key_points = [body]
+        if title or purpose or key_points:
+            slides.append(
+                {
+                    "title": title or "Untitled Slide",
+                    "purpose": purpose,
+                    "key_points": key_points,
+                    "visual": _bounded_text(raw.get("visual") or raw.get("visual_intent")),
+                    "speaker_notes": _bounded_text(raw.get("speaker_notes") or raw.get("notes")),
+                    "evidence_refs": _string_list(raw.get("evidence_refs"))[:20],
+                }
+            )
+    return slides
 
 
 def _write_docx(path: Path, *, title: str, sections: list[Any]) -> None:
@@ -354,6 +545,29 @@ def _docx_summary(title: str, sections: list[Any]) -> dict[str, Any]:
 
 def _pptx_summary(title: str, slides: list[Any]) -> dict[str, Any]:
     return {"title": title, "slide_count": len([slide for slide in slides if isinstance(slide, dict)]) + 1}
+
+
+def _append_list(lines: list[str], title: str, items: list[str]) -> None:
+    if not items:
+        return
+    lines.extend([f"## {title}", ""])
+    for item in items:
+        lines.append(f"- {item}")
+    lines.append("")
+
+
+def _bounded_text(value: Any) -> str:
+    return " ".join(str(value or "").split())[:OFFICE_MAX_TEXT_CHARS]
+
+
+def _load_json_sidecar(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
 
 
 def _string_list(value: Any) -> list[str]:

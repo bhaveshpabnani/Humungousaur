@@ -8,12 +8,61 @@ from humungousaur.tools import default_tools
 from humungousaur.tools.office import (
     DocxDocumentCreateTool,
     DocxDocumentInspectTool,
+    PresentationPlanCreateTool,
+    PresentationPlanInspectTool,
     PptxDeckCreateTool,
     PptxDeckInspectTool,
 )
 
 
 class OfficeToolTests(unittest.TestCase):
+    def test_presentation_plan_create_and_inspect_roundtrip(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
+
+            created = PresentationPlanCreateTool().execute(
+                {
+                    "filename": "deck-plan.md",
+                    "title": "Executive Launch Review",
+                    "audience": "Executive team",
+                    "goal": "Secure launch approval.",
+                    "desired_action": "Approve the launch checklist.",
+                    "status": "ready_for_review",
+                    "narrative_arc": ["Context", "Evidence", "Decision"],
+                    "slide_plan": [
+                        {
+                            "title": "Decision Needed",
+                            "purpose": "Frame the ask.",
+                            "key_points": ["Approval is required before launch."],
+                            "visual": "decision summary",
+                            "speaker_notes": "Open with the specific decision.",
+                            "evidence_refs": ["fixture"],
+                        },
+                        {
+                            "title": "Evidence",
+                            "purpose": "Show readiness.",
+                            "key_points": ["Smoke tests are green."],
+                            "visual": "status table",
+                            "speaker_notes": "Keep this brief.",
+                            "evidence_refs": ["tests fixture"],
+                        },
+                    ],
+                    "design_notes": ["Use one message per slide."],
+                    "evidence_refs": ["synthetic test fixture"],
+                    "risks": ["Metrics need live validation before final use."],
+                    "reason": "Verify native presentation planning artifact.",
+                },
+                config,
+            )
+            inspected = PresentationPlanInspectTool().execute({"path": created.output["path"]}, config)
+
+        self.assertEqual(created.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(created.output["slide_count"], 2)
+        self.assertEqual(created.output["evidence_ref_count"], 1)
+        self.assertEqual(inspected.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(inspected.output["status"], "ready_for_review")
+        self.assertEqual(inspected.output["risk_count"], 1)
+
     def test_docx_document_create_and_inspect_roundtrip(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
@@ -77,6 +126,8 @@ class OfficeToolTests(unittest.TestCase):
         self.assertIn("docx_document_inspect", tools)
         self.assertIn("pptx_deck_create", tools)
         self.assertIn("pptx_deck_inspect", tools)
+        self.assertIn("presentation_plan_create", tools)
+        self.assertIn("presentation_plan_inspect", tools)
         self.assertEqual(tools["docx_document_create"].capability_group, "office")
 
 

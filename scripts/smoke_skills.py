@@ -212,6 +212,44 @@ def _smoke_pdf(record, tools: dict[str, Any], config: AgentConfig) -> None:
 
 
 def _smoke_office(record, tools: dict[str, Any], config: AgentConfig) -> None:
+    presentation_plan = tools["presentation_plan_create"].execute(
+        {
+            "filename": "skill-smoke-presentation-plan.md",
+            "title": "Humungousaur Skill Smoke Review",
+            "audience": "Product owner",
+            "goal": "Show that native presentation planning is wired to the agent.",
+            "desired_action": "Approve the next skill capability slice.",
+            "status": "ready_for_review",
+            "narrative_arc": ["What changed", "Why it matters", "Verification"],
+            "slide_plan": [
+                {
+                    "title": "Native Planning",
+                    "purpose": "Show the planning capability.",
+                    "key_points": ["Presentation design produces an inspectable plan before PPTX generation."],
+                    "visual": "simple capability flow",
+                    "speaker_notes": "Keep the focus on evidence and task progress.",
+                    "evidence_refs": ["scripts/smoke_skills.py"],
+                },
+                {
+                    "title": "Verification",
+                    "purpose": "Show coverage.",
+                    "key_points": ["Focused tests and full skill smoke cover the plan."],
+                    "visual": "status checklist",
+                    "speaker_notes": "Mention that the deck is not automatically published.",
+                    "evidence_refs": ["tests/test_office_tools.py"],
+                },
+            ],
+            "design_notes": ["Use one key message per slide.", "Keep executive slides scan-friendly."],
+            "evidence_refs": ["scripts/smoke_skills.py synthetic fixture"],
+            "risks": ["Synthetic content must be replaced before a real deck."],
+            "reason": "Verify native presentation design planning capability.",
+        },
+        config,
+    )
+    presentation_plan_inspect = tools["presentation_plan_inspect"].execute({"path": presentation_plan.output.get("path", "")}, config) if _ok(presentation_plan) else presentation_plan
+    record("office", "presentation_plan_create", _ok(presentation_plan) and presentation_plan.output.get("slide_count") == 2, _tool_payload(presentation_plan))
+    record("office", "presentation_plan_inspect", _ok(presentation_plan_inspect) and presentation_plan_inspect.output.get("risk_count") == 1, _tool_payload(presentation_plan_inspect))
+
     docx = tools["docx_document_create"].execute(
         {
             "filename": "skill-smoke.docx",
