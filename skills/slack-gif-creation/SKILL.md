@@ -22,6 +22,8 @@ Use for celebratory GIF concepts, team reactions, onboarding animations, or Slac
 
 - `web-artifact-builder`
 - `algorithmic-art`
+- `media_storyboard_create`
+- `media_storyboard_inspect`
 - `channel_message_prepare`
 - `message-approval-policy`
 - `tool_search`
@@ -30,8 +32,8 @@ Use for celebratory GIF concepts, team reactions, onboarding animations, or Slac
 
 1. Clarify emotion/message and audience.
 2. Define safe, work-appropriate concept.
-3. Check for native GIF/artifact generation support.
-4. If missing, provide storyboard/spec or HTML animation prototype.
+3. Use `media_storyboard_create` to create a local storyboard/contact-sheet artifact for the GIF concept, dimensions, scenes, palette, accessibility, and licensing constraints.
+4. Use `media_storyboard_inspect` to verify the artifact and SVG path.
 5. Prepare Slack message only after review.
 6. Do not send/post without approval.
 
@@ -40,6 +42,7 @@ Use for celebratory GIF concepts, team reactions, onboarding animations, or Slac
 - Do not import Anthropic Slack GIF creator code.
 - GIF generation must be Humungousaur-owned or approved artifact workflow.
 - Slack delivery uses native channel tools.
+- The native storyboard tool creates Markdown/JSON/SVG planning artifacts; a binary GIF encoder remains a separate approved implementation.
 
 ## Safety And Approval
 
@@ -51,7 +54,7 @@ Use for celebratory GIF concepts, team reactions, onboarding animations, or Slac
 
 - Artifact path proves generated media/prototype.
 - Prepared Slack outbox proves draft only.
-- State if GIF binary generation is not implemented.
+- State if the deliverable is a storyboard/contact sheet rather than a binary GIF.
 
 ## Failure Modes
 

@@ -22,6 +22,8 @@ Use for generated images, mockups, illustrations, textures, icons, storyboards, 
 
 - `tool_search`
 - `capability_surface`
+- `media_storyboard_create`
+- `media_storyboard_inspect`
 - `write_note`
 - `frontend-design`
 - `brand-guidelines`
@@ -31,15 +33,16 @@ Use for generated images, mockups, illustrations, textures, icons, storyboards, 
 1. Define image purpose and usage.
 2. Gather reference constraints and safety limits.
 3. Draft a precise prompt/spec.
-4. Check for native/approved generation tool availability.
+4. Use `media_storyboard_create` for local prompt/storyboard/contact-sheet artifacts when generation is not available or not yet approved.
 5. Generate/edit only through approved tools.
-6. Verify output path and visual fit.
+6. Use `media_storyboard_inspect` or provider output inspection to verify output path and visual fit.
 
 ## Native Implementation Boundaries
 
 - Do not import Hermes ComfyUI or OpenClaw image plugins.
 - Image providers require Humungousaur-owned adapters or approved available tools.
 - Prompt drafts are not generated artifacts.
+- Storyboard artifacts are local visual planning outputs and must be labeled separately from generated images.
 
 ## Safety And Approval
 
@@ -51,6 +54,7 @@ Use for generated images, mockups, illustrations, textures, icons, storyboards, 
 
 - Artifact path or visual output proves generation.
 - Check aspect ratio and intended use.
+- Inspect storyboard artifacts when generation is not executed.
 - Label prompt-only outputs clearly.
 
 ## Failure Modes

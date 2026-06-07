@@ -23,15 +23,17 @@ Use for short videos, explainer animations, Manim-style scenes, ASCII/video conc
 - `write_note`
 - `web-artifact-builder`
 - `algorithmic-art`
+- `media_storyboard_create`
+- `media_storyboard_inspect`
 - `voice_response_prepare`
 - `tool_search`
 
 ## Workflow
 
 1. Define message, audience, and duration.
-2. Create scene-by-scene storyboard.
+2. Use `media_storyboard_create` for scene-by-scene storyboard, timing, dimensions, palette, narration/text, accessibility, and licensing constraints.
 3. Draft narration and timing.
-4. Check for native video/rendering support.
+4. Use `media_storyboard_inspect` before reporting the storyboard or handing it to a renderer.
 5. Generate only through approved native tools.
 6. Verify output artifact if rendered.
 
@@ -40,6 +42,7 @@ Use for short videos, explainer animations, Manim-style scenes, ASCII/video conc
 - Do not import Hermes Manim or ASCII video scripts.
 - Rendering pipelines must be Humungousaur-owned or explicitly approved.
 - Storyboards are not rendered videos.
+- The native storyboard tool creates Markdown/JSON/SVG contact sheets and does not render video files.
 
 ## Safety And Approval
 
@@ -51,6 +54,7 @@ Use for short videos, explainer animations, Manim-style scenes, ASCII/video conc
 
 - Rendered video needs artifact path and playback/inspection.
 - Storyboard-only output should be labeled.
+- Inspect storyboard artifacts and generated SVG contact sheets.
 - Check audio/narration sync if generated.
 
 ## Failure Modes

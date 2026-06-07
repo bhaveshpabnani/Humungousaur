@@ -102,6 +102,7 @@ def main() -> int:
     _smoke_writing(record, tools, config)
     _smoke_content(record, tools, config)
     _smoke_research(record, tools, config)
+    _smoke_media(record, tools, config)
     _smoke_channels(record, tools, config)
     _smoke_rss(record, tools, config)
     _smoke_core_surfaces(record, tools, config)
@@ -427,6 +428,54 @@ def _smoke_research(record, tools: dict[str, Any], config: AgentConfig) -> None:
     record("research", "citation_bibliography_inspect", _ok(bibliography_inspect) and bibliography_inspect.output.get("uncertain_entry_count") == 1, _tool_payload(bibliography_inspect))
     record("research", "literature_set_create", _ok(literature) and literature.output.get("paper_count") == 1, _tool_payload(literature))
     record("research", "literature_set_inspect", _ok(literature_inspect) and literature_inspect.output.get("theme_count") == 1, _tool_payload(literature_inspect))
+
+
+def _smoke_media(record, tools: dict[str, Any], config: AgentConfig) -> None:
+    sound = tools["sound_spec_create"].execute(
+        {
+            "filename": "skill-smoke-sound.md",
+            "title": "Skill Smoke Sound Spec",
+            "sound_type": "sound_effect",
+            "intended_use": "Agent UI completion chime",
+            "duration_seconds": 1.5,
+            "mood": "calm and satisfying",
+            "instrumentation": ["soft bell", "low warm pad"],
+            "sections": [{"name": "Chime", "start": "00:00", "duration": "1.5s", "notes": "Single gentle resolve."}],
+            "sound_design_notes": ["No harsh transient.", "Keep suitable for repeated daily use."],
+            "licensing_constraints": ["No living-artist or copyrighted motif imitation."],
+            "prompt": "A short calm completion chime with a soft bell and warm pad, suitable for productivity software.",
+            "reason": "Verify native music/sound specification artifact support.",
+        },
+        config,
+    )
+    sound_inspect = tools["sound_spec_inspect"].execute({"path": sound.output.get("path", "")}, config) if _ok(sound) else sound
+    storyboard = tools["media_storyboard_create"].execute(
+        {
+            "filename": "skill-smoke-storyboard.md",
+            "title": "Skill Smoke Slack GIF Storyboard",
+            "media_type": "gif",
+            "audience": "Product team",
+            "intended_use": "Approval-safe Slack celebration draft",
+            "duration_seconds": 2.4,
+            "width": 480,
+            "height": 270,
+            "style": "clean geometric confetti",
+            "palette": ["#1d3557", "#f1faee", "#e63946"],
+            "scenes": [
+                {"label": "Ready", "description": "A simple checkmark enters over a clean background.", "duration_seconds": 0.8, "motion": "fade and scale"},
+                {"label": "Celebrate", "description": "Confetti blocks arc outward around the checkmark.", "duration_seconds": 1.6, "motion": "radial burst", "text": "Shipped"},
+            ],
+            "accessibility_notes": ["No flashing or rapid high-contrast flicker."],
+            "licensing_constraints": ["No copyrighted characters or memes."],
+            "reason": "Verify native GIF/video/image storyboard artifact support.",
+        },
+        config,
+    )
+    storyboard_inspect = tools["media_storyboard_inspect"].execute({"path": storyboard.output.get("path", "")}, config) if _ok(storyboard) else storyboard
+    record("media", "sound_spec_create", _ok(sound) and sound.output.get("artifact_status") == "prepared_not_generated", _tool_payload(sound))
+    record("media", "sound_spec_inspect", _ok(sound_inspect) and sound_inspect.output.get("section_count") == 1, _tool_payload(sound_inspect))
+    record("media", "media_storyboard_create", _ok(storyboard) and storyboard.output.get("scene_count") == 2, _tool_payload(storyboard))
+    record("media", "media_storyboard_inspect", _ok(storyboard_inspect) and storyboard_inspect.output.get("media_type") == "gif", _tool_payload(storyboard_inspect))
 
 
 def _prepare_script_fixtures(config: AgentConfig) -> None:

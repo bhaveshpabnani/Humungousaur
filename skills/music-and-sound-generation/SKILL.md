@@ -23,6 +23,8 @@ Use when the user asks to write a song, generate a music prompt, create sound ef
 ## Tool Map
 
 - `write_note`
+- `sound_spec_create`
+- `sound_spec_inspect`
 - `memory_write`
 - `tool_search`
 - `capability_surface`
@@ -32,9 +34,9 @@ Use when the user asks to write a song, generate a music prompt, create sound ef
 
 1. Clarify whether the deliverable is lyrics, prompt, sound design brief, or generated audio.
 2. If generated audio is requested, inspect native capability surface first.
-3. If no Humungousaur-native generator exists, provide a detailed prompt/spec and note the missing native implementation rather than using upstream code.
-4. For lyrics, structure verses, chorus, bridge, style tags, and performance notes.
-5. For sound effects, specify source, texture, timing, ambience, and post-processing needs.
+3. Use `sound_spec_create` for a reusable local specification with arrangement, lyrics, sound-design notes, prompt, negative prompt, licensing constraints, and provider boundary.
+4. Use `sound_spec_inspect` to verify the artifact before reporting completion.
+5. If generated audio is requested and no native generator exists, label the output as a prepared spec rather than generated audio.
 6. Save prompts or drafts when the user wants reusable assets.
 
 ## Safety And Boundaries
@@ -42,11 +44,13 @@ Use when the user asks to write a song, generate a music prompt, create sound ef
 - Do not imitate living artists' voices or copyrighted songs too closely.
 - Do not execute third-party generation scripts from Hermes or OpenClaw directly.
 - Do not claim audio was generated unless a native tool actually produced an artifact.
+- `sound_spec_create` creates local specs only; it does not generate, upload, or publish audio.
 
 ## Verification
 
 - Check whether the output is a prompt/spec or generated artifact.
 - Confirm any artifact path before reporting generated audio.
+- Inspect the sound spec and report `prepared_not_generated` when no audio file was rendered.
 - Verify style constraints and licensing-sensitive requests are handled safely.
 
 ## Failure Modes
