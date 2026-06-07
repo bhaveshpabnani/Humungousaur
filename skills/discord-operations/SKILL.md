@@ -15,6 +15,7 @@ description: Configure and operate Discord bot DMs, guild channels, threads, amb
 - `channel_listener_status`
 - `channel_webhook_ingest`
 - `channel_message_prepare`
+- `channel_action_prepare`
 - `channel_message_send`
 - `channel_outbox`
 
@@ -56,6 +57,8 @@ Discord bot-authored messages should be ignored unless `allow_bot_message:true` 
 ## Sending
 
 Use `channel_message_prepare` first. Use `channel_message_send` only after approval and only when `DISCORD_BOT_TOKEN` is configured.
+
+Use `channel_action_prepare` for Discord reactions, file-share requests, thread/forum replies, pins, unpins, typing indicators, and read receipts. Verify the prepared action envelope before claiming anything happened in Discord.
 
 ## Troubleshooting
 

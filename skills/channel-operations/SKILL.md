@@ -17,6 +17,7 @@ description: Concrete operations playbook for configuring, testing, and safely u
 - `channel_listener_tick`
 - `channel_webhook_ingest`
 - `channel_message_prepare`
+- `channel_action_prepare`
 - `channel_message_send`
 - `channel_outbox`
 
@@ -48,12 +49,13 @@ Do not put raw tokens, app secrets, OAuth refresh tokens, phone auth state, QR s
 For a non-destructive smoke:
 
 1. Prepare a message with `channel_message_prepare`.
-2. Inspect `channel_outbox`.
-3. For inbound harness smoke, pass an inbound channel message with explicit `requires_response:true`.
-4. For webhook smoke, use `channel_webhook_ingest` with a structured provider payload.
-5. For Telegram listener smoke, use `channel_listener_tick` after enabling the channel and configuring `TELEGRAM_BOT_TOKEN`.
-6. Confirm a prepared reply exists only for non-ambient request messages.
-7. For external send smoke, use `channel_message_send` only with approval and a test recipient or room.
+2. Prepare reactions, file shares, thread replies, pins, typing indicators, or read receipts with `channel_action_prepare`.
+3. Inspect `channel_outbox`.
+4. For inbound harness smoke, pass an inbound channel message with explicit `requires_response:true`.
+5. For webhook smoke, use `channel_webhook_ingest` with a structured provider payload.
+6. For Telegram listener smoke, use `channel_listener_tick` after enabling the channel and configuring `TELEGRAM_BOT_TOKEN`.
+7. Confirm a prepared reply exists only for non-ambient request messages.
+8. For external send smoke, use `channel_message_send` only with approval and a test recipient or room.
 
 ## Group And Ambient Behavior
 
@@ -77,6 +79,7 @@ If the inbound payload says the sender is a bot:
 ## Delivery Truth
 
 - Prepared outbox means "ready for trusted runtime", not sent.
+- Prepared channel actions mean "ready for trusted runtime", not reacted, uploaded, pinned, or typed.
 - Direct send means the Humungousaur adapter called an official API and got a success response.
 - Bridge-required channels stay prepared until a trusted local runtime is connected.
 - Listener ready means the channel is enabled and either local polling or webhook ingress is available; it does not mean a public tunnel has been configured.

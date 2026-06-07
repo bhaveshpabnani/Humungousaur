@@ -14,6 +14,7 @@ from humungousaur.integrations.channels import (
     channel_setup_status,
     find_channel,
     list_outbox,
+    prepare_channel_action,
     load_channel_catalog,
     prepare_outbound_message,
     save_channel_setup,
@@ -307,6 +308,61 @@ class ChannelMessageSendTool(Tool):
         )
 
 
+class ChannelActionPrepareTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="channel_action_prepare",
+            description=(
+                "Prepare an approval-safe channel action envelope for reactions, file shares, thread replies, pins, "
+                "typing indicators, and read receipts. This writes a local outbox item and never sends."
+            ),
+            risk_level=RiskLevel.MEDIUM,
+            input_schema=object_input_schema(
+                {
+                    "channel_id": {"type": "string", "description": "Exact channel id such as slack, telegram, whatsapp, discord, or teams."},
+                    "conversation_id": {"type": "string", "description": "External channel conversation, room, phone number, or chat id."},
+                    "action_type": {
+                        "type": "string",
+                        "enum": ["reaction_add", "reaction_remove", "file_share", "thread_reply", "pin", "unpin", "typing_indicator", "read_receipt"],
+                    },
+                    "target_message_id": {"type": "string", "description": "Provider message id for reactions, pins, unpins, or thread replies."},
+                    "text": {"type": "string", "description": "Optional body text for file shares or thread replies."},
+                    "media_paths": {"type": "array", "items": {"type": "string"}, "maxItems": 10},
+                    "metadata": {"type": "object", "description": "Provider-specific fields such as emoji, thread_ts, topic_id, or file metadata."},
+                    "reason": {"type": "string", "description": "Why this channel action should be prepared."},
+                },
+                required=["channel_id", "conversation_id", "action_type", "reason"],
+            ),
+            capability_group="channels",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        metadata = tool_input.get("metadata", {})
+        if not isinstance(metadata, dict):
+            metadata = {}
+        try:
+            action = prepare_channel_action(
+                config,
+                channel_id=str(tool_input.get("channel_id") or ""),
+                conversation_id=str(tool_input.get("conversation_id") or ""),
+                action_type=str(tool_input.get("action_type") or ""),
+                target_message_id=str(tool_input.get("target_message_id") or ""),
+                text=str(tool_input.get("text") or ""),
+                media_paths=[str(item) for item in tool_input.get("media_paths", [])],
+                metadata=metadata,
+                reason=str(tool_input.get("reason") or ""),
+            )
+        except ValueError as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, str(exc), error=str(exc))
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Prepared {action['action_type']} channel action envelope.",
+            {"action": action},
+        )
+
+
 class ChannelOutboxTool(Tool):
     def __init__(self) -> None:
         super().__init__(
@@ -446,6 +502,7 @@ def default_channel_tools() -> dict[str, Tool]:
         ChannelDoctorTool(),
         ChannelMessagePrepareTool(),
         ChannelMessageSendTool(),
+        ChannelActionPrepareTool(),
         ChannelOutboxTool(),
         ChannelListenerStatusTool(),
         ChannelListenerTickTool(),

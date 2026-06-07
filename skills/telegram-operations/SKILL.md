@@ -16,6 +16,7 @@ description: Configure and operate Telegram bot DMs, groups, topics, markdown-im
 - `channel_listener_tick`
 - `channel_webhook_ingest`
 - `channel_message_prepare`
+- `channel_action_prepare`
 - `channel_message_send`
 - `channel_outbox`
 
@@ -59,6 +60,8 @@ The prepared envelope should contain a `media` entry with kind `image`.
 ## Sending
 
 Use `channel_message_prepare` for previews. Use `channel_message_send` only after approval and only when `TELEGRAM_BOT_TOKEN` is configured.
+
+Use `channel_action_prepare` for Telegram reactions, topic/thread replies, media/file-share requests, typing indicators, and read receipts. Keep prepared actions local until the trusted bot adapter executes them.
 
 ## Troubleshooting
 

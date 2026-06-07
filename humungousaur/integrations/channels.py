@@ -213,6 +213,62 @@ def prepare_outbound_message(
     return payload
 
 
+def prepare_channel_action(
+    config: AgentConfig,
+    *,
+    channel_id: str,
+    conversation_id: str,
+    action_type: str,
+    target_message_id: str = "",
+    text: str = "",
+    media_paths: list[str] | None = None,
+    metadata: dict[str, Any] | None = None,
+    reason: str = "",
+) -> dict[str, Any]:
+    normalized = config.normalized()
+    channel = find_channel(channel_id)
+    if channel is None:
+        raise ValueError(f"Unknown channel_id: {channel_id}")
+    action_type = _clean_action_type(action_type)
+    if action_type not in _supported_action_types(channel):
+        raise ValueError(f"Channel action '{action_type}' is not supported for {channel['channel_id']}.")
+    if not conversation_id.strip():
+        raise ValueError("conversation_id is required for channel action preparation.")
+    if action_type in {"reaction_add", "reaction_remove", "pin", "unpin", "thread_reply"} and not target_message_id.strip():
+        raise ValueError(f"target_message_id is required for {action_type}.")
+    if action_type in {"thread_reply", "file_share"} and not text.strip() and not media_paths:
+        raise ValueError(f"{action_type} requires text or media paths.")
+    action_id = f"channel-action-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}"
+    payload = {
+        "action_id": action_id,
+        "status": "prepared_not_sent",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "channel_id": channel["channel_id"],
+        "channel_name": channel.get("display_name", channel.get("name", "")),
+        "conversation_id": conversation_id.strip(),
+        "action_type": action_type,
+        "target_message_id": target_message_id.strip(),
+        "text": text,
+        "media_paths": [str(item) for item in (media_paths or [])],
+        "metadata": metadata if isinstance(metadata, dict) else {},
+        "reason": reason,
+        "requires_approval": True,
+        "delivery": {
+            "requires_trusted_runtime": True,
+            "plugin_status": channel.get("plugin_status", ""),
+            "runtime_adapter": channel.get("runtime_adapter", ""),
+            "transport": channel.get("transport", ""),
+            "direct_adapter_implemented": False,
+        },
+        "capability_hints": _channel_action_hints(channel),
+    }
+    path = channel_outbox_dir(normalized) / f"{action_id}.json"
+    _write_message(path, payload)
+    payload["path"] = str(path)
+    return payload
+
+
 def send_outbound_message(
     config: AgentConfig,
     *,
@@ -284,16 +340,21 @@ def list_outbox(config: AgentConfig, limit: int = 20) -> list[dict[str, Any]]:
     if not outbox.exists():
         return []
     messages: list[dict[str, Any]] = []
-    for path in sorted(outbox.glob("channel-message-*.json"), key=lambda item: item.stat().st_mtime, reverse=True):
+    paths = list(outbox.glob("channel-message-*.json")) + list(outbox.glob("channel-action-*.json"))
+    for path in sorted(paths, key=lambda item: item.stat().st_mtime, reverse=True):
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
         if not isinstance(payload, dict):
             continue
+        item_type = "action" if str(payload.get("action_id", "")).startswith("channel-action-") else "message"
         messages.append(
             {
-                "message_id": payload.get("message_id", path.stem),
+                "item_type": item_type,
+                "message_id": payload.get("message_id", payload.get("action_id", path.stem)),
+                "action_id": payload.get("action_id", ""),
+                "action_type": payload.get("action_type", ""),
                 "status": payload.get("status", ""),
                 "created_at": payload.get("created_at", ""),
                 "updated_at": payload.get("updated_at", ""),
@@ -532,6 +593,34 @@ def _delivery_hints(channel: dict[str, Any]) -> dict[str, Any]:
         "approval_reactions_supported": bool(delivery.get("approval_reactions", False)),
         "native_threads_supported": bool(delivery.get("native_threads", False)),
     }
+
+
+def _channel_action_hints(channel: dict[str, Any]) -> dict[str, Any]:
+    policies = channel.get("policies", {}) if isinstance(channel.get("policies"), dict) else {}
+    delivery = channel.get("delivery", {}) if isinstance(channel.get("delivery"), dict) else {}
+    return {
+        "supported_action_types": sorted(_supported_action_types(channel)),
+        "supports_reactions": bool(channel.get("supports_reactions", False)),
+        "supports_media": bool(channel.get("supports_media", False) or delivery.get("media", False)),
+        "native_threads_supported": bool(delivery.get("native_threads", False)),
+        "approval_reactions_supported": bool(delivery.get("approval_reactions", False)),
+        "ambient_room_events_supported": bool(policies.get("ambient_room_events_supported", False)),
+        "bot_loop_protection_supported": bool(policies.get("bot_loop_protection_supported", False)),
+    }
+
+
+def _supported_action_types(channel: dict[str, Any]) -> set[str]:
+    delivery = channel.get("delivery", {}) if isinstance(channel.get("delivery"), dict) else {}
+    action_types = {"typing_indicator", "read_receipt"}
+    if bool(channel.get("supports_reactions", False) or delivery.get("reactions", False) or delivery.get("approval_reactions", False)):
+        action_types.update({"reaction_add", "reaction_remove"})
+    if bool(channel.get("supports_media", False) or delivery.get("media", False)):
+        action_types.add("file_share")
+    if bool(delivery.get("native_threads", False)):
+        action_types.add("thread_reply")
+    if channel.get("channel_id") in {"slack", "discord", "mattermost", "msteams"}:
+        action_types.update({"pin", "unpin"})
+    return action_types
 
 
 def _media_payload(channel: dict[str, Any], text: str, media_paths: list[str]) -> list[dict[str, Any]]:
@@ -867,3 +956,7 @@ def _redacted_response(response: dict[str, Any]) -> dict[str, Any]:
 
 def _clean_id(value: object) -> str:
     return "_".join(str(value or "").strip().lower().replace("-", "_").split())[:120]
+
+
+def _clean_action_type(value: object) -> str:
+    return "_".join(str(value or "").strip().lower().replace("-", "_").split())[:80]

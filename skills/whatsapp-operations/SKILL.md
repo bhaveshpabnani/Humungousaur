@@ -15,6 +15,7 @@ description: Configure and operate WhatsApp through Humungousaur's Cloud API sen
 - `channel_listener_status`
 - `channel_webhook_ingest`
 - `channel_message_prepare`
+- `channel_action_prepare`
 - `channel_message_send`
 - `channel_outbox`
 
@@ -54,6 +55,8 @@ Rules:
 Use `channel_message_prepare` for review, group sends, media sends, and bridge-required sends.
 
 Use `channel_message_send` only for Cloud API text messages and only after approval.
+
+Use `channel_action_prepare` for WhatsApp reactions, file-share requests, typing indicators, read receipts, and bridge-only rich actions. Thread replies are not a native WhatsApp action in this contract; prepare a normal message instead.
 
 Never claim a message was delivered unless the result status is `sent`.
 

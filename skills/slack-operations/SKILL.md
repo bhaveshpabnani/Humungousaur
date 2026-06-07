@@ -15,6 +15,7 @@ description: Configure and operate Slack as a Humungousaur channel, including So
 - `channel_listener_status`
 - `channel_webhook_ingest`
 - `channel_message_prepare`
+- `channel_action_prepare`
 - `channel_message_send`
 - `channel_outbox`
 
@@ -74,6 +75,8 @@ When replying in a thread, include metadata:
 {"thread_ts":"1712023032.1234"}
 ```
 
+Use `channel_action_prepare` for Slack reactions, file-share requests, thread replies, pins, unpins, typing indicators, and read receipts. The prepared action remains local until a trusted adapter executes it.
+
 ## Groups And Ambient Rooms
 
 Slack MPIMs route as group chats. Apply group allowlists, mention policy, and ambient-room behavior.
@@ -94,3 +97,4 @@ Slack bot-authored events must include structured bot identity such as `sender_i
 - If inbound does not arrive, check Socket Mode app token or HTTP signing secret.
 - If channel messages are ignored, check group policy, channel ID allowlist, mention policy, and sender allowlist.
 - If file analysis is expected, confirm file scopes and size limits.
+- If a reaction or pin is expected, confirm the action outbox item exists before claiming it was executed.

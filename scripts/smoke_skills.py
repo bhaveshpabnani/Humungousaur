@@ -316,6 +316,7 @@ def _smoke_channels(record, tools: dict[str, Any], config: AgentConfig) -> None:
             },
             config,
         )
+        action = tools["channel_action_prepare"].execute(_channel_action_input(channel_id), config)
         webhook = tools["channel_webhook_ingest"].execute(
             {
                 "channel_id": channel_id,
@@ -340,6 +341,12 @@ def _smoke_channels(record, tools: dict[str, Any], config: AgentConfig) -> None:
         )
         record(
             "channels",
+            f"{channel_id}_action_prepare",
+            _ok(action) and action.output["action"]["status"] == "prepared_not_sent",
+            _tool_payload(action),
+        )
+        record(
+            "channels",
             f"{channel_id}_webhook_ingest",
             _ok(webhook) and webhook.output.get("message_count", 0) == 1,
             _tool_payload(webhook),
@@ -347,7 +354,9 @@ def _smoke_channels(record, tools: dict[str, Any], config: AgentConfig) -> None:
         record(
             "channels",
             f"{channel_id}_outbox",
-            _ok(outbox) and any(item.get("channel_id") == channel_id for item in outbox.output.get("messages", [])),
+            _ok(outbox)
+            and any(item.get("channel_id") == channel_id and item.get("item_type") == "message" for item in outbox.output.get("messages", []))
+            and any(item.get("channel_id") == channel_id and item.get("item_type") == "action" for item in outbox.output.get("messages", [])),
             _tool_payload(outbox),
         )
 
@@ -382,6 +391,25 @@ def _channel_prepare_metadata(channel_id: str) -> dict[str, Any]:
     if channel_id == "discord":
         return {"thread_id": "990001"}
     return {}
+
+
+def _channel_action_input(channel_id: str) -> dict[str, Any]:
+    defaults = _channel_defaults(channel_id)
+    base = {
+        "channel_id": channel_id,
+        "conversation_id": defaults["conversation_id"],
+        "target_message_id": f"{channel_id}-message-smoke",
+        "reason": f"Prepare a richer non-sending {channel_id} channel action.",
+    }
+    if channel_id == "slack":
+        return {**base, "action_type": "reaction_add", "metadata": {"emoji": "white_check_mark", "thread_ts": "1712023032.1234"}}
+    if channel_id == "telegram":
+        return {**base, "action_type": "thread_reply", "text": "Telegram topic/thread reply prepared by smoke.", "metadata": {"topic_id": "42"}}
+    if channel_id == "discord":
+        return {**base, "action_type": "thread_reply", "text": "Discord thread reply prepared by smoke.", "metadata": {"thread_id": "990001"}}
+    if channel_id == "whatsapp":
+        return {**base, "action_type": "reaction_add", "metadata": {"emoji": "thumbs_up", "bridge_mode": "prepared"}}
+    return {**base, "action_type": "typing_indicator"}
 
 
 def _channel_webhook_payload(channel_id: str) -> dict[str, Any]:

@@ -9,6 +9,7 @@ from humungousaur.integrations.channel_listeners import channel_listener_status,
 from humungousaur.integrations.channels import channel_setup_status, handle_channel_inbound
 from humungousaur.schemas import ActionStatus
 from humungousaur.tools.channel_tools import (
+    ChannelActionPrepareTool,
     ChannelCatalogTool,
     ChannelDoctorTool,
     ChannelManifestTool,
@@ -19,6 +20,7 @@ from humungousaur.tools.channel_tools import (
     ChannelSetupStatusTool,
     ChannelWebhookIngestTool,
 )
+from humungousaur.tools import default_tools
 
 
 class ChannelToolTests(unittest.TestCase):
@@ -63,6 +65,71 @@ class ChannelToolTests(unittest.TestCase):
             self.assertEqual(prepared.output["message"]["media"][0]["url"], "https://example.com/image.png")
             self.assertTrue(Path(prepared.output["message"]["path"]).exists())
             self.assertEqual(len(outbox.output["messages"]), 1)
+
+    def test_channel_action_prepare_writes_reaction_and_thread_actions_without_sending(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
+
+            reaction = ChannelActionPrepareTool().execute(
+                {
+                    "channel_id": "slack",
+                    "conversation_id": "C123",
+                    "action_type": "reaction_add",
+                    "target_message_id": "1712023032.1234",
+                    "metadata": {"emoji": "white_check_mark"},
+                    "reason": "Acknowledge a reviewed message.",
+                },
+                config,
+            )
+            thread = ChannelActionPrepareTool().execute(
+                {
+                    "channel_id": "discord",
+                    "conversation_id": "990001",
+                    "action_type": "thread_reply",
+                    "target_message_id": "m-123",
+                    "text": "Draft thread reply; not sent.",
+                    "reason": "Prepare a thread reply action.",
+                },
+                config,
+            )
+            outbox = ChannelOutboxTool().execute({"limit": 10}, config)
+            reaction_path_exists = Path(reaction.output["action"]["path"]).exists()
+
+        self.assertEqual(reaction.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(reaction.output["action"]["status"], "prepared_not_sent")
+        self.assertTrue(reaction.output["action"]["requires_approval"])
+        self.assertEqual(reaction.output["action"]["action_type"], "reaction_add")
+        self.assertEqual(thread.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(thread.output["action"]["action_type"], "thread_reply")
+        self.assertTrue(reaction_path_exists)
+        self.assertTrue(any(item["item_type"] == "action" and item["action_type"] == "reaction_add" for item in outbox.output["messages"]))
+
+    def test_channel_action_prepare_blocks_unsupported_action(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
+
+            result = ChannelActionPrepareTool().execute(
+                {
+                    "channel_id": "whatsapp",
+                    "conversation_id": "+15555550100",
+                    "action_type": "thread_reply",
+                    "target_message_id": "wamid-1",
+                    "text": "WhatsApp does not expose native thread replies.",
+                    "reason": "Verify unsupported action handling.",
+                },
+                config,
+            )
+
+        self.assertEqual(result.status, ActionStatus.FAILED)
+        self.assertIn("not supported", result.summary)
+
+    def test_channel_action_tool_is_in_global_catalog(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
+            tools = default_tools(config)
+
+        self.assertIn("channel_action_prepare", tools)
+        self.assertEqual(tools["channel_action_prepare"].capability_group, "channels")
 
     def test_channel_setup_save_status_and_doctor_report_missing_env_without_secrets(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
