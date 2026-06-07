@@ -49,23 +49,18 @@ class VoiceProviderStatusTool(Tool):
         payload = {
             "stt": {
                 "deepgram": {
-                    "configured": bool(os.environ.get("DEEPGRAM_API_KEY")),
+                    "configured": bool(_secret(config, "DEEPGRAM_API_KEY")),
                     "base_url": os.environ.get("DEEPGRAM_BASE_URL", "https://api.deepgram.com"),
-                    "model_env_configured": bool(os.environ.get("DEEPGRAM_MODEL")),
+                    "model_env_configured": bool(_secret(config, "DEEPGRAM_MODEL")),
                 },
                 "local-whisper": local_whisper_status(),
             },
             "tts": {
                 "elevenlabs": {
-                    "configured": bool(
-                        os.environ.get("ELEVENLABS_API_KEY")
-                        or os.environ.get("ELEVEN_LABS_API_KEY")
-                        or os.environ.get("ELEVAN_LABS_API_KEY")
-                        or os.environ.get("ELEVANLABS_API_KEY")
-                    ),
-                    "voice_id_configured": bool(os.environ.get("ELEVENLABS_VOICE_ID")),
+                    "configured": bool(_elevenlabs_secret(config)),
+                    "voice_id_configured": bool(config.secret_value("ELEVENLABS_VOICE_ID") or os.environ.get("ELEVENLABS_VOICE_ID")),
                     "base_url": os.environ.get("ELEVENLABS_BASE_URL", "https://api.elevenlabs.io"),
-                    "model_env_configured": bool(os.environ.get("ELEVENLABS_MODEL_ID")),
+                    "model_env_configured": bool(_secret(config, "ELEVENLABS_MODEL_ID")),
                 },
                 "system": {
                     "configured": platform.system().lower() == "windows",
@@ -145,7 +140,8 @@ class VoiceTranscribeTool(Tool):
             if provider == "deepgram":
                 transcription = deepgram_transcribe_file(
                     audio_path,
-                    model=str(tool_input.get("model") or ""),
+                    api_key=_secret(config, "DEEPGRAM_API_KEY"),
+                    model=str(tool_input.get("model") or config.secret_value("DEEPGRAM_MODEL") or ""),
                     language=str(tool_input.get("language") or ""),
                     smart_format=bool(tool_input.get("smart_format", True)),
                     mime_type=str(tool_input.get("mime_type") or ""),
@@ -248,8 +244,9 @@ class VoiceResponsePrepareTool(Tool):
                     text,
                     _voice_audio_dir(config),
                     response_id=payload["response_id"],
-                    voice_id=str(tool_input.get("voice_id") or ""),
-                    model=str(tool_input.get("model") or ""),
+                    api_key=_elevenlabs_secret(config),
+                    voice_id=str(tool_input.get("voice_id") or config.secret_value("ELEVENLABS_VOICE_ID") or ""),
+                    model=str(tool_input.get("model") or config.secret_value("ELEVENLABS_MODEL_ID") or ""),
                     output_format=str(tool_input.get("output_format") or ""),
                     allow_voice_lookup=bool(tool_input.get("allow_voice_lookup", False)),
                     timeout_seconds=float(config.model_timeout_seconds or 60.0),
@@ -358,8 +355,9 @@ class VoiceSpeakTool(Tool):
                     text,
                     _voice_audio_dir(config),
                     response_id=response_id,
-                    voice_id=str(tool_input.get("voice_id") or ""),
-                    model=str(tool_input.get("model") or ""),
+                    api_key=_elevenlabs_secret(config),
+                    voice_id=str(tool_input.get("voice_id") or config.secret_value("ELEVENLABS_VOICE_ID") or ""),
+                    model=str(tool_input.get("model") or config.secret_value("ELEVENLABS_MODEL_ID") or ""),
                     output_format=str(tool_input.get("output_format") or ""),
                     allow_voice_lookup=bool(tool_input.get("allow_voice_lookup", False)),
                     timeout_seconds=float(config.model_timeout_seconds or 60.0),
@@ -523,6 +521,23 @@ def _env_tts_provider() -> str:
 
     provider = os.environ.get("HUMUNGOUSAUR_TTS_PROVIDER") or os.environ.get("VOICE_TTS_PROVIDER") or ""
     return provider.strip().lower()
+
+
+def _secret(config: AgentConfig, name: str) -> str | None:
+    import os
+
+    return config.normalized().secret_value(name) or os.environ.get(name)
+
+
+def _elevenlabs_secret(config: AgentConfig) -> str | None:
+    import os
+
+    normalized = config.normalized()
+    for name in ("ELEVENLABS_API_KEY", "ELEVEN_LABS_API_KEY", "ELEVAN_LABS_API_KEY", "ELEVANLABS_API_KEY"):
+        value = normalized.secret_value(name) or os.environ.get(name)
+        if value:
+            return value
+    return None
 
 
 def _resolve_read_path(config: AgentConfig, raw_path: str) -> tuple[Path | None, str | None]:

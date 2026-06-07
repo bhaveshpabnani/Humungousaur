@@ -101,7 +101,7 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            var voice = await _api.GetVoiceStatusAsync();
+            var voice = await _api.GetVoiceStatusAsync(_settings);
             var deepgramConfigured = voice["stt"]?["deepgram"]?["configured"]?.GetValue<bool>() == true;
             var elevenConfigured = voice["tts"]?["elevenlabs"]?["configured"]?.GetValue<bool>() == true;
             var systemConfigured = voice["tts"]?["system"]?["configured"]?.GetValue<bool>() == true;
@@ -255,7 +255,8 @@ public sealed partial class MainWindow : Window
         ChannelListenSwitch.IsOn = setup.ListenEnabled;
         ConversationIdBox.Text = setup.ConversationId;
         SecretNameBox.Text = setup.SecretName;
-        ChannelSecretBox.Password = "";
+        ChannelSecretBox.Password = setup.SecretValue;
+        ChannelSecretsBox.Text = SerializeSecretLines(setup.SecretValues);
         ChannelNotesBox.Text = setup.Notes;
         SetComboByTag(ConversationTypeBox, setup.ConversationType);
         _ = RefreshSelectedChannelStatusAsync(channel.ChannelId);
@@ -275,7 +276,11 @@ public sealed partial class MainWindow : Window
         setup.ConversationId = ConversationIdBox.Text.Trim();
         setup.ConversationType = ComboTag(ConversationTypeBox, "dm");
         setup.SecretName = SecretNameBox.Text.Trim();
-        setup.SecretConfigured = setup.SecretConfigured || !string.IsNullOrWhiteSpace(ChannelSecretBox.Password);
+        setup.SecretValue = ChannelSecretBox.Password;
+        setup.SecretValues = ParseSecretLines(ChannelSecretsBox.Text);
+        setup.SecretConfigured = setup.SecretConfigured
+            || !string.IsNullOrWhiteSpace(setup.SecretValue)
+            || setup.SecretValues.Values.Any(value => !string.IsNullOrWhiteSpace(value));
         setup.Notes = ChannelNotesBox.Text.Trim();
         _settingsStore.Save(_settings);
         try
@@ -473,7 +478,7 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            var status = await _api.GetChannelStatusAsync(channelId);
+            var status = await _api.GetChannelStatusAsync(channelId, _settings);
             var channel = status["channels"]?.AsArray().FirstOrDefault()?.AsObject();
             if (channel is null)
             {
@@ -502,7 +507,7 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            var status = await _api.GetChannelListenersAsync(channelId);
+            var status = await _api.GetChannelListenersAsync(channelId, _settings);
             var listener = status["listeners"]?.AsArray().FirstOrDefault()?.AsObject();
             if (listener is null)
             {
@@ -547,7 +552,12 @@ public sealed partial class MainWindow : Window
         WorkspacePathBox.Text = _settings.WorkspacePath;
         PythonPathBox.Text = _settings.PythonPath;
         ModelNameBox.Text = _settings.ModelName;
+        ModelBaseUrlBox.Text = _settings.ModelBaseUrl;
+        ModelApiKeyBox.Password = _settings.ModelApiKey;
         VoiceIdBox.Text = _settings.VoiceId;
+        DeepgramApiKeyBox.Password = _settings.DeepgramApiKey;
+        ElevenLabsApiKeyBox.Password = _settings.ElevenLabsApiKey;
+        ElevenLabsModelBox.Text = _settings.ElevenLabsModel;
         ApproveHighRiskSwitch.IsOn = _settings.ApproveHighRisk;
         SetComboByTag(PlannerBox, _settings.Planner);
         SetComboByTag(ModelProviderBox, _settings.ModelProvider);
@@ -565,8 +575,13 @@ public sealed partial class MainWindow : Window
         _settings.Planner = ComboTag(PlannerBox, "model");
         _settings.ModelProvider = ComboTag(ModelProviderBox, "groq");
         _settings.ModelName = ModelNameBox.Text.Trim();
+        _settings.ModelBaseUrl = ModelBaseUrlBox.Text.Trim();
+        _settings.ModelApiKey = ModelApiKeyBox.Password;
         _settings.TtsProvider = ComboTag(TtsProviderBox, "system");
         _settings.VoiceId = VoiceIdBox.Text.Trim();
+        _settings.DeepgramApiKey = DeepgramApiKeyBox.Password;
+        _settings.ElevenLabsApiKey = ElevenLabsApiKeyBox.Password;
+        _settings.ElevenLabsModel = ElevenLabsModelBox.Text.Trim();
         _settings.ApproveHighRisk = ApproveHighRiskSwitch.IsOn;
     }
 
@@ -613,6 +628,36 @@ public sealed partial class MainWindow : Window
                 return;
             }
         }
+    }
+
+    private static Dictionary<string, string> ParseSecretLines(string text)
+    {
+        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var rawLine in text.Split(["\r\n", "\n"], StringSplitOptions.None))
+        {
+            var line = rawLine.Trim();
+            if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#", StringComparison.Ordinal))
+            {
+                continue;
+            }
+            var separator = line.IndexOf('=');
+            if (separator <= 0)
+            {
+                continue;
+            }
+            var key = line[..separator].Trim();
+            var value = line[(separator + 1)..].Trim();
+            if (!string.IsNullOrWhiteSpace(key) && !string.IsNullOrWhiteSpace(value))
+            {
+                values[key] = value;
+            }
+        }
+        return values;
+    }
+
+    private static string SerializeSecretLines(Dictionary<string, string> values)
+    {
+        return string.Join(Environment.NewLine, values.Select(item => $"{item.Key}={item.Value}"));
     }
 
     private static string ShortenPath(string path)

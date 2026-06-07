@@ -30,19 +30,25 @@ public sealed class AgentApiClient
         return await GetAsync<List<ChannelInfo>>("channels") ?? [];
     }
 
-    public Task<JsonObject> GetChannelStatusAsync(string channelId)
+    public Task<JsonObject> GetChannelStatusAsync(string channelId, AppSettings settings)
     {
-        return GetJsonObjectAsync($"channels/status?channel_id={Uri.EscapeDataString(channelId)}");
+        var payload = RuntimePayload(settings);
+        payload["channel_id"] = channelId;
+        return PostJsonObjectAsync("channels/status", payload);
     }
 
-    public Task<JsonObject> GetChannelDoctorAsync(string channelId)
+    public Task<JsonObject> GetChannelDoctorAsync(string channelId, AppSettings settings)
     {
-        return GetJsonObjectAsync($"channels/doctor?channel_id={Uri.EscapeDataString(channelId)}");
+        var payload = RuntimePayload(settings);
+        payload["channel_id"] = channelId;
+        return PostJsonObjectAsync("channels/doctor", payload);
     }
 
-    public Task<JsonObject> GetChannelListenersAsync(string channelId)
+    public Task<JsonObject> GetChannelListenersAsync(string channelId, AppSettings settings)
     {
-        return GetJsonObjectAsync($"channels/listeners?channel_id={Uri.EscapeDataString(channelId)}");
+        var payload = RuntimePayload(settings);
+        payload["channel_id"] = channelId;
+        return PostJsonObjectAsync("channels/listeners", payload);
     }
 
     public Task<JsonObject> TickChannelListenerAsync(ChannelInfo channel, AppSettings settings)
@@ -65,15 +71,10 @@ public sealed class AgentApiClient
                 ["conversation_id"] = setup.ConversationId,
                 ["conversation_type"] = setup.ConversationType,
             },
-            ["secret_refs"] = new JsonObject(),
-            ["secret_configured"] = new JsonObject(),
+            ["secret_refs"] = ChannelSecretRefs(setup),
+            ["secret_configured"] = ChannelSecretConfigured(setup),
             ["notes"] = setup.Notes,
         };
-        if (!string.IsNullOrWhiteSpace(setup.SecretName))
-        {
-            payload["secret_refs"]!["primary"] = setup.SecretName;
-            payload["secret_configured"]!["primary"] = setup.SecretConfigured;
-        }
         return PostJsonObjectAsync("channels/setup", payload);
     }
 
@@ -82,7 +83,7 @@ public sealed class AgentApiClient
         return await GetAsync<ToolCatalog>("tools") ?? new ToolCatalog();
     }
 
-    public Task<JsonObject> GetVoiceStatusAsync() => GetJsonObjectAsync("voice/status");
+    public Task<JsonObject> GetVoiceStatusAsync(AppSettings settings) => PostJsonObjectAsync("voice/status", RuntimePayload(settings));
 
     public Task<JsonObject> GetAutonomousStatusAsync() => GetJsonObjectAsync("autonomous/status?limit=8");
 
@@ -139,12 +140,93 @@ public sealed class AgentApiClient
         if (!string.IsNullOrWhiteSpace(settings.ModelProvider))
         {
             payload["model_provider"] = settings.ModelProvider;
+            payload["model_api_key_env"] = ModelApiKeyName(settings.ModelProvider);
         }
         if (!string.IsNullOrWhiteSpace(settings.ModelName))
         {
             payload["model"] = settings.ModelName;
         }
+        if (!string.IsNullOrWhiteSpace(settings.ModelBaseUrl))
+        {
+            payload["model_base_url"] = settings.ModelBaseUrl;
+        }
+        var secrets = RuntimeSecrets(settings);
+        if (secrets.Count > 0)
+        {
+            payload["runtime_secrets"] = secrets;
+        }
         return payload;
+    }
+
+    private static JsonObject RuntimeSecrets(AppSettings settings)
+    {
+        var secrets = new JsonObject();
+        AddSecret(secrets, ModelApiKeyName(settings.ModelProvider), settings.ModelApiKey);
+        AddSecret(secrets, "DEEPGRAM_API_KEY", settings.DeepgramApiKey);
+        AddSecret(secrets, "ELEVENLABS_API_KEY", settings.ElevenLabsApiKey);
+        AddSecret(secrets, "ELEVENLABS_VOICE_ID", settings.VoiceId);
+        AddSecret(secrets, "ELEVENLABS_MODEL_ID", settings.ElevenLabsModel);
+        foreach (var channel in settings.Channels)
+        {
+            if (!string.IsNullOrWhiteSpace(channel.SecretName) && !string.IsNullOrWhiteSpace(channel.SecretValue))
+            {
+                AddSecret(secrets, channel.SecretName, channel.SecretValue);
+            }
+            foreach (var item in channel.SecretValues)
+            {
+                AddSecret(secrets, item.Key, item.Value);
+            }
+        }
+        return secrets;
+    }
+
+    private static JsonObject ChannelSecretRefs(ChannelSetup setup)
+    {
+        var refs = new JsonObject();
+        if (!string.IsNullOrWhiteSpace(setup.SecretName))
+        {
+            refs["primary"] = setup.SecretName;
+        }
+        foreach (var item in setup.SecretValues)
+        {
+            refs[item.Key] = item.Key;
+        }
+        return refs;
+    }
+
+    private static JsonObject ChannelSecretConfigured(ChannelSetup setup)
+    {
+        var configured = new JsonObject();
+        if (!string.IsNullOrWhiteSpace(setup.SecretName))
+        {
+            configured["primary"] = setup.SecretConfigured || !string.IsNullOrWhiteSpace(setup.SecretValue);
+        }
+        foreach (var item in setup.SecretValues)
+        {
+            configured[item.Key] = !string.IsNullOrWhiteSpace(item.Value);
+        }
+        return configured;
+    }
+
+    private static void AddSecret(JsonObject secrets, string name, string value)
+    {
+        if (!string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(value))
+        {
+            secrets[name.Trim()] = value;
+        }
+    }
+
+    private static string ModelApiKeyName(string provider)
+    {
+        return provider switch
+        {
+            "openai" or "openai-responses" or "openai-chat" => "OPENAI_API_KEY",
+            "groq" => "GROQ_API_KEY",
+            "grok" => "XAI_API_KEY",
+            "ollama" => "OLLAMA_API_KEY",
+            "local-openai" => "LOCAL_LLM_API_KEY",
+            _ => "OPENAI_API_KEY",
+        };
     }
 
     private async Task<T?> GetAsync<T>(string route)

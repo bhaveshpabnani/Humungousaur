@@ -257,6 +257,7 @@
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -276,7 +277,8 @@
                                 <TextBox x:Name="SecretNameBox" Grid.Row="1" Grid.Column="1" Header="Secret name" PlaceholderText="SLACK_BOT_TOKEN" />
                                 <PasswordBox x:Name="ChannelSecretBox" Grid.Row="2" Header="Token or pairing note" PlaceholderText="Kept out of saved settings" />
                                 <TextBox x:Name="ChannelNotesBox" Grid.Row="2" Grid.Column="1" Header="Setup notes" />
-                                <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="8">
+                                <TextBox x:Name="ChannelSecretsBox" Grid.Row="3" Grid.ColumnSpan="2" Header="Channel secrets" AcceptsReturn="True" MinHeight="74" PlaceholderText="SLACK_BOT_TOKEN=xoxb-...&#x0a;WHATSAPP_PHONE_NUMBER_ID=..." TextWrapping="NoWrap" />
+                                <StackPanel Grid.Row="4" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="8">
                                     <Button x:Name="SaveChannelButton" Content="Save setup" Click="SaveChannelButton_Click" />
                                     <Button x:Name="TestChannelButton" Content="Preview inbound" Click="TestChannelButton_Click" />
                                     <Button x:Name="TickChannelButton" Content="Poll now" Click="TickChannelButton_Click" />
@@ -335,6 +337,7 @@
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
                             <Grid ColumnSpacing="10">
                                 <Grid.ColumnDefinitions>
@@ -349,8 +352,18 @@
                                 <TextBox x:Name="VoiceIdBox" Grid.Column="1" Header="Voice id" />
                                 <Button Grid.Column="2" VerticalAlignment="Bottom" Content="Save voice" Click="SaveVoiceButton_Click" />
                             </Grid>
-                            <TextBox x:Name="VoiceTestBox" Grid.Row="1" Text="I am online and ready to help." Header="Test phrase" />
-                            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
+                            <Grid Grid.Row="1" ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <PasswordBox x:Name="DeepgramApiKeyBox" Header="Deepgram API key" />
+                                <PasswordBox x:Name="ElevenLabsApiKeyBox" Grid.Column="1" Header="ElevenLabs API key" />
+                                <TextBox x:Name="ElevenLabsModelBox" Grid.Column="2" Header="ElevenLabs model" PlaceholderText="eleven_multilingual_v2" />
+                            </Grid>
+                            <TextBox x:Name="VoiceTestBox" Grid.Row="2" Text="I am online and ready to help." Header="Test phrase" />
+                            <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8">
                                 <Button Content="Refresh voice" Click="RefreshVoiceButton_Click" />
                                 <Button Content="Speak test" Click="SpeakTestButton_Click" />
                             </StackPanel>
@@ -453,6 +466,8 @@
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
                             <TextBox x:Name="ApiBaseUrlBox" Header="API base URL" />
                             <TextBox x:Name="PortBox" Grid.Column="1" Header="Port" />
@@ -469,7 +484,9 @@
                                 <ComboBoxItem Content="Local OpenAI" Tag="local-openai" />
                             </ComboBox>
                             <TextBox x:Name="ModelNameBox" Grid.Row="3" Grid.Column="1" Header="Model override" />
-                            <StackPanel Grid.Row="4" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="10">
+                            <TextBox x:Name="ModelBaseUrlBox" Grid.Row="4" Header="Model base URL" PlaceholderText="https://api.groq.com/openai/v1" />
+                            <PasswordBox x:Name="ModelApiKeyBox" Grid.Row="4" Grid.Column="1" Header="Model API key" />
+                            <StackPanel Grid.Row="5" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="10">
                                 <ToggleSwitch x:Name="ApproveHighRiskSwitch" Header="Approve high risk" />
                                 <Button Content="Save settings" Click="SaveSettingsButton_Click" />
                                 <Button Content="Start agent" Click="StartAgentButton_Click" />

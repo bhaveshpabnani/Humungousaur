@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Security.Cryptography;
+using System.Text;
 using Humungousaur.App.Models;
 
 namespace Humungousaur.App.Services;
@@ -28,6 +30,7 @@ public sealed class AppSettingsStore
         try
         {
             var settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(_settingsPath), JsonOptions) ?? new AppSettings();
+            UnprotectSettings(settings);
             return WithDefaults(settings);
         }
         catch
@@ -39,7 +42,7 @@ public sealed class AppSettingsStore
     public void Save(AppSettings settings)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(_settingsPath)!);
-        File.WriteAllText(_settingsPath, JsonSerializer.Serialize(settings, JsonOptions));
+        File.WriteAllText(_settingsPath, JsonSerializer.Serialize(ProtectedCopy(settings), JsonOptions));
     }
 
     private static AppSettings WithDefaults(AppSettings settings)
@@ -60,6 +63,83 @@ public sealed class AppSettingsStore
         }
 
         return settings;
+    }
+
+    private static AppSettings ProtectedCopy(AppSettings settings)
+    {
+        return new AppSettings
+        {
+            ApiBaseUrl = settings.ApiBaseUrl,
+            WorkspacePath = settings.WorkspacePath,
+            PythonPath = settings.PythonPath,
+            Port = settings.Port,
+            Planner = settings.Planner,
+            ModelProvider = settings.ModelProvider,
+            ModelName = settings.ModelName,
+            ModelBaseUrl = settings.ModelBaseUrl,
+            ModelApiKey = Protect(settings.ModelApiKey),
+            TtsProvider = settings.TtsProvider,
+            VoiceId = settings.VoiceId,
+            DeepgramApiKey = Protect(settings.DeepgramApiKey),
+            ElevenLabsApiKey = Protect(settings.ElevenLabsApiKey),
+            ElevenLabsModel = settings.ElevenLabsModel,
+            ApproveHighRisk = settings.ApproveHighRisk,
+            Channels = settings.Channels.Select(channel => new ChannelSetup
+            {
+                ChannelId = channel.ChannelId,
+                Enabled = channel.Enabled,
+                ListenEnabled = channel.ListenEnabled,
+                ConversationId = channel.ConversationId,
+                ConversationType = channel.ConversationType,
+                SecretName = channel.SecretName,
+                SecretValue = Protect(channel.SecretValue),
+                SecretValues = channel.SecretValues.ToDictionary(item => item.Key, item => Protect(item.Value)),
+                SecretConfigured = channel.SecretConfigured,
+                Notes = channel.Notes,
+            }).ToList(),
+        };
+    }
+
+    private static void UnprotectSettings(AppSettings settings)
+    {
+        settings.ModelApiKey = Unprotect(settings.ModelApiKey);
+        settings.DeepgramApiKey = Unprotect(settings.DeepgramApiKey);
+        settings.ElevenLabsApiKey = Unprotect(settings.ElevenLabsApiKey);
+        foreach (var channel in settings.Channels)
+        {
+            channel.SecretValue = Unprotect(channel.SecretValue);
+            channel.SecretValues = channel.SecretValues.ToDictionary(item => item.Key, item => Unprotect(item.Value));
+            channel.SecretConfigured = channel.SecretConfigured || !string.IsNullOrWhiteSpace(channel.SecretValue) || channel.SecretValues.Count > 0;
+        }
+    }
+
+    private static string Protect(string value)
+    {
+        if (string.IsNullOrEmpty(value) || value.StartsWith("dpapi:", StringComparison.Ordinal))
+        {
+            return value;
+        }
+
+        var bytes = ProtectedData.Protect(Encoding.UTF8.GetBytes(value), null, DataProtectionScope.CurrentUser);
+        return "dpapi:" + Convert.ToBase64String(bytes);
+    }
+
+    private static string Unprotect(string value)
+    {
+        if (string.IsNullOrEmpty(value) || !value.StartsWith("dpapi:", StringComparison.Ordinal))
+        {
+            return value;
+        }
+
+        try
+        {
+            var bytes = Convert.FromBase64String(value["dpapi:".Length..]);
+            return Encoding.UTF8.GetString(ProtectedData.Unprotect(bytes, null, DataProtectionScope.CurrentUser));
+        }
+        catch
+        {
+            return "";
+        }
     }
 
     private static string? FindWorkspaceRoot()

@@ -369,6 +369,23 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                     )
                     self._send_json(result, HTTPStatus.CREATED)
                     return
+                if path == "/voice/status":
+                    run_config = request_config(effective_config(), payload)
+                    result = VoiceProviderStatusTool().execute({}, run_config)
+                    self._send_json({"status": result.status.value, "summary": result.summary, **result.output}, HTTPStatus.CREATED)
+                    return
+                if path == "/channels/status":
+                    run_config = request_config(effective_config(), payload)
+                    self._send_json(channel_setup_status(run_config, channel_id=str(payload.get("channel_id") or "") or None), HTTPStatus.CREATED)
+                    return
+                if path == "/channels/doctor":
+                    run_config = request_config(effective_config(), payload)
+                    self._send_json(channel_doctor(run_config, channel_id=str(payload.get("channel_id") or "") or None), HTTPStatus.CREATED)
+                    return
+                if path == "/channels/listeners":
+                    run_config = request_config(effective_config(), payload)
+                    self._send_json(channel_listener_status(run_config, channel_id=str(payload.get("channel_id") or "") or None), HTTPStatus.CREATED)
+                    return
                 if path == "/channels/listeners/tick":
                     run_config = request_config(effective_config(), payload)
                     result = channel_listener_tick(

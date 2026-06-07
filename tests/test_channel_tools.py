@@ -2,6 +2,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from humungousaur.config import AgentConfig
 from humungousaur.integrations.channel_listeners import channel_listener_status, process_channel_webhook
@@ -96,6 +97,30 @@ class ChannelToolTests(unittest.TestCase):
 
         self.assertEqual(status["channels"][0]["setup"]["auth_type"], "bot_token")
         self.assertIn("TELEGRAM_BOT_TOKEN", status["channels"][0]["missing_send_env"])
+
+    def test_channel_status_and_listener_use_runtime_secrets_without_env(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(
+                workspace=Path(tmp_dir),
+                data_dir=Path(tmp_dir) / "artifacts",
+                runtime_secrets={"TELEGRAM_BOT_TOKEN": "tg-runtime"},
+            ).normalized()
+            ChannelSetupSaveTool().execute(
+                {
+                    "channel_id": "telegram",
+                    "enabled": True,
+                    "conversation_defaults": {"conversation_id": "42", "conversation_type": "dm"},
+                },
+                config,
+            )
+
+            with patch.dict("os.environ", {}, clear=True):
+                status = channel_setup_status(config, channel_id="telegram")
+                listener = channel_listener_status(config, channel_id="telegram")
+
+        self.assertEqual(status["channels"][0]["missing_send_env"], [])
+        self.assertTrue(status["channels"][0]["ready_for_send"])
+        self.assertTrue(listener["listeners"][0]["polling_available"])
 
     def test_channel_inbound_routes_to_interaction_harness_and_prepares_reply(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

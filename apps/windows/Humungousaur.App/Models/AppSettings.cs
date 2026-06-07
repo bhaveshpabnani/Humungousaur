@@ -9,8 +9,13 @@ public sealed class AppSettings
     public string Planner { get; set; } = "model";
     public string ModelProvider { get; set; } = "groq";
     public string ModelName { get; set; } = "";
+    public string ModelBaseUrl { get; set; } = "";
+    public string ModelApiKey { get; set; } = "";
     public string TtsProvider { get; set; } = "system";
     public string VoiceId { get; set; } = "";
+    public string DeepgramApiKey { get; set; } = "";
+    public string ElevenLabsApiKey { get; set; } = "";
+    public string ElevenLabsModel { get; set; } = "";
     public bool ApproveHighRisk { get; set; }
     public List<ChannelSetup> Channels { get; set; } = [];
 }
@@ -23,6 +28,8 @@ public sealed class ChannelSetup
     public string ConversationId { get; set; } = "";
     public string ConversationType { get; set; } = "dm";
     public string SecretName { get; set; } = "";
+    public string SecretValue { get; set; } = "";
+    public Dictionary<string, string> SecretValues { get; set; } = [];
     public bool SecretConfigured { get; set; }
     public string Notes { get; set; } = "";
 }

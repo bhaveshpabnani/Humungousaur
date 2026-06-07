@@ -391,7 +391,7 @@ def _local_whisper_model_path(model: str | None = None) -> Path:
         return Path(configured).expanduser().resolve()
     model_name = model or os.environ.get("HUMUNGOUSAUR_LOCAL_WHISPER_MODEL") or os.environ.get("LOCAL_WHISPER_MODEL") or "tiny.en"
     repo_dir = f"Systran--faster-whisper-{model_name}"
-    return (Path.home() / "Desktop" / "Umang" / "voice-wakeup" / "artifacts" / "models" / repo_dir).resolve()
+    return (_home_path() / "Desktop" / "Umang" / "voice-wakeup" / "artifacts" / "models" / repo_dir).resolve()
 
 
 def _faster_whisper_model_class():
@@ -400,7 +400,7 @@ def _faster_whisper_model_class():
 
         return WhisperModel
     except ImportError:
-        site_packages = Path.home() / "Desktop" / "Umang" / "voice-wakeup" / ".venv" / "Lib" / "site-packages"
+        site_packages = _home_path() / "Desktop" / "Umang" / "voice-wakeup" / ".venv" / "Lib" / "site-packages"
         if site_packages.exists():
             sys.path.append(str(site_packages))
         try:
@@ -411,6 +411,17 @@ def _faster_whisper_model_class():
             raise SpeechProviderError(
                 "faster-whisper is not installed in this environment and the voice-wakeup venv was not usable."
             ) from exc
+
+
+def _home_path() -> Path:
+    for name in ("USERPROFILE", "HOME"):
+        value = os.environ.get(name)
+        if value:
+            return Path(value).expanduser().resolve()
+    try:
+        return Path.home().resolve()
+    except RuntimeError:
+        return Path.cwd().resolve()
 
 
 def play_audio_file(path: Path, *, timeout_seconds: float = 60.0) -> dict[str, str]:

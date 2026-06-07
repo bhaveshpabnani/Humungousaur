@@ -89,6 +89,14 @@ class APITests(unittest.TestCase):
                 self.assertEqual(voice_status["status"], "succeeded")
                 self.assertIn("stt", voice_status)
                 self.assertIn("tts", voice_status)
+                voice_status_with_app_secret = api_post(
+                    base_url,
+                    "/voice/status",
+                    {"runtime_secrets": {"DEEPGRAM_API_KEY": "dg-runtime", "ELEVENLABS_API_KEY": "el-runtime"}},
+                )
+                self.assertTrue(voice_status_with_app_secret["stt"]["deepgram"]["configured"])
+                self.assertTrue(voice_status_with_app_secret["tts"]["elevenlabs"]["configured"])
+                self.assertNotIn("dg-runtime", json.dumps(voice_status_with_app_secret))
                 screen_captures = api_get(base_url, "/screen/captures")
                 self.assertFalse(screen_captures["image_bytes_served"])
                 self.assertEqual(screen_captures["captures"], [])
@@ -102,6 +110,12 @@ class APITests(unittest.TestCase):
                 self.assertEqual(next(channel for channel in channels if channel["channel_id"] == "slack")["setup"]["auth_type"], "slack_app")
                 channel_status = api_get(base_url, "/channels/status?channel_id=slack")
                 self.assertIn("SLACK_BOT_TOKEN", channel_status["channels"][0]["missing_send_env"])
+                channel_status_with_app_secret = api_post(
+                    base_url,
+                    "/channels/status",
+                    {"channel_id": "slack", "runtime_secrets": {"SLACK_BOT_TOKEN": "xoxb-runtime"}},
+                )
+                self.assertEqual(channel_status_with_app_secret["channels"][0]["missing_send_env"], [])
                 channel_doctor = api_get(base_url, "/channels/doctor?channel_id=slack")
                 self.assertEqual(channel_doctor["overall_status"], "needs_setup")
                 saved_setup = api_post(

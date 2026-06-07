@@ -159,6 +159,7 @@ def request_config(base: AgentConfig, payload: dict[str, Any]) -> AgentConfig:
         model_timeout_seconds = float(payload.get("model_timeout_seconds", base.model_timeout_seconds))
     except (TypeError, ValueError):
         model_timeout_seconds = base.model_timeout_seconds
+    runtime_secrets = _runtime_secrets(payload)
     return replace(
         base,
         dry_run=bool(payload.get("dry_run", base.dry_run)),
@@ -168,4 +169,16 @@ def request_config(base: AgentConfig, payload: dict[str, Any]) -> AgentConfig:
         model_base_url=payload.get("model_base_url", base.model_base_url),
         model_api_key_env=payload.get("model_api_key_env", base.model_api_key_env),
         model_timeout_seconds=max(0.1, min(model_timeout_seconds, 300.0)),
+        runtime_secrets={**dict(base.runtime_secrets or {}), **runtime_secrets},
     ).normalized()
+
+
+def _runtime_secrets(payload: dict[str, Any]) -> dict[str, str]:
+    raw = payload.get("runtime_secrets", payload.get("secrets", {}))
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        str(key).strip(): str(value)
+        for key, value in raw.items()
+        if str(key).strip() and str(value)
+    }

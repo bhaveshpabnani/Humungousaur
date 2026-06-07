@@ -25,6 +25,22 @@ class VoiceProviderTests(unittest.TestCase):
         self.assertNotIn("dg-secret", json.dumps(result.output))
         self.assertNotIn("el-secret", json.dumps(result.output))
 
+    def test_voice_provider_status_uses_runtime_secrets_without_env(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(
+                workspace=Path(tmp_dir),
+                data_dir=Path(tmp_dir) / "artifacts",
+                runtime_secrets={"DEEPGRAM_API_KEY": "dg-runtime", "ELEVENLABS_API_KEY": "el-runtime"},
+            ).normalized()
+            with patch.dict("os.environ", {}, clear=True):
+                result = VoiceProviderStatusTool().execute({}, config)
+
+        self.assertEqual(result.status, ActionStatus.SUCCEEDED)
+        self.assertTrue(result.output["stt"]["deepgram"]["configured"])
+        self.assertTrue(result.output["tts"]["elevenlabs"]["configured"])
+        self.assertNotIn("dg-runtime", json.dumps(result.output))
+        self.assertNotIn("el-runtime", json.dumps(result.output))
+
     def test_voice_transcribe_deepgram_parses_transcript(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)

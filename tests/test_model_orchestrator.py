@@ -89,6 +89,26 @@ class ModelOrchestratorTests(unittest.TestCase):
             self.assertEqual(client.api_key_env, "GROQ_API_KEY")
             self.assertEqual(client.model, "llama-3.3-70b-versatile")
 
+    def test_model_provider_uses_runtime_secret_and_desktop_model_override(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(
+                workspace=workspace,
+                data_dir=workspace / "artifacts",
+                planner_provider="model",
+                model_provider="groq",
+                model_name="desktop-model",
+                runtime_secrets={"GROQ_API_KEY": "gsk-desktop"},
+            )
+
+            with patch.dict("os.environ", {"GROQ_MODEL": "env-model"}, clear=True):
+                client = AgentOrchestrator(config)._build_model_client()
+
+            self.assertIsInstance(client, OpenAICompatibleChatClient)
+            assert isinstance(client, OpenAICompatibleChatClient)
+            self.assertEqual(client.model, "desktop-model")
+            self.assertEqual(client.api_key, "gsk-desktop")
+
     def test_ollama_provider_defaults_to_local_openai_endpoint(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)

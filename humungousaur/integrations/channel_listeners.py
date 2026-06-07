@@ -155,7 +155,7 @@ def _listener_record(config: AgentConfig, channel: dict[str, Any], setups: dict[
     enabled = bool(saved.get("enabled", False))
     listener_mode = _listener_mode(channel)
     required_env = _listener_required_env(channel)
-    missing_env = [name for name in required_env if not os.environ.get(name)]
+    missing_env = [name for name in required_env if not _secret(config, name)]
     required_binaries = [str(item) for item in setup.get("required_binaries", []) if str(item)]
     missing_binaries = [name for name in required_binaries if not _binary_available(name)]
     channel_state = state.get("channels", {}).get(channel_id, {}) if isinstance(state.get("channels", {}), dict) else {}
@@ -210,7 +210,7 @@ def _poll_telegram(
     prepare_replies: bool,
     approve_high_risk: bool,
 ) -> list[dict[str, Any]]:
-    token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    token = _secret(config, "TELEGRAM_BOT_TOKEN") or ""
     if not token:
         return []
     channel_state = _channel_state(state, "telegram")
@@ -510,6 +510,10 @@ def _binary_available(name: str) -> bool:
     from shutil import which
 
     return which(name) is not None
+
+
+def _secret(config: AgentConfig, name: str) -> str | None:
+    return config.normalized().secret_value(name) or os.environ.get(name)
 
 
 def _first_mapping(payload: dict[str, Any], keys: list[str]) -> dict[str, Any]:

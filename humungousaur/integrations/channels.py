@@ -254,7 +254,7 @@ def send_outbound_message(
         message["updated_at"] = datetime.now(timezone.utc).isoformat()
         _write_message(path, message)
         return message
-    missing = _missing_env(contract.get("required_env", []))
+    missing = _missing_env(normalized, contract.get("required_env", []))
     if missing:
         message["status"] = "blocked_missing_credentials"
         message["delivery"]["sent"] = False
@@ -263,7 +263,7 @@ def send_outbound_message(
         _write_message(path, message)
         return message
     try:
-        response = _send_via_official_adapter(channel, message)
+        response = _send_via_official_adapter(normalized, channel, message)
     except Exception as exc:
         message["status"] = "send_failed"
         message["delivery"]["sent"] = False
@@ -479,7 +479,7 @@ def _channel_status(config: AgentConfig, channel: dict[str, Any], setups: dict[s
     contract = _official_send_contract(channel)
     required_env = [str(item) for item in contract.get("required_env", []) if str(item)]
     setup_checks = [str(item) for item in setup.get("doctor_checks", []) if str(item)]
-    missing_setup = [check for check in setup_checks if not _check_available(check)]
+    missing_setup = [check for check in setup_checks if not _check_available(config, check)]
     return {
         "channel_id": channel["channel_id"],
         "display_name": channel.get("display_name", channel.get("name", "")),
@@ -489,10 +489,10 @@ def _channel_status(config: AgentConfig, channel: dict[str, Any], setups: dict[s
         "can_prepare": bool(channel.get("delivery", {}).get("prepared_outbox", True)),
         "send_implemented": bool(contract.get("implemented", False)),
         "send_mode": str(contract.get("mode", "")),
-        "missing_send_env": _missing_env(required_env),
+        "missing_send_env": _missing_env(config, required_env),
         "missing_setup_checks": missing_setup,
         "configured_secret_refs": sorted((saved.get("secret_refs", {}) or {}).keys()) if isinstance(saved.get("secret_refs", {}), dict) else [],
-        "ready_for_send": bool(contract.get("implemented", False)) and not _missing_env(required_env),
+        "ready_for_send": bool(contract.get("implemented", False)) and not _missing_env(config, required_env),
         "ready_for_inbound": bool(saved.get("enabled", False)) and not missing_setup,
         "setup": setup,
     }
@@ -652,26 +652,26 @@ def _bot_loop_check(config: AgentConfig, payload: dict[str, Any], channel: dict[
     }
 
 
-def _send_via_official_adapter(channel: dict[str, Any], message: dict[str, Any]) -> dict[str, Any]:
+def _send_via_official_adapter(config: AgentConfig, channel: dict[str, Any], message: dict[str, Any]) -> dict[str, Any]:
     mode = str(_official_send_contract(channel).get("mode", ""))
     if mode == "slack_chat_post_message":
-        return _send_slack(message)
+        return _send_slack(config, message)
     if mode == "telegram_send_message":
-        return _send_telegram(message)
+        return _send_telegram(config, message)
     if mode == "discord_channel_message":
-        return _send_discord(message)
+        return _send_discord(config, message)
     if mode == "whatsapp_cloud_text":
-        return _send_whatsapp_cloud(message)
+        return _send_whatsapp_cloud(config, message)
     if mode == "google_chat_webhook":
-        return _send_webhook(os.environ["GOOGLE_CHAT_WEBHOOK_URL"], {"text": message["text"]})
+        return _send_webhook(_required_secret(config, "GOOGLE_CHAT_WEBHOOK_URL"), {"text": message["text"]})
     if mode == "teams_webhook":
-        return _send_webhook(os.environ["TEAMS_WEBHOOK_URL"], {"text": message["text"]})
+        return _send_webhook(_required_secret(config, "TEAMS_WEBHOOK_URL"), {"text": message["text"]})
     if mode == "twilio_sms":
-        return _send_twilio_sms(message)
+        return _send_twilio_sms(config, message)
     raise ValueError(f"No Humungousaur official adapter for send mode: {mode}")
 
 
-def _send_slack(message: dict[str, Any]) -> dict[str, Any]:
+def _send_slack(config: AgentConfig, message: dict[str, Any]) -> dict[str, Any]:
     payload = {"channel": message["conversation_id"], "text": message["text"]}
     thread_ts = message.get("metadata", {}).get("thread_ts") if isinstance(message.get("metadata"), dict) else None
     if thread_ts:
@@ -679,15 +679,15 @@ def _send_slack(message: dict[str, Any]) -> dict[str, Any]:
     response = _http_json(
         "https://slack.com/api/chat.postMessage",
         payload,
-        headers={"Authorization": f"Bearer {os.environ['SLACK_BOT_TOKEN']}"},
+        headers={"Authorization": f"Bearer {_required_secret(config, 'SLACK_BOT_TOKEN')}"},
     )
     if response.get("ok") is not True:
         raise ValueError(f"Slack send failed: {response.get('error', 'unknown_error')}")
     return _redacted_response(response)
 
 
-def _send_telegram(message: dict[str, Any]) -> dict[str, Any]:
-    token = os.environ["TELEGRAM_BOT_TOKEN"]
+def _send_telegram(config: AgentConfig, message: dict[str, Any]) -> dict[str, Any]:
+    token = _required_secret(config, "TELEGRAM_BOT_TOKEN")
     payload = {"chat_id": message["conversation_id"], "text": message["text"]}
     response = _http_json(f"https://api.telegram.org/bot{token}/sendMessage", payload)
     if response.get("ok") is not True:
@@ -695,19 +695,19 @@ def _send_telegram(message: dict[str, Any]) -> dict[str, Any]:
     return _redacted_response(response)
 
 
-def _send_discord(message: dict[str, Any]) -> dict[str, Any]:
+def _send_discord(config: AgentConfig, message: dict[str, Any]) -> dict[str, Any]:
     channel_id = parse.quote(str(message["conversation_id"]), safe="")
     payload = {"content": message["text"]}
     response = _http_json(
         f"https://discord.com/api/v10/channels/{channel_id}/messages",
         payload,
-        headers={"Authorization": f"Bot {os.environ['DISCORD_BOT_TOKEN']}"},
+        headers={"Authorization": f"Bot {_required_secret(config, 'DISCORD_BOT_TOKEN')}"},
     )
     return _redacted_response(response)
 
 
-def _send_whatsapp_cloud(message: dict[str, Any]) -> dict[str, Any]:
-    phone_number_id = parse.quote(os.environ["WHATSAPP_PHONE_NUMBER_ID"], safe="")
+def _send_whatsapp_cloud(config: AgentConfig, message: dict[str, Any]) -> dict[str, Any]:
+    phone_number_id = parse.quote(_required_secret(config, "WHATSAPP_PHONE_NUMBER_ID"), safe="")
     payload = {
         "messaging_product": "whatsapp",
         "to": message["conversation_id"],
@@ -717,7 +717,7 @@ def _send_whatsapp_cloud(message: dict[str, Any]) -> dict[str, Any]:
     response = _http_json(
         f"https://graph.facebook.com/v20.0/{phone_number_id}/messages",
         payload,
-        headers={"Authorization": f"Bearer {os.environ['WHATSAPP_ACCESS_TOKEN']}"},
+        headers={"Authorization": f"Bearer {_required_secret(config, 'WHATSAPP_ACCESS_TOKEN')}"},
     )
     return _redacted_response(response)
 
@@ -726,12 +726,12 @@ def _send_webhook(url: str, payload: dict[str, Any]) -> dict[str, Any]:
     return _http_json(url, payload)
 
 
-def _send_twilio_sms(message: dict[str, Any]) -> dict[str, Any]:
-    sid = os.environ["TWILIO_ACCOUNT_SID"]
-    token = os.environ["TWILIO_AUTH_TOKEN"]
+def _send_twilio_sms(config: AgentConfig, message: dict[str, Any]) -> dict[str, Any]:
+    sid = _required_secret(config, "TWILIO_ACCOUNT_SID")
+    token = _required_secret(config, "TWILIO_AUTH_TOKEN")
     form = parse.urlencode(
         {
-            "From": os.environ["TWILIO_FROM_NUMBER"],
+            "From": _required_secret(config, "TWILIO_FROM_NUMBER"),
             "To": message["conversation_id"],
             "Body": message["text"],
         }
@@ -766,12 +766,12 @@ def _http_json(url: str, payload: dict[str, Any], headers: dict[str, str] | None
     return parsed
 
 
-def _check_available(check: str) -> bool:
+def _check_available(config: AgentConfig, check: str) -> bool:
     if check.startswith("env:"):
-        return bool(os.environ.get(check.removeprefix("env:")))
+        return bool(_secret(config, check.removeprefix("env:")))
     if check.startswith("any_env:"):
         names = [item for item in check.removeprefix("any_env:").split("|") if item]
-        return any(os.environ.get(name) for name in names)
+        return any(_secret(config, name) for name in names)
     if check.startswith("bin:"):
         return shutil.which(check.removeprefix("bin:")) is not None
     if check.startswith("api:"):
@@ -783,8 +783,19 @@ def _check_available(check: str) -> bool:
     return True
 
 
-def _missing_env(required_env: list[str]) -> list[str]:
-    return [name for name in required_env if name and not os.environ.get(name)]
+def _missing_env(config: AgentConfig, required_env: list[str]) -> list[str]:
+    return [name for name in required_env if name and not _secret(config, name)]
+
+
+def _secret(config: AgentConfig, name: str) -> str | None:
+    return config.normalized().secret_value(name) or os.environ.get(name)
+
+
+def _required_secret(config: AgentConfig, name: str) -> str:
+    value = _secret(config, name)
+    if not value:
+        raise KeyError(name)
+    return value
 
 
 def _has_group_conversation(channel: dict[str, Any]) -> bool:

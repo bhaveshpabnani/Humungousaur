@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Mapping
 
 
 @dataclass(slots=True)
@@ -17,6 +18,7 @@ class AgentConfig:
     model_base_url: str | None = None
     model_api_key_env: str | None = None
     model_timeout_seconds: float = 45.0
+    runtime_secrets: Mapping[str, str] = field(default_factory=dict)
     allowed_read_roots: tuple[Path, ...] = field(default_factory=tuple)
     allowed_write_roots: tuple[Path, ...] = field(default_factory=tuple)
 
@@ -37,9 +39,21 @@ class AgentConfig:
             model_base_url=self.model_base_url,
             model_api_key_env=self.model_api_key_env,
             model_timeout_seconds=self.model_timeout_seconds,
+            runtime_secrets={
+                str(key).strip(): str(value)
+                for key, value in dict(self.runtime_secrets or {}).items()
+                if str(key).strip() and str(value)
+            },
             allowed_read_roots=tuple(path.expanduser().resolve() for path in read_roots),
             allowed_write_roots=tuple(path.expanduser().resolve() for path in write_roots),
         )
+
+    def secret_value(self, name: str, default: str | None = None) -> str | None:
+        cleaned = str(name or "").strip()
+        if not cleaned:
+            return default
+        value = dict(self.runtime_secrets or {}).get(cleaned)
+        return value if value else default
 
     @property
     def notes_dir(self) -> Path:
