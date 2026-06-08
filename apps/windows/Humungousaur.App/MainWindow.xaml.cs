@@ -15,6 +15,7 @@ public sealed partial class MainWindow : Window
     private readonly AgentApiClient _api = new();
     private readonly LocalAgentProcess _agentProcess = new();
     private readonly DispatcherTimer _autonomyTimer = new();
+    private readonly DispatcherTimer _channelListenerTimer = new();
     private readonly ObservableCollection<ChatLogItem> _chat = [];
     private readonly ObservableCollection<string> _processLines = [];
     private AppSettings _settings = new();
@@ -23,6 +24,7 @@ public sealed partial class MainWindow : Window
     private List<RuntimeRunItem> _runs = [];
     private List<ApprovalItem> _approvals = [];
     private bool _autonomyCycleRunning;
+    private bool _channelListenerTickRunning;
 
     public MainWindow()
     {
@@ -36,6 +38,7 @@ public sealed partial class MainWindow : Window
         ProcessLog.ItemsSource = _processLines;
         _agentProcess.OutputReceived += line => DispatcherQueue.TryEnqueue(() => AddProcessLine(line));
         _autonomyTimer.Tick += AutonomyTimer_Tick;
+        _channelListenerTimer.Tick += ChannelListenerTimer_Tick;
     }
 
     private async void RootGrid_Loaded(object sender, RoutedEventArgs e)
@@ -438,6 +441,73 @@ public sealed partial class MainWindow : Window
         {
             ChannelListenerText.Text = exc.Message;
             ShowNotice("Listener tick failed.", InfoBarSeverity.Error);
+        }
+    }
+
+    private async void TickAllChannelsButton_Click(object sender, RoutedEventArgs e)
+    {
+        await RunChannelListenerTickAsync(showNotice: true);
+    }
+
+    private async Task RunChannelListenerTickAsync(bool showNotice)
+    {
+        if (_channelListenerTickRunning)
+        {
+            return;
+        }
+
+        try
+        {
+            _channelListenerTickRunning = true;
+            ReadSettingsFromUi();
+            var result = await _api.TickAllChannelListenersAsync(_settings);
+            var processed = result["processed_count"]?.GetValue<int>() ?? 0;
+            var notes = result["listener_notes"]?.AsArray().Count ?? 0;
+            ChannelListenLoopText.Text = $"Last tick processed {processed} event(s); {notes} listener note(s).";
+            if (showNotice)
+            {
+                ShowNotice($"Channel listener tick processed {processed} event(s).", InfoBarSeverity.Success);
+            }
+            await RefreshOutboxAsync();
+            if (ChannelList.SelectedItem is ChannelInfo channel)
+            {
+                await RefreshSelectedChannelStatusAsync(channel.ChannelId);
+            }
+        }
+        catch (Exception exc)
+        {
+            ChannelListenLoopText.Text = exc.Message;
+            if (showNotice)
+            {
+                ShowNotice("Channel listener tick failed.", InfoBarSeverity.Error);
+            }
+        }
+        finally
+        {
+            _channelListenerTickRunning = false;
+        }
+    }
+
+    private async void ChannelListenerTimer_Tick(object? sender, object e)
+    {
+        await RunChannelListenerTickAsync(showNotice: false);
+    }
+
+    private void ContinuousChannelListenSwitch_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (ContinuousChannelListenSwitch.IsOn)
+        {
+            var seconds = int.TryParse(ChannelListenIntervalBox.Text, out var parsed) ? Math.Max(10, parsed) : 30;
+            _channelListenerTimer.Interval = TimeSpan.FromSeconds(seconds);
+            _channelListenerTimer.Start();
+            ChannelListenLoopText.Text = $"Listening loop running every {seconds} seconds.";
+            ShowNotice($"Channel listening loop running every {seconds} seconds.", InfoBarSeverity.Success);
+        }
+        else
+        {
+            _channelListenerTimer.Stop();
+            ChannelListenLoopText.Text = "Listening loop stopped.";
+            ShowNotice("Channel listening loop stopped.", InfoBarSeverity.Informational);
         }
     }
 
@@ -1077,7 +1147,7 @@ public sealed partial class MainWindow : Window
         _settings.WorkspacePath = WorkspacePathBox.Text.Trim();
         _settings.PythonPath = PythonPathBox.Text.Trim();
         _settings.Planner = ComboTag(PlannerBox, "model");
-        _settings.ModelProvider = ComboTag(ModelProviderBox, "groq");
+        _settings.ModelProvider = ComboTag(ModelProviderBox, "openai");
         _settings.ModelName = ModelNameBox.Text.Trim();
         _settings.ModelBaseUrl = ModelBaseUrlBox.Text.Trim();
         _settings.ModelApiKey = ModelApiKeyBox.Password;

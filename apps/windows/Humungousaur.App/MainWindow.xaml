@@ -325,9 +325,20 @@
                                     <Button x:Name="PrepareOutboundButton" Content="Prepare outbound" Click="PrepareOutboundButton_Click" />
                                     <Button x:Name="SendOutboundButton" Content="Send approved" Click="SendOutboundButton_Click" />
                                     <Button x:Name="TickChannelButton" Content="Poll now" Click="TickChannelButton_Click" />
+                                    <Button x:Name="TickAllChannelsButton" Content="Poll all" Click="TickAllChannelsButton_Click" />
                                     <Button Content="Refresh listeners" Click="RefreshListenersButton_Click" />
                                     <Button Content="Refresh outbox" Click="RefreshOutboxButton_Click" />
                                 </StackPanel>
+                                <Grid Grid.Row="7" Grid.ColumnSpan="2" ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="120" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <ToggleSwitch x:Name="ContinuousChannelListenSwitch" Header="Listen loop" Toggled="ContinuousChannelListenSwitch_Toggled" />
+                                    <TextBox x:Name="ChannelListenIntervalBox" Grid.Column="1" Header="Poll sec" Text="30" />
+                                    <TextBlock x:Name="ChannelListenLoopText" Grid.Column="2" Text="Listening loop stopped." TextWrapping="WrapWholeWords" VerticalAlignment="Bottom" Opacity="0.72" />
+                                </Grid>
                             </Grid>
                         </Border>
                         <Border Grid.Row="3" CornerRadius="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Padding="16">

@@ -75,6 +75,14 @@ public sealed class AgentApiClient
         return PostJsonObjectAsync("channels/listeners/tick", payload);
     }
 
+    public Task<JsonObject> TickAllChannelListenersAsync(AppSettings settings)
+    {
+        var payload = RuntimePayload(settings);
+        payload["limit"] = 10;
+        payload["prepare_replies"] = true;
+        return PostJsonObjectAsync("channels/listeners/tick", payload);
+    }
+
     public Task<JsonObject> SaveChannelSetupAsync(ChannelInfo channel, ChannelSetup setup)
     {
         var payload = new JsonObject

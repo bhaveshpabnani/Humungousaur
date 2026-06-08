@@ -44,6 +44,20 @@ public sealed class LocalAgentProcess
         info.ArgumentList.Add(workspace);
         info.ArgumentList.Add("--port");
         info.ArgumentList.Add(settings.Port.ToString());
+        info.ArgumentList.Add("--planner");
+        info.ArgumentList.Add(string.IsNullOrWhiteSpace(settings.Planner) ? "model" : settings.Planner);
+        info.ArgumentList.Add("--model-provider");
+        info.ArgumentList.Add(CliModelProvider(settings.ModelProvider));
+        info.ArgumentList.Add("--model");
+        info.ArgumentList.Add(string.IsNullOrWhiteSpace(settings.ModelName) ? "gpt-5-mini" : settings.ModelName);
+        info.ArgumentList.Add("--model-api-key-env");
+        info.ArgumentList.Add(ModelApiKeyName(settings.ModelProvider));
+        if (!string.IsNullOrWhiteSpace(settings.ModelBaseUrl))
+        {
+            info.ArgumentList.Add("--model-base-url");
+            info.ArgumentList.Add(settings.ModelBaseUrl);
+        }
+        ApplyRuntimeEnvironment(info, settings);
 
         _process = new Process { StartInfo = info, EnableRaisingEvents = true };
         _process.OutputDataReceived += (_, args) => Emit(args.Data, _stdoutLogPath);
@@ -99,5 +113,55 @@ public sealed class LocalAgentProcess
         }
 
         return "python";
+    }
+
+    private static void ApplyRuntimeEnvironment(ProcessStartInfo info, AppSettings settings)
+    {
+        AddEnvironmentSecret(info, ModelApiKeyName(settings.ModelProvider), settings.ModelApiKey);
+        AddEnvironmentSecret(info, "DEEPGRAM_API_KEY", settings.DeepgramApiKey);
+        AddEnvironmentSecret(info, "ELEVENLABS_API_KEY", settings.ElevenLabsApiKey);
+        AddEnvironmentSecret(info, "ELEVENLABS_VOICE_ID", settings.VoiceId);
+        AddEnvironmentSecret(info, "ELEVENLABS_MODEL_ID", settings.ElevenLabsModel);
+
+        foreach (var channel in settings.Channels)
+        {
+            AddEnvironmentSecret(info, channel.SecretName, channel.SecretValue);
+            foreach (var item in channel.SecretValues ?? [])
+            {
+                AddEnvironmentSecret(info, item.Key, item.Value);
+            }
+        }
+
+    }
+
+    private static void AddEnvironmentSecret(ProcessStartInfo info, string name, string value)
+    {
+        if (!string.IsNullOrWhiteSpace(name) && !string.IsNullOrWhiteSpace(value))
+        {
+            info.Environment[name.Trim()] = value;
+        }
+    }
+
+    private static string ModelApiKeyName(string provider)
+    {
+        return provider switch
+        {
+            "openai" or "openai-responses" or "openai-chat" => "OPENAI_API_KEY",
+            "groq" => "GROQ_API_KEY",
+            "grok" => "XAI_API_KEY",
+            "ollama" => "OLLAMA_API_KEY",
+            "local-openai" => "LOCAL_LLM_API_KEY",
+            _ => "OPENAI_API_KEY",
+        };
+    }
+
+    private static string CliModelProvider(string provider)
+    {
+        return provider switch
+        {
+            "openai" => "openai-responses",
+            "" => "openai-responses",
+            _ => provider,
+        };
     }
 }
