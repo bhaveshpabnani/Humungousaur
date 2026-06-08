@@ -66,3 +66,16 @@ Record the reason and the exact next stimulus that should resume the work.
 - Every durable task should have an owner, status, reason, and evidence refs.
 - Do not create background loops without a stopping condition.
 - Do not mark a task complete merely because a run started.
+
+## Safety And Approval
+
+- Durable goals, commitments, wakeups, triggers, and delegated tasks should be created only when they represent real user intent or model-supported task state.
+- Do not schedule external-visible actions, live sends, installs, deploys, or destructive work without explicit approval.
+- Keep waiting states honest: name the exact blocker, owner, and resume stimulus.
+- Do not mark a task complete until evidence proves the requested end state, not merely a plan, queued run, or worker handoff.
+
+## Native Implementation Boundaries
+
+- Use Humungousaur cognitive goal, commitment, wakeup, trigger, autonomous task graph, queue, cycle, and multi-agent board tools.
+- TaskFlow is a native orchestration contract, not an imported Hermes/OpenClaw scheduler.
+- The model decides semantic task decomposition and completion judgments; deterministic code persists exact records, IDs, statuses, and evidence.

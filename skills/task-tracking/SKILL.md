@@ -47,6 +47,19 @@ Use when the user asks to track work, update task status, review blockers, list 
 - Do not fabricate due dates or owners.
 - Do not overwrite unrelated commitments because names look similar.
 
+## Safety And Approval
+
+- Updating commitments is durable state; use exact IDs where possible and summarize evidence for each change.
+- Do not close, delete, or supersede tasks unless the user requests it or current evidence proves resolution.
+- Do not invent due dates, owners, urgency, or external dependencies.
+- High-risk next actions remain approval-gated even when they appear on the task board.
+
+## Native Implementation Boundaries
+
+- Use Humungousaur commitment, cognition, memory, and activity tools.
+- OpenClaw task-tracker ideas are reference workflow patterns only; records must remain Humungousaur-native and evidence-backed.
+- Similar task titles are not enough for deterministic merging; use exact IDs or model-led review over evidence.
+
 ## Verification
 
 - Every status update should include evidence from user input, tool output, or a stored record.

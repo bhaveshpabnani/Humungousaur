@@ -47,6 +47,19 @@ Use for high-impact tasks, broad architecture changes, long autonomous runs, ext
 - Do not downplay risks when tools can affect external systems.
 - If a model/provider is unavailable, stop or use explicit tool commands only; do not invent deterministic intent handling.
 
+## Safety And Approval
+
+- Treat self-assessment as advisory evidence, not permission to bypass approval gates.
+- If the assessment identifies external-visible, destructive, privileged, or privacy-sensitive actions, require the relevant tool approval before execution.
+- Do not downgrade risk because a task is familiar; use current tool schemas, provider status, credentials, and workspace state.
+- Report model-unavailable or tool-unavailable states honestly instead of substituting brittle keyword rules.
+
+## Native Implementation Boundaries
+
+- Use Humungousaur capability, tool, cognition, plugin, channel, and system-status tools only.
+- OpenClaw or other references may shape the checklist, but readiness decisions must be model-led and evidence-backed through native records.
+- A readiness claim is valid only for the current workspace/configuration snapshot; rerun assessment after tool, credential, branch, or environment changes.
+
 ## Verification
 
 - Assessment output should name capability gaps and verification steps.

@@ -45,6 +45,19 @@ Use when a task is too large for a single foreground loop, benefits from indepen
 - Do not delegate outside the intended workspace.
 - Do not allow worker-side push/deploy unless the user explicitly requested it.
 
+## Safety And Approval
+
+- Check git status and user-owned changes before handoff.
+- Prefer read-only, dry-run, or planning handoffs before write-capable handoffs.
+- Require approval for worker commands that mutate files, install dependencies, access networks, use secrets, push, deploy, or run long-lived processes.
+- If the worker reports success without verifiable artifacts, treat it as unverified.
+
+## Native Implementation Boundaries
+
+- Use Humungousaur Codex CLI status/plan/run, multi-agent board, shell, file, and note tools.
+- Claude Code, OpenCode, Hermes, and other worker systems are external runtimes; this skill prepares and verifies handoffs rather than importing their code.
+- Humungousaur remains responsible for final validation, commit scope, and user-facing claims.
+
 ## Verification
 
 - Confirm worker command, cwd, sandbox, timeout, and output.

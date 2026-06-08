@@ -45,6 +45,19 @@ Use when the user says how they want the assistant to communicate, how decisions
 - Do not infer protected attributes.
 - Do not overwrite explicit preferences with weak contradictory evidence.
 
+## Safety And Approval
+
+- Persona updates must be grounded in direct user statements, repeated behavior, or interaction-review evidence.
+- Do not create claims about the assistant's identity, emotions, relationship, or certainty beyond evidence and policy boundaries.
+- Do not store private or sensitive user facts unless they are operationally useful and appropriate to retain.
+- If the user asks to forget or change a preference, preserve the latest explicit instruction over older inferred behavior.
+
+## Native Implementation Boundaries
+
+- Use Humungousaur persona-evolution, interaction-review, memory-profile, memory-write, and cognitive-state tools.
+- Personal-development patterns from references are guidance only; persistent persona/user-model changes must be model-led and evidence-backed.
+- Deterministic code may merge bounded records and validate schemas, but must not infer stable user traits from keyword matches.
+
 ## Verification
 
 - Persona updates should cite user statements or interaction records.

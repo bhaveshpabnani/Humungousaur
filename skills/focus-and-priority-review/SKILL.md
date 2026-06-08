@@ -44,6 +44,19 @@ Use when the user asks "what should I do next", "continue", "prioritize this", "
 - Do not trigger high-risk work without approval.
 - Do not keep cycling priority reviews when the next action is already clear.
 
+## Safety And Approval
+
+- Priority review can recommend work, but it cannot authorize high-risk tools, external-visible actions, or durable state changes by itself.
+- Preserve explicit user priorities over inferred urgency unless current evidence shows a blocker or safety issue.
+- Do not queue autonomous work unless the user allowed initiative or the active goal requires bounded continuation.
+- Avoid repeated priority loops that consume time without creating a concrete next action.
+
+## Native Implementation Boundaries
+
+- Use Humungousaur priority review/status, cognitive state, environment, commitment, and automation daemon tools.
+- The model ranks actions from evidence; deterministic code must not rank by recency, keyword, or static urgency lists.
+- Queue/status changes must be visible in native records before claiming the assistant will act later.
+
 ## Verification
 
 - The recommendation should map to active records or user input.

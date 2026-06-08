@@ -44,6 +44,19 @@ Use when the user asks to remind, check later, follow up, monitor, continue tomo
 - Do not create vague recurring monitors with no stop condition.
 - Do not infer exact dates from ambiguous words without the current date/time context.
 
+## Safety And Approval
+
+- Confirm ambiguous dates, times, recurrence, timezone, and stop conditions before recording a wakeup.
+- Do not schedule live sends, purchases, deletes, installs, deploys, or other external-visible actions without explicit approval.
+- For monitors, record the trigger condition, cadence, maximum scope, and what should happen when it fires.
+- Cancellation should use exact trigger IDs when available and should not delete unrelated reminders.
+
+## Native Implementation Boundaries
+
+- Use Humungousaur trigger, commitment, and automation daemon tools.
+- Calendar/reminder systems from Hermes/OpenClaw are reference patterns only unless a separate native channel/calendar adapter is selected.
+- Deterministic code persists exact trigger records and evaluations; semantic timing/priority decisions must use user input or model-led review, not keyword guesses.
+
 ## Verification
 
 - Confirm trigger ID, status, and trigger text.

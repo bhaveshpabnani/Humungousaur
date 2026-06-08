@@ -45,6 +45,19 @@ Use when the user wants the agent to run continuously, process queued tasks, wak
 - External-visible actions still require the channel/message/tool approval policy.
 - Do not enable initiative when the user asked only for passive monitoring.
 
+## Safety And Approval
+
+- Always set bounded max cycles, idle stop behavior, and initiative policy before running a loop.
+- Run a single verification tick before recommending continuous operation.
+- Keep high-risk, external-visible, destructive, or privileged actions paused for approval.
+- Stop or reduce scope on repeated failures, duplicate event processing, model/provider unavailability, or unclear queue state.
+
+## Native Implementation Boundaries
+
+- Use Humungousaur automation daemon, trigger, priority review, cognitive state, queue, and autonomous-cycle tools.
+- OpenClaw autonomy patterns are reference concepts only; runtime state and loop execution must remain Humungousaur-native.
+- The model owns semantic decisions about attention and initiative; deterministic code only enforces bounds, queue mechanics, schemas, and approvals.
+
 ## Verification
 
 - Confirm the loop reports cycle count, idle state, and queue changes.

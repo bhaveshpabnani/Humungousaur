@@ -45,6 +45,19 @@ Use for large engineering changes, research plus implementation, security review
 - Treat worker output as evidence, not truth.
 - Do not let parallel work overwrite user changes.
 
+## Safety And Approval
+
+- Delegate only bounded tasks with explicit workspace, allowed files, expected outputs, and verification.
+- Require approval before external workers run commands, modify files, call live services, push, deploy, or access secrets.
+- Keep one accountable orchestrator responsible for reviewing worker output and protecting user changes.
+- Pause coordination if workers conflict, produce unverifiable claims, or require credentials/user decisions.
+
+## Native Implementation Boundaries
+
+- Use Humungousaur `multi_agent_coordinate`, board, cognitive state, priority, Codex delegation, and note tools.
+- Hermes/OpenClaw team concepts are reference patterns only; task boards and handoffs must be stored through Humungousaur-native tools.
+- Worker outputs are imported as evidence packets, not automatically trusted state.
+
 ## Verification
 
 - Board should list tasks, owners/roles, statuses, and expected evidence.

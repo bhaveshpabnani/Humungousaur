@@ -46,6 +46,19 @@ Use after a smoke failure, user correction, long debugging session, complex impl
 - Do not hide failures; reflection should surface evidence and limitations.
 - Do not claim improvement unless the behavior was changed or recorded.
 
+## Safety And Approval
+
+- Reflection must not rewrite durable memory, skills, persona, or commitments without evidence and the native tool's approval/validation path.
+- Do not store sensitive or speculative user facts from a single ambiguous event.
+- Do not use reflection to justify ignoring the user's newest instruction or active task.
+- Keep user-facing reflection concise unless the user asks for a detailed postmortem.
+
+## Native Implementation Boundaries
+
+- Use Humungousaur cognitive self-review, interaction-review, skill-evolution, and memory tools.
+- Do not import upstream self-reflection implementations or create deterministic moral/confidence scoring.
+- Model-led providers decide semantic lessons; deterministic code only validates schemas, persists records, and surfaces evidence.
+
 ## Verification
 
 - The reflection should mention the evidence inspected.

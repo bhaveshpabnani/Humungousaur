@@ -46,6 +46,19 @@ Use when the user asks to clean memory, summarize past work, forget outdated det
 - Respect explicit user forget requests while preserving audit requirements.
 - Do not infer sensitive stable facts from weak evidence.
 
+## Safety And Approval
+
+- Treat memory writes, curation, archiving, and forgetting as durable state changes.
+- Keep explicit user forget requests high priority, while preserving any required audit trace.
+- Do not promote sensitive, protected, medical, legal, financial, or identity-related facts unless clearly useful and evidence-supported.
+- Do not let memory cleanup remove active commitments, unresolved blockers, or live-task context.
+
+## Native Implementation Boundaries
+
+- Use Humungousaur memory summary/search/write/profile and cognitive memory curation tools.
+- OpenClaw memory-metabolism ideas are reference patterns; retention, summarization, and forgetting decisions must be model-led through native curation.
+- Deterministic code validates records and stores evidence, but must not infer semantic staleness or user preferences without the model or explicit user instruction.
+
 ## Verification
 
 - Confirm curation status and counts of retained, archived, or summarized records.
