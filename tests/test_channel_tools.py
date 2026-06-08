@@ -179,6 +179,7 @@ class ChannelToolTests(unittest.TestCase):
                 {
                     "channel_id": "telegram",
                     "enabled": True,
+                    "listen_enabled": False,
                     "conversation_defaults": {"conversation_id": "42", "conversation_type": "dm"},
                 },
                 config,
@@ -190,7 +191,11 @@ class ChannelToolTests(unittest.TestCase):
 
         self.assertEqual(status["channels"][0]["missing_send_env"], [])
         self.assertTrue(status["channels"][0]["ready_for_send"])
-        self.assertTrue(listener["listeners"][0]["polling_available"])
+        self.assertTrue(status["channels"][0]["enabled"])
+        self.assertFalse(status["channels"][0]["listen_enabled"])
+        self.assertFalse(status["channels"][0]["ready_for_inbound"])
+        self.assertFalse(listener["listeners"][0]["listen_enabled"])
+        self.assertFalse(listener["listeners"][0]["polling_available"])
 
     def test_channel_integration_smoke_reports_runtime_secret_readiness_without_live_send(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

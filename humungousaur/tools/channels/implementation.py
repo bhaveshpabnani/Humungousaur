@@ -133,6 +133,7 @@ class ChannelSetupSaveTool(Tool):
                 {
                     "channel_id": {"type": "string", "description": "Exact channel id."},
                     "enabled": {"type": "boolean", "description": "Whether the channel should be considered enabled by local setup."},
+                    "listen_enabled": {"type": "boolean", "description": "Whether listener polling/webhook processing should be active for inbound events."},
                     "conversation_defaults": {"type": "object", "description": "Default conversation ids/types and routing hints."},
                     "allowlist": {"type": "array", "items": {"type": "string"}, "maxItems": 200},
                     "group_allowlist": {"type": "array", "items": {"type": "string"}, "maxItems": 200},

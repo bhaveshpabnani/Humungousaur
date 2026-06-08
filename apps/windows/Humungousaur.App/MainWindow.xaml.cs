@@ -808,13 +808,14 @@ public sealed partial class MainWindow : Window
 
             var readyForSend = channel["ready_for_send"]?.GetValue<bool>() == true;
             var readyForInbound = channel["ready_for_inbound"]?.GetValue<bool>() == true;
+            var listenEnabled = channel["listen_enabled"]?.GetValue<bool>() == true;
             var missing = channel["missing_send_env"]?.AsArray()
                 .Select(item => item?.GetValue<string>())
                 .Where(item => !string.IsNullOrWhiteSpace(item))
                 .ToList() ?? [];
             ChannelStatusText.Text = missing.Count == 0
-                ? $"Backend setup: send {(readyForSend ? "ready" : "prepared only")}; inbound {(readyForInbound ? "enabled" : "not enabled")}."
-                : $"Backend setup: missing {string.Join(", ", missing)}; prepared outbox is available.";
+                ? $"Backend setup: send {(readyForSend ? "ready" : "prepared only")}; inbound {(readyForInbound ? "enabled" : listenEnabled ? "waiting" : "paused")}."
+                : $"Backend setup: missing {string.Join(", ", missing)}; inbound {(listenEnabled ? "waiting" : "paused")}; prepared outbox is available.";
             await RefreshSelectedChannelListenerAsync(channelId);
         }
         catch (Exception exc)
@@ -836,6 +837,7 @@ public sealed partial class MainWindow : Window
             }
 
             var ready = listener["ready"]?.GetValue<bool>() == true;
+            var listenEnabled = listener["listen_enabled"]?.GetValue<bool>() == true;
             var mode = listener["listener_mode"]?.GetValue<string>() ?? "listener";
             var webhookPath = listener["webhook_path"]?.GetValue<string>() ?? "";
             var missingEnv = listener["missing_env"]?.AsArray()
@@ -843,8 +845,8 @@ public sealed partial class MainWindow : Window
                 .Where(item => !string.IsNullOrWhiteSpace(item))
                 .ToList() ?? [];
             ChannelListenerText.Text = missingEnv.Count == 0
-                ? $"Listener: {(ready ? "ready" : "waiting")} via {mode}; webhook {webhookPath}."
-                : $"Listener: missing {string.Join(", ", missingEnv)}; webhook {webhookPath}.";
+                ? $"Listener: {(ready ? "ready" : listenEnabled ? "waiting" : "paused")} via {mode}; webhook {webhookPath}."
+                : $"Listener: missing {string.Join(", ", missingEnv)}; {(listenEnabled ? "waiting" : "paused")}; webhook {webhookPath}.";
         }
         catch (Exception exc)
         {

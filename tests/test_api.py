@@ -154,16 +154,19 @@ class APITests(unittest.TestCase):
                     {
                         "channel_id": "slack",
                         "enabled": True,
+                        "listen_enabled": False,
                         "secret_refs": {"bot_token": "SLACK_BOT_TOKEN"},
                         "conversation_defaults": {"conversation_id": "C123"},
                     },
                 )
                 self.assertTrue(saved_setup["setup"]["enabled"])
+                self.assertFalse(saved_setup["setup"]["listen_enabled"])
                 posted_requirements = api_post(base_url, "/channels/requirements", {"channel_id": "telegram"})
                 self.assertEqual(posted_requirements["setup"]["auth_type"], "bot_token")
                 listener_status = api_get(base_url, "/channels/listeners?channel_id=slack")
                 self.assertEqual(listener_status["listeners"][0]["channel_id"], "slack")
                 self.assertTrue(listener_status["listeners"][0]["enabled"])
+                self.assertFalse(listener_status["listeners"][0]["listen_enabled"])
                 self.assertEqual(listener_status["listeners"][0]["webhook_path"], "/channels/webhook/slack")
                 listener_tick = api_post(
                     base_url,

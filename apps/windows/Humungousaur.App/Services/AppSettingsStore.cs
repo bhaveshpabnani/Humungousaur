@@ -62,12 +62,19 @@ public sealed class AppSettingsStore
             settings.ApiBaseUrl = $"http://127.0.0.1:{settings.Port}";
         }
 
+        settings.Planner = AppRuntimeDefaults.EffectivePlanner(settings.Planner);
         if (string.IsNullOrWhiteSpace(settings.ModelProvider) ||
             (settings.ModelProvider.Equals("groq", StringComparison.OrdinalIgnoreCase) &&
              string.IsNullOrWhiteSpace(settings.ModelApiKey)))
         {
-            settings.ModelProvider = "openai";
+            settings.ModelProvider = AppRuntimeDefaults.ModelProvider;
         }
+        else
+        {
+            settings.ModelProvider = AppRuntimeDefaults.EffectiveModelProvider(settings.ModelProvider);
+        }
+        settings.ModelName = AppRuntimeDefaults.EffectiveModelName(settings.ModelName);
+        settings.TtsProvider = AppRuntimeDefaults.EffectiveTtsProvider(settings.TtsProvider);
 
         return settings;
     }

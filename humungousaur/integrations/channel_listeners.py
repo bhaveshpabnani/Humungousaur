@@ -153,6 +153,7 @@ def _listener_record(config: AgentConfig, channel: dict[str, Any], setups: dict[
     runtime = channel.get("runtime", {}) if isinstance(channel.get("runtime"), dict) else {}
     setup = channel.get("setup", {}) if isinstance(channel.get("setup"), dict) else {}
     enabled = bool(saved.get("enabled", False))
+    listen_enabled = bool(saved.get("listen_enabled", enabled))
     listener_mode = _listener_mode(channel)
     required_env = _listener_required_env(channel)
     missing_env = [name for name in required_env if not _secret(config, name)]
@@ -161,13 +162,14 @@ def _listener_record(config: AgentConfig, channel: dict[str, Any], setups: dict[
     channel_state = state.get("channels", {}).get(channel_id, {}) if isinstance(state.get("channels", {}), dict) else {}
     if not isinstance(channel_state, dict):
         channel_state = {}
-    polling_available = enabled and channel_id == "telegram" and "TELEGRAM_BOT_TOKEN" not in missing_env
-    webhook_available = enabled and bool(runtime.get("listener_required_for_inbound", False)) and not missing_binaries
-    ready = enabled and (polling_available or webhook_available) and not missing_binaries
+    polling_available = enabled and listen_enabled and channel_id == "telegram" and "TELEGRAM_BOT_TOKEN" not in missing_env
+    webhook_available = enabled and listen_enabled and bool(runtime.get("listener_required_for_inbound", False)) and not missing_binaries
+    ready = enabled and listen_enabled and (polling_available or webhook_available) and not missing_binaries
     return {
         "channel_id": channel_id,
         "display_name": channel.get("display_name", channel.get("name", "")),
         "enabled": enabled,
+        "listen_enabled": listen_enabled,
         "listener_mode": listener_mode,
         "ready": ready,
         "polling_available": polling_available,

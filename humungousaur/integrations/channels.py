@@ -723,6 +723,7 @@ def _clean_setup_record(channel: dict[str, Any], setup: dict[str, Any]) -> dict[
     return {
         "channel_id": channel["channel_id"],
         "enabled": bool(setup.get("enabled", False)),
+        "listen_enabled": bool(setup.get("listen_enabled", setup.get("enabled", False))),
         "conversation_defaults": _json_object(setup.get("conversation_defaults", {}), max_items=50),
         "allowlist": _json_list(setup.get("allowlist", []), limit=200),
         "group_allowlist": _json_list(setup.get("group_allowlist", []), limit=200),
@@ -744,10 +745,13 @@ def _channel_status(config: AgentConfig, channel: dict[str, Any], setups: dict[s
     required_env = [str(item) for item in contract.get("required_env", []) if str(item)]
     setup_checks = [str(item) for item in setup.get("doctor_checks", []) if str(item)]
     missing_setup = [check for check in setup_checks if not _check_available(config, check)]
+    enabled = bool(saved.get("enabled", False))
+    listen_enabled = bool(saved.get("listen_enabled", enabled))
     return {
         "channel_id": channel["channel_id"],
         "display_name": channel.get("display_name", channel.get("name", "")),
-        "enabled": bool(saved.get("enabled", False)),
+        "enabled": enabled,
+        "listen_enabled": listen_enabled,
         "setup_kind": channel.get("setup_kind", ""),
         "runtime_adapter": channel.get("runtime_adapter", ""),
         "can_prepare": bool(channel.get("delivery", {}).get("prepared_outbox", True)),
@@ -757,7 +761,7 @@ def _channel_status(config: AgentConfig, channel: dict[str, Any], setups: dict[s
         "missing_setup_checks": missing_setup,
         "configured_secret_refs": sorted((saved.get("secret_refs", {}) or {}).keys()) if isinstance(saved.get("secret_refs", {}), dict) else [],
         "ready_for_send": bool(contract.get("implemented", False)) and not _missing_env(config, required_env),
-        "ready_for_inbound": bool(saved.get("enabled", False)) and not missing_setup,
+        "ready_for_inbound": enabled and listen_enabled and not missing_setup,
         "setup": setup,
     }
 

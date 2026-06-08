@@ -45,13 +45,13 @@ public sealed class LocalAgentProcess
         info.ArgumentList.Add("--port");
         info.ArgumentList.Add(settings.Port.ToString());
         info.ArgumentList.Add("--planner");
-        info.ArgumentList.Add(string.IsNullOrWhiteSpace(settings.Planner) ? "model" : settings.Planner);
+        info.ArgumentList.Add(AppRuntimeDefaults.EffectivePlanner(settings.Planner));
         info.ArgumentList.Add("--model-provider");
-        info.ArgumentList.Add(CliModelProvider(settings.ModelProvider));
+        info.ArgumentList.Add(AppRuntimeDefaults.CliModelProvider(settings.ModelProvider));
         info.ArgumentList.Add("--model");
-        info.ArgumentList.Add(string.IsNullOrWhiteSpace(settings.ModelName) ? "gpt-5-mini" : settings.ModelName);
+        info.ArgumentList.Add(AppRuntimeDefaults.EffectiveModelName(settings.ModelName));
         info.ArgumentList.Add("--model-api-key-env");
-        info.ArgumentList.Add(ModelApiKeyName(settings.ModelProvider));
+        info.ArgumentList.Add(AppRuntimeDefaults.ModelApiKeyName(settings.ModelProvider));
         if (!string.IsNullOrWhiteSpace(settings.ModelBaseUrl))
         {
             info.ArgumentList.Add("--model-base-url");
@@ -117,7 +117,7 @@ public sealed class LocalAgentProcess
 
     private static void ApplyRuntimeEnvironment(ProcessStartInfo info, AppSettings settings)
     {
-        AddEnvironmentSecret(info, ModelApiKeyName(settings.ModelProvider), settings.ModelApiKey);
+        AddEnvironmentSecret(info, AppRuntimeDefaults.ModelApiKeyName(settings.ModelProvider), settings.ModelApiKey);
         AddEnvironmentSecret(info, "DEEPGRAM_API_KEY", settings.DeepgramApiKey);
         AddEnvironmentSecret(info, "ELEVENLABS_API_KEY", settings.ElevenLabsApiKey);
         AddEnvironmentSecret(info, "ELEVENLABS_VOICE_ID", settings.VoiceId);
@@ -142,26 +142,4 @@ public sealed class LocalAgentProcess
         }
     }
 
-    private static string ModelApiKeyName(string provider)
-    {
-        return provider switch
-        {
-            "openai" or "openai-responses" or "openai-chat" => "OPENAI_API_KEY",
-            "groq" => "GROQ_API_KEY",
-            "grok" => "XAI_API_KEY",
-            "ollama" => "OLLAMA_API_KEY",
-            "local-openai" => "LOCAL_LLM_API_KEY",
-            _ => "OPENAI_API_KEY",
-        };
-    }
-
-    private static string CliModelProvider(string provider)
-    {
-        return provider switch
-        {
-            "openai" => "openai-responses",
-            "" => "openai-responses",
-            _ => provider,
-        };
-    }
 }

@@ -88,7 +88,8 @@ public sealed class AgentApiClient
         var payload = new JsonObject
         {
             ["channel_id"] = channel.ChannelId,
-            ["enabled"] = setup.Enabled && setup.ListenEnabled,
+            ["enabled"] = setup.Enabled,
+            ["listen_enabled"] = setup.ListenEnabled,
             ["conversation_defaults"] = new JsonObject
             {
                 ["conversation_id"] = setup.ConversationId,
@@ -220,18 +221,12 @@ public sealed class AgentApiClient
     {
         var payload = new JsonObject
         {
-            ["planner"] = settings.Planner,
+            ["planner"] = AppRuntimeDefaults.EffectivePlanner(settings.Planner),
             ["approve_high_risk"] = settings.ApproveHighRisk,
+            ["model_provider"] = AppRuntimeDefaults.EffectiveModelProvider(settings.ModelProvider),
+            ["model"] = AppRuntimeDefaults.EffectiveModelName(settings.ModelName),
+            ["model_api_key_env"] = AppRuntimeDefaults.ModelApiKeyName(settings.ModelProvider),
         };
-        if (!string.IsNullOrWhiteSpace(settings.ModelProvider))
-        {
-            payload["model_provider"] = settings.ModelProvider;
-            payload["model_api_key_env"] = ModelApiKeyName(settings.ModelProvider);
-        }
-        if (!string.IsNullOrWhiteSpace(settings.ModelName))
-        {
-            payload["model"] = settings.ModelName;
-        }
         if (!string.IsNullOrWhiteSpace(settings.ModelBaseUrl))
         {
             payload["model_base_url"] = settings.ModelBaseUrl;
@@ -247,7 +242,7 @@ public sealed class AgentApiClient
     private static JsonObject RuntimeSecrets(AppSettings settings)
     {
         var secrets = new JsonObject();
-        AddSecret(secrets, ModelApiKeyName(settings.ModelProvider), settings.ModelApiKey);
+        AddSecret(secrets, AppRuntimeDefaults.ModelApiKeyName(settings.ModelProvider), settings.ModelApiKey);
         AddSecret(secrets, "DEEPGRAM_API_KEY", settings.DeepgramApiKey);
         AddSecret(secrets, "ELEVENLABS_API_KEY", settings.ElevenLabsApiKey);
         AddSecret(secrets, "ELEVENLABS_VOICE_ID", settings.VoiceId);
@@ -313,19 +308,6 @@ public sealed class AgentApiClient
         {
             secrets[name.Trim()] = value;
         }
-    }
-
-    private static string ModelApiKeyName(string provider)
-    {
-        return provider switch
-        {
-            "openai" or "openai-responses" or "openai-chat" => "OPENAI_API_KEY",
-            "groq" => "GROQ_API_KEY",
-            "grok" => "XAI_API_KEY",
-            "ollama" => "OLLAMA_API_KEY",
-            "local-openai" => "LOCAL_LLM_API_KEY",
-            _ => "OPENAI_API_KEY",
-        };
     }
 
     private async Task<T?> GetAsync<T>(string route)
