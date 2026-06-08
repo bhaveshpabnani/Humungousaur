@@ -582,8 +582,7 @@ class CodexCliRunTool(Tool):
         if not task:
             return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "task is required.")
         cli = _codex_cli_status(probe_help=False)
-        if not cli["available"] or not cli.get("path"):
-            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Codex CLI was not found.", {"cli": cli})
+        dry_run = normalized.dry_run or bool(tool_input.get("dry_run", False))
         cwd = _resolve_cli_cwd(tool_input.get("working_directory"), normalized)
         if cwd is None:
             return ToolResult(
@@ -598,8 +597,25 @@ class CodexCliRunTool(Tool):
         output_schema = _resolve_optional_allowed_path(tool_input.get("output_schema_path"), normalized)
         if output_schema is False:
             return ToolResult(self.name, ActionStatus.BLOCKED, self.risk_level, "output_schema_path is outside allowed roots.")
+        if not cli["available"] or not cli.get("path"):
+            if not dry_run:
+                return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Codex CLI was not found.", {"cli": cli})
+            argv = _build_codex_exec_argv("codex", tool_input, task, output_last, output_schema)
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would delegate task through Codex CLI, but the CLI was not found on PATH.",
+                {
+                    "argv": argv,
+                    "cwd": str(cwd),
+                    "cli": cli,
+                    "task_length": len(task),
+                    "cli_unavailable": True,
+                    "safety_note": "Command is built as argv tokens, not a shell string. Install Codex CLI before live delegation.",
+                },
+            )
         argv = _build_codex_exec_argv(str(cli["path"]), tool_input, task, output_last, output_schema)
-        dry_run = normalized.dry_run or bool(tool_input.get("dry_run", False))
         if dry_run:
             return ToolResult(
                 self.name,

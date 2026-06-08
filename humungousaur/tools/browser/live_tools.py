@@ -111,13 +111,26 @@ class BrowserLiveObserveTool(Tool):
         )
 
     def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
-        del config
         live_session_id = str(tool_input.get("live_session_id", "")).strip()
         if not live_session_id:
             return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Live browser session id is required.")
         max_elements = max(1, min(int(tool_input.get("max_elements") or 50), 100))
+        include_text = bool(tool_input.get("include_text", False))
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would observe a live browser session.",
+                {
+                    "live_session_id": live_session_id,
+                    "include_text": include_text,
+                    "max_elements": max_elements,
+                    "observation_not_performed": True,
+                },
+            )
         try:
-            output = LIVE_BROWSER_MANAGER.observe(live_session_id, include_text=bool(tool_input.get("include_text", False)), max_elements=max_elements)
+            output = LIVE_BROWSER_MANAGER.observe(live_session_id, include_text=include_text, max_elements=max_elements)
         except Exception as exc:
             return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Live browser observation failed.", error=str(exc))
         return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Observed live browser session {live_session_id}.", output)
@@ -142,14 +155,28 @@ class BrowserLiveClickTool(Tool):
         )
 
     def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
-        del config
         live_session_id = str(tool_input.get("live_session_id", "")).strip()
         element_id = str(tool_input.get("element_id", "")).strip()
+        reason = str(tool_input.get("reason", "")).strip()
+        if not live_session_id or not element_id or not reason:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "live_session_id, element_id, and reason are required.")
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would click an observed live browser element.",
+                {
+                    "live_session_id": live_session_id,
+                    "clicked_element": {"element_id": element_id, "reason": reason},
+                    "click_not_performed": True,
+                },
+            )
         try:
             output = LIVE_BROWSER_MANAGER.click(live_session_id, element_id)
         except Exception as exc:
             return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Live browser click failed.", error=str(exc))
-        output["clicked_element"] = {"element_id": element_id, "reason": str(tool_input.get("reason", "")).strip()}
+        output["clicked_element"] = {"element_id": element_id, "reason": reason}
         return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Clicked {element_id} in live browser session {live_session_id}.", output)
 
 
@@ -175,25 +202,47 @@ class BrowserLiveTypeTool(Tool):
         )
 
     def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
-        del config
         live_session_id = str(tool_input.get("live_session_id", "")).strip()
         element_id = str(tool_input.get("element_id", "")).strip()
         text = str(tool_input.get("text", ""))
+        clear = bool(tool_input.get("clear", True))
+        press_enter = bool(tool_input.get("press_enter", False))
+        reason = str(tool_input.get("reason", "")).strip()
+        if not live_session_id or not element_id or not text or not reason:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "live_session_id, element_id, text, and reason are required.")
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would type into an observed live browser element.",
+                {
+                    "live_session_id": live_session_id,
+                    "typed_element": {
+                        "element_id": element_id,
+                        "text_length": len(text),
+                        "clear": clear,
+                        "pressed_enter": press_enter,
+                        "reason": reason,
+                    },
+                    "typing_not_performed": True,
+                },
+            )
         try:
             output = LIVE_BROWSER_MANAGER.type_text(
                 live_session_id,
                 element_id,
                 text=text,
-                clear=bool(tool_input.get("clear", True)),
-                press_enter=bool(tool_input.get("press_enter", False)),
+                clear=clear,
+                press_enter=press_enter,
             )
         except Exception as exc:
             return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Live browser typing failed.", error=str(exc))
         output["typed_element"] = {
             "element_id": element_id,
             "text_length": len(text),
-            "pressed_enter": bool(tool_input.get("press_enter", False)),
-            "reason": str(tool_input.get("reason", "")).strip(),
+            "pressed_enter": press_enter,
+            "reason": reason,
         }
         return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Typed into {element_id} in live browser session {live_session_id}.", output)
 
@@ -216,10 +265,25 @@ class BrowserLiveScrollTool(Tool):
         )
 
     def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
-        del config
         live_session_id = str(tool_input.get("live_session_id", "")).strip()
         direction = str(tool_input.get("direction", "down")).strip().lower()
+        if not live_session_id:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Live browser session id is required.")
+        if direction not in {"up", "down", "left", "right"}:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Unsupported scroll direction.")
         amount = max(1, min(int(tool_input.get("amount") or 3), 10))
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would scroll a live browser page.",
+                {
+                    "live_session_id": live_session_id,
+                    "scroll": {"direction": direction, "amount": amount},
+                    "scroll_not_performed": True,
+                },
+            )
         try:
             output = LIVE_BROWSER_MANAGER.scroll(live_session_id, direction=direction, amount=amount)
         except Exception as exc:
@@ -294,8 +358,17 @@ class BrowserLiveTabsTool(Tool):
         )
 
     def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
-        del config
         live_session_id = str(tool_input.get("live_session_id", "")).strip()
+        if not live_session_id:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Live browser session id is required.")
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would list live browser tabs.",
+                {"live_session_id": live_session_id, "tabs_not_read": True},
+            )
         try:
             output = LIVE_BROWSER_MANAGER.tabs(live_session_id)
         except Exception as exc:
@@ -912,8 +985,18 @@ class BrowserLiveCloseTool(Tool):
         )
 
     def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
-        del config
         live_session_id = str(tool_input.get("live_session_id", "")).strip()
+        reason = str(tool_input.get("reason", "")).strip()
+        if not live_session_id:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Live browser session id is required.")
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would close a live browser session.",
+                {"live_session_id": live_session_id, "reason": reason, "browser_not_closed": True},
+            )
         try:
             output = LIVE_BROWSER_MANAGER.close(live_session_id)
         except Exception as exc:

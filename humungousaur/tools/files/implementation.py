@@ -472,6 +472,19 @@ class ReadPDFTool(Tool):
             return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Path is not a PDF file.")
         if path.stat().st_size > config.max_file_bytes:
             return ToolResult(self.name, ActionStatus.BLOCKED, self.risk_level, "PDF exceeds configured read limit.")
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would extract text from PDF.",
+                {
+                    "path": _relative(path, config),
+                    "max_pages": int(tool_input.get("max_pages") or PDF_MAX_PAGES),
+                    "max_chars": int(tool_input.get("max_chars") or PDF_TEXT_LIMIT_CHARS),
+                    "pdf_not_read": True,
+                },
+            )
         extracted = _extract_pdf_text(
             path,
             max_pages=int(tool_input.get("max_pages") or PDF_MAX_PAGES),
@@ -509,6 +522,19 @@ class SummarizePDFsTool(Tool):
         if not root.exists():
             return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, f"PDF path does not exist: {root}")
         files = _iter_pdf_files(root, config)[: config.max_search_results]
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                f"Dry run: would summarize {len(files)} PDF files.",
+                {
+                    "path": _relative(root, config),
+                    "file_count": len(files),
+                    "files": [_relative(path, config) for path in files],
+                    "pdfs_not_read": True,
+                },
+            )
         summaries: list[dict[str, Any]] = []
         errors: list[dict[str, str]] = []
         for path in files:
@@ -561,10 +587,6 @@ class MergePDFsTool(Tool):
         )
 
     def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
-        try:
-            from pypdf import PdfReader, PdfWriter
-        except Exception as exc:
-            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "pypdf is required for native PDF merge.", error=str(exc))
         normalized = config.normalized()
         raw_paths = tool_input.get("paths", [])
         if not isinstance(raw_paths, list) or len(raw_paths) < 2:
@@ -586,6 +608,10 @@ class MergePDFsTool(Tool):
                 f"Dry run: would merge {len(paths)} PDFs.",
                 {"path": str(output_path), "input_paths": [_relative(path, normalized) for path in paths]},
             )
+        try:
+            from pypdf import PdfReader, PdfWriter
+        except Exception as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "pypdf is required for native PDF merge.", error=str(exc))
         writer = PdfWriter()
         page_counts = []
         try:
@@ -628,10 +654,6 @@ class ExtractPDFPagesTool(Tool):
         )
 
     def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
-        try:
-            from pypdf import PdfReader, PdfWriter
-        except Exception as exc:
-            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "pypdf is required for native PDF page extraction.", error=str(exc))
         normalized = config.normalized()
         try:
             source = _resolve_pdf_read_file(normalized, str(tool_input.get("path") or ""))
@@ -650,6 +672,10 @@ class ExtractPDFPagesTool(Tool):
                 "Dry run: would extract PDF pages.",
                 {"path": str(output_path), "source_path": _relative(source, normalized), "start_page": start_page, "end_page": end_page},
             )
+        try:
+            from pypdf import PdfReader, PdfWriter
+        except Exception as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "pypdf is required for native PDF page extraction.", error=str(exc))
         try:
             reader = PdfReader(str(source))
             indices = _page_indices(start_page, end_page, len(reader.pages))

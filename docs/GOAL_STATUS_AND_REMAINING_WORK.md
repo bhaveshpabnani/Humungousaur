@@ -17,11 +17,11 @@ The core standard for this goal is:
 ## Current Repository Status
 
 - Branch: `main`.
-- Last fully pushed capability commit before this slice: `0869eff Add per-skill task smoke coverage`.
-- Latest documented full skill smoke: `500` sections, `0` failures.
+- Last fully pushed capability commit before this slice: `e036e75 Expand foundational skill smoke coverage`.
+- Latest documented full skill smoke: `556` sections, `0` failures.
 - Latest documented full regression: `393 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
 - Latest per-skill audit matrix: `132` skills audited, `132` native-capable or script-backed, `0` thin-tool-map skills needing deeper detail, `0` prompt-only, `0` unresolved Tool Map entries, `0` attention items.
-- Latest per-skill task-smoke coverage: `132` skills covered, `132` direct task-smoked, `0` composition-smoked, `0` pending task-smoke skills, `177` native tools seen in smoke evidence, `72` skills with mapped native tools still pending narrower smoke.
+- Latest per-skill task-smoke coverage: `132` skills covered, `132` direct task-smoked, `0` composition-smoked, `0` pending task-smoke skills, `221` native tools seen in smoke evidence, `0` skills with mapped native tools still pending narrower smoke.
 - Current tool-domain folders observed: `33`.
 - Current skills observed: more than `130`.
 - Current working tree note: per-skill task-smoke coverage and direct task scenarios have been added in this slice; final commit/push status should be checked with `git status` and `git log`.
@@ -69,6 +69,7 @@ These areas have native implementation, skill wiring, smoke/regression coverage,
 | Cognition and memory | Done as native surfaces | Memory, persona, reflection, self-assessment, automations, autonomous loop, and multi-agent coordination surfaces exist. |
 | Per-skill task-smoke coverage | Done in current slice | Full skill smoke now emits Markdown/JSON coverage artifacts, records exact native tool evidence, directly task-smokes all 132 skills, and reports 0 skills without task-smoke evidence. |
 | Foundational native-tool smoke | Done in current slice | Safe/dry-run smokes now cover file/search/shell/code catalogs, memory, activity, conversation, email, cognition review, skill forge, and canvas tools, raising native tools seen in evidence from 148 to 177 and reducing skills with pending mapped tools from 116 to 72. |
+| Complete mapped-tool smoke closure | Done in current slice | Direct safe/dry-run evidence now covers the remaining mapped live-browser, channel, voice, Codex CLI, Lobster, OS element/clipboard, plugin, browser extraction, Python artifact, taskflow cognition, persona/briefing/curation, and PDF optional-dependency boundaries, raising native tools seen in evidence to 221 and reducing mapped pending native tools to 0. |
 
 ## Implemented But Still Needs Deeper Live Validation
 
@@ -88,11 +89,12 @@ These areas have code and skills, but they are not yet finished as daily-use, li
 
 ## Still To Do
 
-### 1. Expand Narrow Per-Tool And Live Skill Smoke
+### 1. Keep Mapped-Tool Smoke Green And Add Live Skill Smoke
 
 - The generated per-skill audit matrix now reports `0` thin-tool-map skills and `0` attention items.
 - The generated per-skill task-smoke coverage now reports `0` pending task-smoke skills.
-- Add narrower smoke for mapped native tools that are still pending inside otherwise task-smoked skills.
+- The generated per-skill task-smoke coverage now reports `0` skills with mapped native tools still pending narrower smoke.
+- Keep this evidence green as skills evolve.
 - Flag and live-test credentialed/provider-backed skills that still only have local, dry-run, or prepare/approve evidence.
 
 ### 2. Complete Desktop App End-To-End Validation
@@ -202,7 +204,7 @@ For each channel:
 
 ## Suggested Next Order
 
-1. Expand live/credentialed smoke for the highest-value skills now that representative per-skill task smoke is complete.
+1. Expand live/credentialed smoke for the highest-value skills now that representative per-skill and mapped-tool smoke is complete.
 2. Complete the desktop app settings/runtime surface.
 3. Run the full voice-to-agent-to-voice Windows smoke.
 4. Live-test the top channels.

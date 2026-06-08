@@ -27,6 +27,7 @@ from humungousaur.tools.skill_tools import (
     AgentSkillScriptReadTool,
     AgentSkillScriptRunTool,
 )
+from humungousaur.tools.os_control.implementation import save_ui_observation
 
 
 def main() -> int:
@@ -139,6 +140,12 @@ def main() -> int:
                 "json": script_run.output.get("json"),
                 "stderr": script_run.output.get("stderr", "")[-500:],
             },
+        )
+        record(
+            "skills",
+            f"agent_skill_script_run:{script['name']}",
+            script_run.status == ActionStatus.SUCCEEDED,
+            _tool_payload(script_run),
         )
 
     _smoke_productivity(record, tools, config)
@@ -304,10 +311,31 @@ def _smoke_productivity(record, tools: dict[str, Any], config: AgentConfig) -> N
 def _smoke_pdf(record, tools: dict[str, Any], config: AgentConfig) -> None:
     ocr = tools["ocr_provider_status"].execute({}, config)
     record("pdf", "ocr_provider_status", _ok(ocr) and ocr.output.get("cloud_ocr_used") is False, _tool_payload(ocr))
-    if not _pdf_dependencies_available():
-        record("pdf", "pdf_dependencies_available", True, {"status": "skipped_optional_dependency_missing", "missing": ["pypdf", "reportlab"], "reason": "Native PDF merge/extract smoke needs the pdf optional dependency group."})
-        return
     fixtures = config.data_dir / "script-fixtures"
+    if not _pdf_dependencies_available():
+        dry_config = _dry_config(config)
+        first = fixtures / "pdf-first.pdf"
+        second = fixtures / "pdf-second.pdf"
+        first.write_bytes(b"%PDF-1.4\n% Humungousaur dry-run placeholder 1\n")
+        second.write_bytes(b"%PDF-1.4\n% Humungousaur dry-run placeholder 2\n")
+        listed = tools["list_pdfs"].execute({"path": str(fixtures)}, config)
+        read = tools["read_pdf"].execute({"path": str(first), "max_pages": 1}, dry_config)
+        summarized = tools["summarize_pdfs"].execute({"path": str(fixtures), "max_pages": 1}, dry_config)
+        merged = tools["pdf_merge"].execute(
+            {"paths": [str(first), str(second)], "filename": "skill-smoke-merged.pdf", "reason": "Dry-run native PDF merge boundary."},
+            dry_config,
+        )
+        extracted = tools["pdf_extract_pages"].execute(
+            {"path": str(first), "start_page": 1, "end_page": 1, "filename": "skill-smoke-extracted.pdf", "reason": "Dry-run native PDF extract boundary."},
+            dry_config,
+        )
+        record("pdf", "pdf_dependencies_available", True, {"status": "skipped_optional_dependency_missing", "missing": ["pypdf", "reportlab"], "reason": "Native PDF merge/extract smoke needs the pdf optional dependency group."})
+        record("pdf", "list_pdfs", _ok(listed) and len(listed.output.get("files", [])) >= 2, _tool_payload(listed))
+        record("pdf", "read_pdf", read.status == ActionStatus.SKIPPED and read.output.get("pdf_not_read") is True, _tool_payload(read))
+        record("pdf", "summarize_pdfs", summarized.status == ActionStatus.SKIPPED and summarized.output.get("pdfs_not_read") is True, _tool_payload(summarized))
+        record("pdf", "pdf_merge", merged.status == ActionStatus.SKIPPED, _tool_payload(merged))
+        record("pdf", "pdf_extract_pages", extracted.status == ActionStatus.SKIPPED, _tool_payload(extracted))
+        return
     first = fixtures / "pdf-first.pdf"
     second = fixtures / "pdf-second.pdf"
     _write_pdf_fixture(first, "First PDF skill smoke page.")
@@ -331,9 +359,13 @@ def _smoke_pdf(record, tools: dict[str, Any], config: AgentConfig) -> None:
         config,
     ) if _ok(merged) else merged
     read = tools["read_pdf"].execute({"path": extracted.output.get("path", ""), "max_pages": 1}, config) if _ok(extracted) else extracted
+    summarized = tools["summarize_pdfs"].execute({"path": str(fixtures), "max_pages": 1}, config) if _ok(read) else read
+    listed = tools["list_pdfs"].execute({"path": str(fixtures)}, config) if _ok(read) else read
     record("pdf", "pdf_merge", _ok(merged) and merged.output.get("input_count") == 2, _tool_payload(merged))
     record("pdf", "pdf_extract_pages", _ok(extracted) and extracted.output.get("page_count") == 1, _tool_payload(extracted))
-    record("pdf", "read_extracted_pdf", _ok(read) and "Second PDF skill smoke page" in read.output.get("text", ""), _tool_payload(read))
+    record("pdf", "read_pdf", _ok(read) and "Second PDF skill smoke page" in read.output.get("text", ""), _tool_payload(read))
+    record("pdf", "summarize_pdfs", _ok(summarized) and len(summarized.output.get("summaries", [])) >= 2, _tool_payload(summarized))
+    record("pdf", "list_pdfs", _ok(listed) and len(listed.output.get("files", [])) >= 2, _tool_payload(listed))
 
 
 def _smoke_office(record, tools: dict[str, Any], config: AgentConfig) -> None:
@@ -1148,6 +1180,9 @@ def _prepare_script_fixtures(config: AgentConfig) -> None:
     (fixtures / "sales.csv").write_text("month,revenue,cost\nJan,100,40\nFeb,125,50\nMar,150,\n", encoding="utf-8")
     (fixtures / "note-a.md").write_text("# Note A\n\nLinks to [[Note B]] and [web](https://example.com).\n", encoding="utf-8")
     (fixtures / "note-b.md").write_text("# Note B\n\nBacklink target.\n", encoding="utf-8")
+    (fixtures / "sample.wav").write_bytes(
+        b"RIFF$\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00@\x1f\x00\x00@\x1f\x00\x00\x01\x00\x08\x00data\x00\x00\x00\x00"
+    )
 
 
 def _pdf_dependencies_available() -> bool:
@@ -1183,6 +1218,7 @@ def _script_smoke_input(name: str, config: AgentConfig) -> dict[str, Any]:
 
 
 def _smoke_channels(record, tools: dict[str, Any], config: AgentConfig) -> None:
+    dry_config = _dry_config(config)
     for channel_id in ("slack", "whatsapp", "telegram", "discord"):
         manifest = tools["channel_manifest"].execute({"channel_id": channel_id}, config)
         doctor = tools["channel_doctor"].execute({"channel_id": channel_id}, config)
@@ -1220,6 +1256,16 @@ def _smoke_channels(record, tools: dict[str, Any], config: AgentConfig) -> None:
             },
             config,
         )
+        dry_send = tools["channel_message_send"].execute(
+            {
+                "channel_id": channel_id,
+                "conversation_id": _channel_defaults(channel_id)["conversation_id"],
+                "text": _channel_smoke_text(channel_id),
+                "metadata": _channel_prepare_metadata(channel_id),
+                "reason": f"Dry-run approval boundary for {channel_id} channel send.",
+            },
+            dry_config,
+        )
         action = tools["channel_action_prepare"].execute(_channel_action_input(channel_id), config)
         webhook = tools["channel_webhook_ingest"].execute(
             {
@@ -1229,6 +1275,10 @@ def _smoke_channels(record, tools: dict[str, Any], config: AgentConfig) -> None:
                 "reason": f"Normalize and process a representative {channel_id} inbound event.",
             },
             config,
+        )
+        listener_tick = tools["channel_listener_tick"].execute(
+            {"channel_id": channel_id, "limit": 1, "prepare_replies": False, "reason": f"Dry-run {channel_id} listener tick."},
+            dry_config,
         )
         outbox = tools["channel_outbox"].execute({"limit": 20}, config)
         record("channels", f"{channel_id}_manifest", _ok(manifest), _tool_payload(manifest))
@@ -1255,6 +1305,12 @@ def _smoke_channels(record, tools: dict[str, Any], config: AgentConfig) -> None:
         )
         record(
             "channels",
+            f"{channel_id}_message_send_dry_run",
+            dry_send.status == ActionStatus.SKIPPED and dry_send.output.get("message", {}).get("status") == "dry_run_not_sent",
+            _tool_payload(dry_send),
+        )
+        record(
+            "channels",
             f"{channel_id}_action_prepare",
             _ok(action) and action.output["action"]["status"] == "prepared_not_sent",
             _tool_payload(action),
@@ -1264,6 +1320,12 @@ def _smoke_channels(record, tools: dict[str, Any], config: AgentConfig) -> None:
             f"{channel_id}_webhook_ingest",
             _ok(webhook) and webhook.output.get("message_count", 0) == 1,
             _tool_payload(webhook),
+        )
+        record(
+            "channels",
+            f"{channel_id}_listener_tick",
+            listener_tick.status == ActionStatus.SKIPPED,
+            _tool_payload(listener_tick),
         )
         record(
             "channels",
@@ -1412,18 +1474,25 @@ def _rss_smoke_feed() -> str:
 
 
 def _smoke_core_surfaces(record, tools: dict[str, Any], config: AgentConfig) -> None:
+    dry_config = _dry_config(config)
+    sample_audio = config.data_dir / "script-fixtures" / "sample.wav"
     scenarios = [
         ("files", "write_note", {"title": "skill smoke note", "content": "Skill smoke note."}),
         ("memory", "memory_write", {"text": "Skill smoke memory.", "kind": "observation", "source": "skill_smoke"}),
         ("system", "system_status", {}),
         ("voice", "voice_provider_status", {}),
+        ("voice", "voice_transcribe", {"audio_path": str(sample_audio), "reason": "Dry-run STT boundary for skill smoke."}),
+        ("voice", "voice_speak", {"text": "Humungousaur voice speak skill smoke.", "reason": "Dry-run TTS playback boundary for skill smoke."}),
         ("browser", "web_search", {"query": "Humungousaur local assistant", "limit": 1}),
         ("workflow", "diff_render", {"left_text": "old\n", "right_text": "new\n"}),
         ("workflow", "tokenjuice_compact", {"text": "\n".join(f"line {i}" for i in range(100)), "max_chars": 500}),
         ("capabilities", "capability_surface", {"include_tools": True, "include_plugins": True, "include_channels": True, "include_skills": True}),
+        ("plugins", "plugin_manifests", {"include_errors": True}),
+        ("plugins", "plugin_setup_plan", {"plugin_id": "channels.slack"}),
     ]
     for section, tool_name, payload in scenarios:
-        result = tools[tool_name].execute(payload, config)
+        execution_config = dry_config if tool_name in {"voice_transcribe", "voice_speak"} else config
+        result = tools[tool_name].execute(payload, execution_config)
         record(section, tool_name, result.status in {ActionStatus.SUCCEEDED, ActionStatus.SKIPPED}, _tool_payload(result))
 
 
@@ -1442,6 +1511,26 @@ def _smoke_foundational_native_tools(record, tools: dict[str, Any], config: Agen
         config,
     )
     canvas_render = tools["canvas_a2ui_render"].execute({"canvas": canvas.output.get("canvas", {})}, config) if _ok(canvas) else canvas
+    python_run = tools["python_interpreter"].execute(
+        {
+            "code": "from pathlib import Path\nimport os\nPath(os.environ['UMANG_RUN_DIR'], 'artifact.txt').write_text('humungousaur artifact smoke', encoding='utf-8')\nprint('humungousaur skill smoke interpreter run')",
+            "timeout_seconds": 5,
+            "sandbox_profile": "read_only",
+            "import_mode": "stdlib",
+            "reason": "Create a bounded interpreter manifest for readback smoke.",
+        },
+        config,
+    )
+    python_run_readback = (
+        tools["python_interpreter_run"].execute({"run_id": python_run.output.get("run_id", "")}, config)
+        if _ok(python_run)
+        else python_run
+    )
+    python_artifact = (
+        tools["python_interpreter_artifact"].execute({"run_id": python_run.output.get("run_id", ""), "filename": "artifact.txt", "max_chars": 200}, config)
+        if _ok(python_run)
+        else python_run
+    )
     foundational_scenarios = [
         ("foundational", "list_files", {"path": "."}, config),
         ("foundational", "read_file", {"path": "docs/SKILL_CAPABILITY_GOAL_PROGRESS.md"}, config),
@@ -1536,9 +1625,35 @@ def _smoke_foundational_native_tools(record, tools: dict[str, Any], config: Agen
             dry_config,
         ),
         ("foundational", "skill_forge_packs", {"limit": 10}, config),
+        (
+            "workflow",
+            "lobster_workflow_start",
+            {
+                "name": "Skill smoke typed workflow",
+                "objective": "Verify resumable workflow creation boundary.",
+                "steps": [{"type": "approval", "title": "Approve synthetic checkpoint"}],
+                "run_until_blocked": True,
+            },
+            dry_config,
+        ),
+        (
+            "workflow",
+            "lobster_workflow_approve",
+            {
+                "workflow_id": "workflow-skill-smoke",
+                "approval_token": "approval-token-skill-smoke",
+                "decision": "approve",
+                "note": "Skill smoke dry-run approval.",
+                "run_until_blocked": False,
+            },
+            dry_config,
+        ),
     ]
     record("foundational", "canvas_a2ui_create", _ok(canvas), _tool_payload(canvas))
     record("foundational", "canvas_a2ui_render", _ok(canvas_render), _tool_payload(canvas_render))
+    record("foundational", "python_interpreter_manifest_run", _ok(python_run), _tool_payload(python_run))
+    record("foundational", "python_interpreter_run", _ok(python_run_readback), _tool_payload(python_run_readback))
+    record("foundational", "python_interpreter_artifact", _ok(python_artifact) and "humungousaur artifact smoke" in python_artifact.output.get("content", ""), _tool_payload(python_artifact))
     for section, tool_name, payload, execution_config in foundational_scenarios:
         result = tools[tool_name].execute(payload, execution_config)
         record(section, tool_name, result.status in {ActionStatus.SUCCEEDED, ActionStatus.SKIPPED}, _tool_payload(result))
@@ -1563,6 +1678,20 @@ def _smoke_skill_task_surfaces(record, tools: dict[str, Any], config: AgentConfi
                 "working_directory": ".",
                 "preferred_sandbox": "read-only",
                 "max_timeout_seconds": 60,
+            },
+        ),
+        ("codex_delegation", "codex_cli_status", {"probe_help": False}),
+        (
+            "codex_delegation",
+            "codex_cli_run",
+            {
+                "task": "Inspect the repository and report the configured smoke command without editing files.",
+                "working_directory": ".",
+                "sandbox": "read-only",
+                "approval_policy": "never",
+                "json_output": True,
+                "dry_run": True,
+                "timeout_seconds": 30,
             },
         ),
         (
@@ -1598,13 +1727,29 @@ def _smoke_skill_task_surfaces(record, tools: dict[str, Any], config: AgentConfi
         ("external_cli_companions", "external_integrations_status", {"probe_screenpipe": False}),
     ]
     for section, tool_name, payload in scenarios:
-        execution_config = dry_config if tool_name in {"codex_cli_plan"} else config
+        execution_config = dry_config if tool_name in {"codex_cli_plan", "codex_cli_run"} else config
         result = tools[tool_name].execute(payload, execution_config)
         record(section, tool_name, result.status in {ActionStatus.SUCCEEDED, ActionStatus.SKIPPED}, _tool_payload(result))
 
 
 def _smoke_desktop_autonomy_and_forms(record, tools: dict[str, Any], config: AgentConfig) -> None:
     dry_config = _dry_config(config)
+    ui_observation = save_ui_observation(
+        config,
+        {
+            "source": "skill_smoke_fixture",
+            "active_window": {"title": "Humungousaur Skill Smoke", "process": "Humungousaur"},
+            "elements": [
+                {
+                    "element_id": "uia:0",
+                    "name": "Skill smoke input",
+                    "control_type": "Edit",
+                    "bounds": {"left": 10, "top": 10, "width": 240, "height": 32},
+                }
+            ],
+        },
+    )
+    ui_observation_id = str(ui_observation.get("observation_id", ""))
     desktop_scenarios = [
         ("desktop", "active_window", {}, config),
         ("desktop", "os_windows", {"limit": 10}, config),
@@ -1615,6 +1760,16 @@ def _smoke_desktop_autonomy_and_forms(record, tools: dict[str, Any], config: Age
         ("desktop", "os_launch_app", {"app": "notepad", "reason": "Skill smoke dry-run; do not launch an app."}, dry_config),
         ("desktop", "open_app", {"app_id": "notepad"}, dry_config),
         ("desktop", "os_observe_ui", {"max_elements": 5, "reason": "Skill smoke dry-run; do not read UI."}, dry_config),
+        ("desktop", "os_click_element", {"observation_id": ui_observation_id, "element_id": "uia:0", "reason": "Skill smoke dry-run; do not click UI."}, dry_config),
+        ("desktop", "os_scroll_element", {"observation_id": ui_observation_id, "element_id": "uia:0", "direction": "down", "reason": "Skill smoke dry-run; do not scroll UI."}, dry_config),
+        (
+            "desktop",
+            "os_type_text",
+            {"observation_id": ui_observation_id, "element_id": "uia:0", "text": "Skill smoke", "clear": True, "reason": "Skill smoke dry-run; do not type UI."},
+            dry_config,
+        ),
+        ("desktop", "os_clipboard_read", {"max_chars": 200, "reason": "Skill smoke dry-run; do not read clipboard."}, dry_config),
+        ("desktop", "os_clipboard_write", {"text": "Humungousaur skill smoke clipboard", "reason": "Skill smoke dry-run; do not write clipboard."}, dry_config),
         ("desktop", "os_send_keys", {"shortcut": "Ctrl+Shift+S", "reason": "Skill smoke dry-run; do not send keys."}, dry_config),
         ("desktop", "os_click_coordinates", {"x": 1, "y": 1, "reason": "Skill smoke dry-run; do not click coordinates."}, dry_config),
         ("desktop", "screenshot_capture", {"reason": "Skill smoke dry-run; do not capture screen contents."}, dry_config),
@@ -1638,11 +1793,20 @@ def _smoke_desktop_autonomy_and_forms(record, tools: dict[str, Any], config: Age
         ("autonomy", "automation_daemon_status", {"limit": 10}, config),
         ("autonomy", "automation_daemon_configure", {"enabled": True, "poll_seconds": 30, "allow_initiative": False, "note": "Skill smoke dry-run."}, dry_config),
         ("autonomy", "automation_daemon_tick", {"max_cycles_per_tick": 1, "allow_initiative": False, "approve_high_risk": False}, dry_config),
+        ("autonomy", "autonomous_cycle_run", {"max_cycles": 1, "allow_initiative": False, "approve_inner_high_risk": False}, dry_config),
         ("autonomy", "cognitive_state", {"limit": 5}, config),
+        ("autonomy", "cognitive_briefing_prepare", {"purpose": "skill_smoke", "horizon_hours": 24, "limit": 5}, dry_config),
         ("autonomy", "cognitive_priority_review", {"purpose": "skill_smoke", "limit": 5}, dry_config),
         ("autonomy", "cognitive_priority_status", {"limit": 5}, config),
+        ("autonomy", "cognitive_self_review_status", {"limit": 5}, config),
+        ("autonomy", "cognitive_interaction_review_status", {"limit": 5}, config),
+        ("autonomy", "cognitive_curation_status", {"limit": 5}, config),
+        ("autonomy", "cognitive_persona_evolve", {"purpose": "skill_smoke", "limit": 5}, dry_config),
+        ("autonomy", "cognitive_persona_evolution_status", {"limit": 5}, config),
         ("autonomy", "cognitive_environment_status", {"limit": 5}, config),
         ("autonomy", "cognitive_commitment_status", {"limit": 5}, config),
+        ("autonomy", "cognitive_goal_create", {"title": "Skill smoke goal", "success_criteria": ["Coverage evidence exists"]}, dry_config),
+        ("autonomy", "cognitive_wakeup_schedule", {"delay_seconds": 60, "text": "Skill smoke wakeup.", "source": "skill_smoke", "reason": "Skill smoke dry-run."}, dry_config),
         (
             "autonomy",
             "cognitive_trigger_record",
@@ -1681,7 +1845,11 @@ def _smoke_web_form_task(record, tools: dict[str, Any], config: AgentConfig, dry
         base_url = f"http://127.0.0.1:{port}/form"
         opened = tools["browser_open"].execute({"url": base_url}, config)
         session_id = opened.output.get("session_id", "") if _ok(opened) else ""
+        fetched = tools["fetch_webpage"].execute({"url": base_url, "max_chars": 1000}, config)
+        researched = tools["research_webpages"].execute({"urls": [base_url], "query": "Skill smoke form"}, config)
         observed = tools["browser_observe"].execute({"session_id": session_id}, config) if session_id else opened
+        extracted = tools["browser_extract"].execute({"session_id": session_id, "query": "Skill Smoke Form", "max_snippets": 5}, config) if session_id else opened
+        found_text = tools["browser_find_text"].execute({"session_id": session_id, "text": "Skill Smoke Form", "max_matches": 5}, config) if session_id else opened
         typed = tools["browser_type"].execute({"session_id": session_id, "element_id": "form:0:field:name", "text": "Humungousaur", "clear": True}, config) if session_id else opened
         filled = (
             tools["browser_fill_form"].execute({"session_id": session_id, "form_index": 0, "values": {"name": "Humungousaur", "message": "Skill smoke form draft."}}, config)
@@ -1695,14 +1863,31 @@ def _smoke_web_form_task(record, tools: dict[str, Any], config: AgentConfig, dry
         thread.join(timeout=5)
     browser_live_scenarios = [
         ("web_forms", "browser_live_open", {"url": "http://127.0.0.1:1/form", "headless": True}, dry_config),
+        ("web_forms", "browser_live_observe", {"live_session_id": "live-skill-smoke", "include_text": False, "max_elements": 10}, dry_config),
+        ("web_forms", "browser_live_tabs", {"live_session_id": "live-skill-smoke"}, dry_config),
+        ("web_forms", "browser_live_search", {"live_session_id": "live-skill-smoke", "query": "Humungousaur skill smoke", "engine": "duckduckgo"}, dry_config),
+        ("web_forms", "browser_live_click", {"live_session_id": "live-skill-smoke", "element_id": "live:0", "reason": "Skill smoke dry-run."}, dry_config),
+        (
+            "web_forms",
+            "browser_live_type",
+            {"live_session_id": "live-skill-smoke", "element_id": "live:input", "text": "Skill smoke", "clear": True, "press_enter": False, "reason": "Skill smoke dry-run."},
+            dry_config,
+        ),
+        ("web_forms", "browser_live_scroll", {"live_session_id": "live-skill-smoke", "direction": "down", "amount": 1}, dry_config),
         ("web_forms", "browser_live_wait", {"live_session_id": "live-skill-smoke", "mode": "timeout", "timeout_ms": 100}, dry_config),
         ("web_forms", "browser_live_query_selector", {"live_session_id": "live-skill-smoke", "selector": "form"}, dry_config),
         ("web_forms", "browser_live_select_option", {"live_session_id": "live-skill-smoke", "element_id": "live:select", "values": ["option"], "reason": "Skill smoke dry-run."}, dry_config),
         ("web_forms", "browser_live_press_key", {"live_session_id": "live-skill-smoke", "shortcut": "Enter", "reason": "Skill smoke dry-run."}, dry_config),
         ("web_forms", "browser_live_screenshot", {"live_session_id": "live-skill-smoke", "reason": "Skill smoke dry-run."}, dry_config),
+        ("web_forms", "browser_live_save_pdf", {"live_session_id": "live-skill-smoke", "filename": "skill-smoke-live.pdf", "reason": "Skill smoke dry-run."}, dry_config),
+        ("web_forms", "browser_live_close", {"live_session_id": "live-skill-smoke", "reason": "Skill smoke dry-run."}, dry_config),
     ]
     record("web_forms", "browser_open", _ok(opened), _tool_payload(opened))
+    record("web_forms", "fetch_webpage", _ok(fetched) and "Skill Smoke Form" in fetched.output.get("text", ""), _tool_payload(fetched))
+    record("web_forms", "research_webpages", _ok(researched) and researched.output.get("summaries"), _tool_payload(researched))
     record("web_forms", "browser_observe", _ok(observed) and any(item.get("element_id") == "form:0" for item in observed.output.get("interactive_elements", [])), _tool_payload(observed))
+    record("web_forms", "browser_extract", _ok(extracted) and extracted.output.get("snippets"), _tool_payload(extracted))
+    record("web_forms", "browser_find_text", _ok(found_text) and found_text.output.get("matches"), _tool_payload(found_text))
     record("web_forms", "browser_type", _ok(typed), _tool_payload(typed))
     record("web_forms", "browser_fill_form", _ok(filled), _tool_payload(filled))
     record("web_forms", "browser_submit_form", _ok(submitted) and submitted.output.get("title") == "Submitted", _tool_payload(submitted))

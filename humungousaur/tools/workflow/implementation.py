@@ -323,14 +323,30 @@ class LobsterWorkflowApproveTool(Tool):
 
     def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
         workflow_id = str(tool_input.get("workflow_id", "")).strip()
+        token = str(tool_input.get("approval_token", "")).strip()
+        decision = str(tool_input.get("decision", "")).strip()
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would apply a Lobster workflow approval decision.",
+                {
+                    "workflow_id": workflow_id,
+                    "approval_token_present": bool(token),
+                    "decision": decision,
+                    "note": str(tool_input.get("note", "")).strip(),
+                    "run_until_blocked": bool(tool_input.get("run_until_blocked", True)),
+                    "approval_not_applied": True,
+                },
+            )
         workflow = _load_workflow(config, workflow_id)
         if workflow is None:
             return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, f"Unknown workflow_id: {workflow_id}.")
-        token = str(tool_input.get("approval_token", "")).strip()
         step = _workflow_step_by_token(workflow, token)
         if step is None:
             return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Approval token is not pending for this workflow.")
-        if str(tool_input.get("decision")) == "reject":
+        if decision == "reject":
             step["status"] = "rejected"
             step["approval_note"] = str(tool_input.get("note", "")).strip()
             workflow["status"] = "rejected"
