@@ -30,6 +30,16 @@ Use this skill when Discord setup, guild channels, DMs, threads, forum threads, 
 5. Save non-secret setup refs with `channel_setup_save`.
 6. Run `channel_doctor` for `discord`.
 
+## Workflow
+
+1. Use `channel_setup_requirements` to inspect Discord token, conversation ID, delivery, and bot-loop policy requirements.
+2. Save enabled state, channel/thread/DM defaults, allowlists, group allowlists, and secret references with `channel_setup_save`.
+3. Run `channel_setup_status`, `channel_doctor`, and `channel_listener_status`.
+4. Use `channel_integration_smoke` for prepared envelope and dry-run send readiness.
+5. Use `channel_webhook_ingest` with a representative Discord message payload to verify inbound normalization and bot-message handling.
+6. Use `channel_message_prepare` for visible replies and `channel_action_prepare` for reactions, file-share requests, thread/forum replies, pins, typing indicators, and read receipts.
+7. Use `channel_message_send` only after approval and only when `DISCORD_BOT_TOKEN` is configured.
+
 ## Permissions
 
 Minimum practical permissions:
@@ -54,6 +64,21 @@ DMs should use pairing or explicit allowlists. If pairing fails, check that the 
 
 Discord bot-authored messages should be ignored unless `allow_bot_message:true` is explicitly present in structured metadata. When allowed, bot-loop protection tracks the bot pair by structured IDs and suppresses runaway exchanges.
 
+## Safety And Approval
+
+- Require exact Discord channel, thread, forum-thread, or DM channel IDs before sending.
+- Apply guild/channel allowlists and mention policy before visible replies in shared servers.
+- Keep `DISCORD_BOT_TOKEN`, application IDs, and public keys in runtime secrets or encrypted desktop settings.
+- Treat bot-authored inbound messages as ignored unless structured policy explicitly permits them.
+- Do not claim a Discord message, reaction, pin, upload, or typing event happened until the result says `sent` or a trusted adapter confirms execution.
+
+## Native Implementation Boundaries
+
+- Humungousaur owns setup, doctor checks, listener state, webhook normalization, prepared envelopes, dry-run smoke, and approval-gated text-send contracts.
+- Discord Gateway presence and full event streaming require a configured bot runtime; local smoke uses webhook-style normalized payloads.
+- Prepared Discord actions remain local contracts until a trusted Discord adapter executes the corresponding API call.
+- Voice-channel behavior is outside this text-channel skill unless another voice-call or audio skill is selected.
+
 ## Sending
 
 Use `channel_message_prepare` first. Use `channel_message_send` only after approval and only when `DISCORD_BOT_TOKEN` is configured.
@@ -65,3 +90,10 @@ Use `channel_action_prepare` for Discord reactions, file-share requests, thread/
 - No guild messages: check Message Content Intent and channel permissions.
 - Direct send blocked: check `DISCORD_BOT_TOKEN`.
 - Thread send fails: check thread permissions and use the thread id as target.
+
+## Verification
+
+- Run `channel_integration_smoke` for `discord`; expect one Discord result, prepared outbox ready, dry-run send ready, and no live send.
+- Run `channel_webhook_ingest` with Discord payload fields such as `channel_id`, `author.id`, `author.bot`, and `content`; expect one normalized inbound message for human-authored text.
+- Verify bot-authored payloads are ignored by default unless structured policy allows them.
+- Inspect `channel_outbox` for both Discord message and action envelopes after smoke.

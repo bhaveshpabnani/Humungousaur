@@ -1,6 +1,6 @@
 # Skill Capability Goal Progress
 
-Last updated: 2026-06-07
+Last updated: 2026-06-08
 
 ## Goal
 
@@ -8,11 +8,11 @@ Smoke test each skill task one by one, identify skills that are only prompt/proc
 
 ## Current Status
 
-- Repository state reviewed during the desktop channel-onboarding integration slice.
+- Repository state reviewed during the channel skill-hardening slice.
 - Current workspace skill count: `132`.
 - Current tool-domain folders: `33`.
 - Latest full skill smoke result: `429` sections, `0` failures.
-- Latest per-skill audit matrix: `132` skills audited, `90` native-capable or script-backed, `42` thin-tool-map skills needing deeper workflow/safety/verification detail, `0` prompt-only, `0` unresolved Tool Map entries.
+- Latest per-skill audit matrix: `132` skills audited, `95` native-capable or script-backed, `37` thin-tool-map skills needing deeper workflow/safety/verification detail, `0` prompt-only, `0` unresolved Tool Map entries.
 - The goal is still active. The current work proves strong incremental progress, but not exhaustive completion across every skill and external/live integration.
 
 ## Completed Capability Slices
@@ -48,6 +48,7 @@ These slices have been implemented, smoke-tested, regression-tested, committed, 
 | current slice | Channel integration smoke | Native non-sending channel readiness report covering setup/status, doctor blockers, prepared outbox, dry-run send wiring, listener state, API route, app button, skill docs, and smoke coverage. |
 | current slice | Desktop runtime and approvals | Windows app Runtime page with recent runs, pending approvals, timeline details, approve/reject actions, and run cancellation. |
 | current slice | Per-skill capability audit matrix | Native skill audit tool writes Markdown/JSON artifacts, resolves exact Tool Maps, classifies all 132 workspace skills, and is now part of full skill smoke. |
+| current slice | Channel skill hardening | Shared channel operations plus Slack, Telegram, Discord, and WhatsApp skills now document native workflows, safety/approval rules, implementation boundaries, and verification against native channel smoke. |
 
 ## Current Native Capability Areas
 
@@ -102,7 +103,7 @@ The recurring verification pattern for each completed slice has been:
 
 Latest verified results:
 
-- Full skill smoke after per-skill audit matrix slice: `429` sections, `0` failures.
+- Full skill smoke after channel skill-hardening slice: `429` sections, `0` failures.
 - Full regression after per-skill audit matrix slice: `392 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
 - The warnings are from `openpyxl` datetime deprecation during XLSX tests, not from the new skill slices.
 
@@ -214,7 +215,7 @@ Needed work:
 
 ### 10. Resolve Exhaustive Skill Audit Findings
 
-Current status: the native audit matrix now proves Tool Map resolution and implementation classification across all 132 skills. It currently reports 90 native-capable/script-backed skills, 42 thin-tool-map skills, 0 prompt-only skills, and 0 unresolved Tool Map entries.
+Current status: the native audit matrix now proves Tool Map resolution and implementation classification across all 132 skills. It currently reports 95 native-capable/script-backed skills, 37 thin-tool-map skills, 0 prompt-only skills, and 0 unresolved Tool Map entries.
 
 Needed work:
 

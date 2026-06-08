@@ -1,6 +1,6 @@
 # Humungousaur Goal Status And Remaining Work
 
-Last updated: 2026-06-07
+Last updated: 2026-06-08
 
 ## Goal Scope
 
@@ -17,13 +17,13 @@ The core standard for this goal is:
 ## Current Repository Status
 
 - Branch: `main`.
-- Last fully pushed capability commit before this slice: `e35444f Add native GitHub workflow artifacts`.
+- Last fully pushed capability commit before this slice: `876f710 Improve desktop channel listener integration`.
 - Latest documented full skill smoke: `429` sections, `0` failures.
 - Latest documented full regression: `392 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
-- Latest per-skill audit matrix: `132` skills audited, `90` native-capable or script-backed, `42` thin-tool-map skills needing deeper detail, `0` prompt-only, `0` unresolved Tool Map entries.
+- Latest per-skill audit matrix: `132` skills audited, `95` native-capable or script-backed, `37` thin-tool-map skills needing deeper detail, `0` prompt-only, `0` unresolved Tool Map entries.
 - Current tool-domain folders observed: `33`.
 - Current skills observed: more than `130`.
-- Current working tree note: desktop channel operations have been implemented and tested in this slice; final commit/push status should be checked with `git status` and `git log`.
+- Current working tree note: channel skill hardening has been completed and tested in this slice; final commit/push status should be checked with `git status` and `git log`.
 
 ## Done And Pushed
 
@@ -38,6 +38,7 @@ These areas have native implementation, skill wiring, smoke/regression coverage,
 | Writing skills | Done | Native writing artifacts and follow-up packets. |
 | Async execution hardening | Done | Agent async execution path was hardened while adding writing skills. |
 | Channel action preparation | Done | Native channel manifests, setup/status, message preparation, send gating, listener/webhook paths, ambient and bot-loop concepts. |
+| Channel skill hardening | Done in current slice | Shared channel operations plus Slack, Telegram, Discord, and WhatsApp skills now document native workflows, safety/approval rules, implementation boundaries, and verification against the existing channel smoke path. |
 | PDF and OCR surfaces | Done | PDF merge/extract/read support and OCR provider status surface. |
 | RSS/feed monitoring | Done | Native RSS/feed monitoring tools and smoke coverage. |
 | Transcript and spoken-content summaries | Done | Native transcript/audio/video summary artifacts. |

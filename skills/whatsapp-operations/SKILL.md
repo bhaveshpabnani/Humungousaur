@@ -39,6 +39,16 @@ No third-party package is assumed by this skill.
 5. Save non-secret setup refs with `channel_setup_save`.
 6. Run `channel_doctor` for `whatsapp`.
 
+## Workflow
+
+1. Use `channel_setup_requirements` to decide between Cloud API text send and prepared QR-bridge mode.
+2. Save enabled state, recipient defaults, allowlists, group allowlists, and secret references with `channel_setup_save`.
+3. Run `channel_setup_status`, `channel_doctor`, and `channel_listener_status`.
+4. Use `channel_integration_smoke` for prepared envelope and dry-run send readiness.
+5. Use `channel_webhook_ingest` with a WhatsApp Cloud webhook payload to verify inbound normalization.
+6. Use `channel_message_prepare` for review, groups, media, or bridge-required paths.
+7. Use `channel_message_send` only for Cloud API text sends after approval and only when credentials are configured.
+
 ## Personal QR Bridge Contract
 
 Use this only when the user intentionally wants personal-account behavior.
@@ -66,3 +76,25 @@ Never claim a message was delivered unless the result status is `sent`.
 - Confirm before messaging someone other than the user.
 - Do not send secrets, auth codes, or private keys.
 - Keep group messaging in prepared mode unless a trusted bridge reports direct support.
+
+## Safety And Approval
+
+- Treat WhatsApp as a high-trust personal channel; default to prepared mode unless the user approves the exact recipient and text.
+- Use test numbers/chats for live smoke and never infer phone numbers from names.
+- Keep WhatsApp access tokens, phone number IDs, business account IDs, QR state, and bridge sessions out of setup JSON.
+- Do not forward private inbound media or messages to unrelated tools unless the user explicitly opts in.
+- Never claim a message was sent unless `channel_message_send` returns `sent` or a trusted bridge confirms delivery.
+
+## Native Implementation Boundaries
+
+- Humungousaur natively owns setup contracts, doctor checks, listener state, Cloud API text-send envelopes, webhook normalization, prepared outbox messages, action envelopes, and dry-run smoke.
+- Personal-account QR operation is represented as a trusted bridge contract; the bridge owns pairing state and direct execution.
+- Group, media, reaction, read receipt, and typing workflows stay prepared unless a trusted WhatsApp runtime reports support.
+- Cloud API webhook verification and public callback delivery require external Meta configuration and a reachable endpoint.
+
+## Verification
+
+- Run `channel_integration_smoke` for `whatsapp`; expect one WhatsApp result, prepared outbox ready, dry-run send ready, and no live send.
+- Run `channel_webhook_ingest` with a WhatsApp Cloud payload containing `entry.changes.value.messages[].text.body`; expect one normalized inbound message.
+- Inspect `channel_outbox` for WhatsApp message and action envelopes before bridge execution.
+- For live Cloud API smoke, use an allowlisted test number, explicit approval, and verify the returned status is `sent`.

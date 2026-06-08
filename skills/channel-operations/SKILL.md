@@ -86,3 +86,18 @@ If the inbound payload says the sender is a bot:
 - Direct send means the Humungousaur adapter called an official API and got a success response.
 - Bridge-required channels stay prepared until a trusted local runtime is connected.
 - Listener ready means the channel is enabled and either local polling or webhook ingress is available; it does not mean a public tunnel has been configured.
+
+## Safety And Approval
+
+- Treat all live channel sends, reactions, pins, uploads, and external replies as user-visible side effects.
+- Use `channel_message_prepare` or `channel_action_prepare` before any visible action unless the user has already approved the exact channel, target, and text.
+- Use `channel_message_send` only with explicit approval, exact `conversation_id`, and a test recipient or trusted room when validating setup.
+- Keep raw secrets in runtime secret providers or desktop encrypted settings; never store them in `channel_setup_save` payloads.
+- For groups and MPIMs, require sender and room allowlists unless the user has intentionally enabled ambient room context.
+
+## Verification
+
+- Representative non-credentialed smoke is covered by `scripts/smoke_skills.py` under the `channels` section for Slack, WhatsApp, Telegram, and Discord.
+- A passing channel smoke must prove `channel_manifest`, `channel_setup_requirements`, `channel_setup_save`, `channel_setup_status`, `channel_doctor`, `channel_listener_status`, `channel_integration_smoke`, `channel_message_prepare`, `channel_action_prepare`, `channel_webhook_ingest`, and `channel_outbox`.
+- `channel_integration_smoke` must report `live_send_performed:false`, `prepared_outbox_ready:true`, and `dry_run_send_ready:true`.
+- Credentialed live verification is separate: run it only with real tokens, an allowlisted test target, and approval for the exact outbound message.
