@@ -207,6 +207,24 @@ def main() -> int:
             "attention_examples": live_boundary.get("attention_examples", []),
         },
     )
+    live_smoke_plan = _write_live_smoke_plan_report(
+        _build_live_smoke_plan(live_boundary),
+        config,
+    )
+    record(
+        "skills",
+        "live_smoke_plan_report",
+        live_smoke_plan["summary"].get("domain_count", 0) > 0
+        and live_smoke_plan["summary"].get("planned_skill_count", 0) >= live_boundary["summary"].get("skills_with_boundary_tools_count", 0)
+        and Path(live_smoke_plan["path"]).exists()
+        and Path(live_smoke_plan["json_path"]).exists(),
+        {
+            "path": live_smoke_plan["path"],
+            "json_path": live_smoke_plan["json_path"],
+            "summary": live_smoke_plan["summary"],
+            "priority_domains": live_smoke_plan.get("domains", [])[:5],
+        },
+    )
 
     failed = [item for item in sections if not item["ok"]]
     config.data_dir.mkdir(parents=True, exist_ok=True)
@@ -2223,6 +2241,122 @@ def _recommended_live_boundary_smoke(state: str, boundary_tools: list[str], miss
     return "No live-boundary smoke needed for this skill."
 
 
+def _build_live_smoke_plan(live_boundary: dict[str, Any]) -> dict[str, Any]:
+    tool_lookup = {str(row.get("tool_name", "")): row for row in live_boundary.get("boundary_tools", []) if row.get("tool_name")}
+    domain_rows: dict[str, dict[str, Any]] = {}
+    for skill in live_boundary.get("skills", []):
+        boundary_tools = [str(tool) for tool in skill.get("boundary_tools", []) if str(tool)]
+        if not boundary_tools:
+            continue
+        for tool_name in boundary_tools:
+            tool = tool_lookup.get(tool_name, {})
+            domain = _live_smoke_domain(tool)
+            row = domain_rows.setdefault(
+                domain["domain_id"],
+                {
+                    **domain,
+                    "skills": {},
+                    "tools": {},
+                    "dry_run_or_skipped_tools": set(),
+                    "missing_tools": set(),
+                },
+            )
+            row["skills"][str(skill.get("name", ""))] = str(skill.get("live_boundary_state", ""))
+            row["tools"][tool_name] = {
+                "tool_name": tool_name,
+                "capability_group": str(tool.get("capability_group", "")),
+                "risk_level": str(tool.get("risk_level", "")),
+                "requires_approval": bool(tool.get("requires_approval", False)),
+                "live_boundary_state": str(tool.get("live_boundary_state", "")),
+                "evidence_refs": [str(item) for item in tool.get("evidence_refs", [])],
+            }
+            if tool_name in skill.get("dry_run_or_skipped_boundary_tools", []):
+                row["dry_run_or_skipped_tools"].add(tool_name)
+            if tool_name in skill.get("missing_boundary_tools", []):
+                row["missing_tools"].add(tool_name)
+
+    domains: list[dict[str, Any]] = []
+    for row in domain_rows.values():
+        skills = sorted(row.pop("skills").items())
+        tools = sorted(row.pop("tools").values(), key=lambda item: item["tool_name"])
+        dry_run_or_skipped = sorted(row.pop("dry_run_or_skipped_tools"))
+        missing = sorted(row.pop("missing_tools"))
+        domains.append(
+            {
+                **row,
+                "skill_count": len(skills),
+                "tool_count": len(tools),
+                "dry_run_or_skipped_tool_count": len(dry_run_or_skipped),
+                "missing_tool_count": len(missing),
+                "skills": [{"name": name, "boundary_state": state} for name, state in skills],
+                "tools": tools,
+                "dry_run_or_skipped_tools": dry_run_or_skipped,
+                "missing_tools": missing,
+                "next_smoke_steps": _live_smoke_next_steps(row["domain_id"], dry_run_or_skipped, missing),
+            }
+        )
+    domains.sort(key=lambda item: (int(item["priority_rank"]), -int(item["skill_count"]), item["domain_id"]))
+    summary = {
+        "domain_count": len(domains),
+        "planned_skill_count": len({skill["name"] for domain in domains for skill in domain.get("skills", [])}),
+        "planned_tool_count": len({tool["tool_name"] for domain in domains for tool in domain.get("tools", [])}),
+        "domains_with_dry_run_or_skipped_tools_count": sum(1 for domain in domains if domain.get("dry_run_or_skipped_tools")),
+        "domains_with_missing_tools_count": sum(1 for domain in domains if domain.get("missing_tools")),
+        "highest_priority_domains": [domain["domain_id"] for domain in domains[:5]],
+    }
+    return {
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "source": "skill_live_smoke_plan",
+        "summary": summary,
+        "domains": domains,
+        "source_live_boundary_summary": live_boundary.get("summary", {}),
+    }
+
+
+def _live_smoke_domain(tool: dict[str, Any]) -> dict[str, Any]:
+    group = str(tool.get("capability_group", "")).strip().lower()
+    domains = {
+        "channels": ("channels", "Channel receive/send and gateway adapters", 10),
+        "voice": ("voice", "Voice wakeup, STT, TTS, and playback", 20),
+        "browser": ("browser", "Browser and live web control", 30),
+        "os": ("desktop_os", "Windows UI, keyboard, mouse, window, app, clipboard, and screen control", 40),
+        "screen": ("desktop_os", "Windows UI, keyboard, mouse, window, app, clipboard, and screen control", 40),
+        "productivity": ("workspace_productivity", "Gmail, Excel, Google Workspace, Notion, Airtable, and safe external operation packets", 50),
+        "office": ("workspace_productivity", "Gmail, Excel, Google Workspace, Notion, Airtable, and safe external operation packets", 50),
+        "github": ("developer_workflows", "GitHub, CI, code execution, and delegated coding workflows", 60),
+        "code": ("developer_workflows", "GitHub, CI, code execution, and delegated coding workflows", 60),
+        "codex": ("developer_workflows", "GitHub, CI, code execution, and delegated coding workflows", 60),
+        "security": ("security_and_network", "Security scans, dependency review, network diagnostics, and live change control", 70),
+        "network": ("security_and_network", "Security scans, dependency review, network diagnostics, and live change control", 70),
+        "workflow": ("workflow_and_approvals", "Typed approval workflows, diffs, compaction, canvas, and approval checkpoints", 80),
+        "cognition": ("cognition_and_autonomy", "Cognitive reviews, memory, persona, wakeups, autonomy, and multi-agent coordination", 90),
+        "memory": ("cognition_and_autonomy", "Cognitive reviews, memory, persona, wakeups, autonomy, and multi-agent coordination", 90),
+    }
+    domain_id, label, priority = domains.get(group, ("other_boundaries", "Other approval-gated or live-boundary tools", 100))
+    return {"domain_id": domain_id, "label": label, "priority_rank": priority}
+
+
+def _live_smoke_next_steps(domain_id: str, dry_run_tools: list[str], missing_tools: list[str]) -> list[str]:
+    setup_step = {
+        "channels": "Run provider setup doctor and non-sending channel_integration_smoke before any approved live send.",
+        "voice": "Run provider status first, then a real local/provider STT sample and a TTS prepare/playback smoke.",
+        "browser": "Run live browser status, open a local page, observe, act after approval, screenshot, and close.",
+        "desktop_os": "Run foreground UI observation, then approved dry-run-to-live click/type/scroll/window actions on a harmless target app.",
+        "workspace_productivity": "Run setup/status for credentials, then execute a prepare/approve packet and one credentialed live smoke where available.",
+        "developer_workflows": "Run CLI/provider status, then dry-run delegation or code execution before approved live execution.",
+        "security_and_network": "Run read-only diagnostics first, then require explicit approval for any network, scanner, or system-setting mutation.",
+        "workflow_and_approvals": "Create a typed workflow, inspect pending approval, approve/reject a checkpoint, and verify resumability.",
+        "cognition_and_autonomy": "Run model/provider-backed cognitive review with bounded state, then inspect persisted review/status records.",
+        "other_boundaries": "Run status/setup tools first, then add a minimal approved live smoke for the exact mapped boundary tools.",
+    }.get(domain_id, "Run setup/status tools first, then add a minimal approved live smoke for the exact mapped boundary tools.")
+    steps = [setup_step]
+    if dry_run_tools:
+        steps.append("Replace dry-run-only evidence with live or explicit unavailable/setup evidence for: " + ", ".join(dry_run_tools[:10]))
+    if missing_tools:
+        steps.append("Add local boundary smoke evidence before live testing: " + ", ".join(missing_tools[:10]))
+    return steps
+
+
 def _smoked_tool_evidence(sections: list[dict[str, Any]], tool_names: set[str]) -> dict[str, list[dict[str, Any]]]:
     evidence: dict[str, list[dict[str, Any]]] = {}
     for item in sections:
@@ -2332,6 +2466,17 @@ def _write_live_boundary_coverage_report(coverage: dict[str, Any], config: Agent
     return payload
 
 
+def _write_live_smoke_plan_report(plan: dict[str, Any], config: AgentConfig) -> dict[str, Any]:
+    plan_dir = config.data_dir / "live_smoke_plan"
+    plan_dir.mkdir(parents=True, exist_ok=True)
+    markdown_path = plan_dir / "skill-live-smoke-plan.md"
+    json_path = plan_dir / "skill-live-smoke-plan.json"
+    payload = {**plan, "path": str(markdown_path), "json_path": str(json_path)}
+    markdown_path.write_text(_render_live_smoke_plan_markdown(payload), encoding="utf-8")
+    json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return payload
+
+
 def _render_skill_task_coverage_markdown(payload: dict[str, Any]) -> str:
     summary = payload["summary"]
     lines = [
@@ -2386,6 +2531,73 @@ def _render_skill_task_coverage_markdown(payload: dict[str, Any]) -> str:
     if not payload.get("pending_examples"):
         lines.append("- None.")
     lines.append("")
+    return "\n".join(lines)
+
+
+def _render_live_smoke_plan_markdown(payload: dict[str, Any]) -> str:
+    summary = payload["summary"]
+    lines = [
+        "# Skill Live Smoke Plan",
+        "",
+        f"Created: {payload['created_at']}",
+        f"Source: `{payload['source']}`",
+        "",
+        "This plan is derived from declared tool metadata and live-boundary smoke evidence. It is an execution checklist for future live/credentialed validation, not an autonomous routing policy.",
+        "",
+        "## Summary",
+        "",
+        f"- Domains planned: {summary['domain_count']}",
+        f"- Planned skills: {summary['planned_skill_count']}",
+        f"- Planned tools: {summary['planned_tool_count']}",
+        f"- Domains with dry-run/skipped tools: {summary['domains_with_dry_run_or_skipped_tools_count']}",
+        f"- Domains with missing tools: {summary['domains_with_missing_tools_count']}",
+        f"- Highest-priority domains: {', '.join(summary.get('highest_priority_domains', [])) or '-'}",
+        "",
+        "## Domain Plan",
+        "",
+        "| Rank | Domain | Skills | Tools | Dry-Run/Skipped Tools | Next Steps |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    for domain in payload.get("domains", []):
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _md_cell(str(domain.get("priority_rank", ""))),
+                    _md_cell(f"{domain.get('domain_id')} - {domain.get('label')}"),
+                    _md_cell(str(domain.get("skill_count", 0))),
+                    _md_cell(str(domain.get("tool_count", 0))),
+                    _md_cell(", ".join(domain.get("dry_run_or_skipped_tools", [])[:10]) or "-"),
+                    _md_cell(" / ".join(domain.get("next_smoke_steps", [])[:3])),
+                ]
+            )
+            + " |"
+        )
+    lines.extend(["", "## Domain Details", ""])
+    for domain in payload.get("domains", []):
+        lines.extend(
+            [
+                f"### {domain.get('domain_id')} - {domain.get('label')}",
+                "",
+                f"- Priority rank: {domain.get('priority_rank')}",
+                f"- Skills: {domain.get('skill_count')}",
+                f"- Tools: {domain.get('tool_count')}",
+                f"- Dry-run/skipped tools: {', '.join(domain.get('dry_run_or_skipped_tools', [])) or '-'}",
+                f"- Missing tools: {', '.join(domain.get('missing_tools', [])) or '-'}",
+                "",
+                "Next steps:",
+            ]
+        )
+        for step in domain.get("next_smoke_steps", []):
+            lines.append(f"- {step}")
+        lines.extend(["", "Representative skills:"])
+        for skill in domain.get("skills", [])[:20]:
+            lines.append(f"- {skill.get('name')} ({skill.get('boundary_state')})")
+        lines.extend(["", "Representative tools:"])
+        for tool in domain.get("tools", [])[:25]:
+            approval = "approval" if tool.get("requires_approval") else "no approval"
+            lines.append(f"- {tool.get('tool_name')} [{tool.get('capability_group')}, {tool.get('risk_level')}, {approval}]")
+        lines.append("")
     return "\n".join(lines)
 
 

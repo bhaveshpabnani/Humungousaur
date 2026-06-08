@@ -4,7 +4,7 @@ import unittest
 
 from humungousaur.schemas import ActionStatus, RiskLevel, ToolResult
 from humungousaur.tools.base import Tool, object_input_schema
-from scripts.smoke_skills import _build_live_boundary_coverage, _build_skill_task_coverage
+from scripts.smoke_skills import _build_live_boundary_coverage, _build_live_smoke_plan, _build_skill_task_coverage
 
 
 class DummyTool(Tool):
@@ -159,6 +159,13 @@ class SmokeSkillTaskCoverageTests(unittest.TestCase):
         self.assertEqual(coverage["summary"]["skills_with_boundary_tools_count"], 1)
         self.assertEqual(coverage["summary"]["skills_with_missing_boundary_evidence_count"], 0)
         self.assertEqual(coverage["summary"]["boundary_tools_seen_in_evidence_count"], 2)
+
+        plan = _build_live_smoke_plan(coverage)
+        self.assertEqual(plan["summary"]["planned_skill_count"], 1)
+        self.assertEqual(plan["summary"]["planned_tool_count"], 2)
+        self.assertIn("other_boundaries", plan["summary"]["highest_priority_domains"])
+        self.assertEqual(plan["domains"][0]["dry_run_or_skipped_tools"], ["dry_run_tool"])
+        self.assertTrue(plan["domains"][0]["next_smoke_steps"])
 
 
 if __name__ == "__main__":

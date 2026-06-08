@@ -11,10 +11,11 @@ Smoke test each skill task one by one, identify skills that are only prompt/proc
 - Repository state reviewed during the final thin-skill hardening slice.
 - Current workspace skill count: `132`.
 - Current tool-domain folders: `33`.
-- Latest full skill smoke result: `557` sections, `0` failures.
+- Latest full skill smoke result: `558` sections, `0` failures.
 - Latest per-skill audit matrix: `132` skills audited, `132` native-capable or script-backed, `0` thin-tool-map skills needing deeper workflow/safety/verification detail, `0` prompt-only, `0` unresolved Tool Map entries, `0` attention items.
 - Latest per-skill task-smoke coverage: `132` skills covered, `132` directly task-smoked, `0` composition-smoked, `0` pending task-smoke skills, `221` native tools seen in smoke evidence, `0` skills with mapped native tools still pending narrower smoke.
 - Latest live-boundary coverage: `132` skills covered, `136` approval/medium/high-risk boundary tools tracked, `0` skills with missing boundary evidence, `28` skills with dry-run-only boundaries, and `128` skills needing live or credentialed validation for daily-use certainty.
+- Latest live-smoke plan: `10` domains planned, `128` skills and `111` boundary tools included, `0` domains with missing tools, and highest-priority domains are channels, voice, browser, desktop OS, and workspace productivity.
 - The goal is still active. The current work proves strong incremental progress, but not exhaustive completion across every skill and external/live integration.
 
 ## Completed Capability Slices
@@ -59,6 +60,7 @@ These slices have been implemented, smoke-tested, regression-tested, committed, 
 | current slice | Foundational native-tool smoke | Added safe/dry-run smokes for file/search/shell/code catalogs, memory, activity, conversation, email, cognition review, skill forge, and canvas tools, raising native tools seen in evidence from 148 to 177 and reducing skills with pending mapped tools from 116 to 72. |
 | current slice | Complete mapped-tool smoke closure | Added direct safe/dry-run evidence for live-browser observe/click/type/scroll/tabs/search/save-PDF/close, channel send/listener tick, voice STT/TTS, Codex CLI status/run, Lobster approval, OS element/clipboard controls, plugin setup/manifests, browser extraction aliases, Python artifact readback, taskflow cognition tools, persona/briefing/curation status, and PDF optional-dependency boundaries, raising native tools seen in evidence to 221 and reducing mapped pending native tools to 0. |
 | current slice | Live-boundary coverage artifact | Full skill smoke now writes Markdown/JSON live-boundary coverage artifacts that separately track approval-gated, medium-risk, and high-risk mapped tools, proving `0` missing local boundary evidence while explicitly flagging `128` skills that still need credentialed/live validation. |
+| current slice | Live-smoke plan artifact | Full skill smoke now writes Markdown/JSON live-smoke plan artifacts that group boundary work into `10` prioritized domains and put channels, voice, browser, desktop OS, and workspace productivity first for daily-assistant live validation. |
 
 ## Current Native Capability Areas
 
@@ -113,9 +115,10 @@ The recurring verification pattern for each completed slice has been:
 
 Latest verified results:
 
-- Full skill smoke after live-boundary coverage slice: `557` sections, `0` failures.
+- Full skill smoke after live-smoke plan slice: `558` sections, `0` failures.
 - Per-skill task coverage artifact after the same smoke: `132` skills, `132` direct task-smoked, `0` composition-smoked, `0` pending task-smoke, `221` native tools seen in smoke evidence, `0` skills with mapped native tools still pending narrower smoke, `0` unresolved Tool Maps.
 - Live-boundary coverage artifact after the same smoke: `132` skills, `136` boundary tools tracked, `111` boundary tools seen in smoke evidence, `0` skills with missing boundary evidence, `28` skills with dry-run-only boundaries, `128` skills needing live or credentialed validation.
+- Live-smoke plan artifact after the same smoke: `10` domains planned, `128` skills and `111` boundary tools included, `8` domains with dry-run/skipped tools, `0` domains with missing tools, highest-priority domains: channels, voice, browser, desktop OS, workspace productivity.
 - Focused regression after mapped-tool smoke closure slice: `125 passed`, `1 skipped`.
 - Full regression after mapped-tool smoke closure slice: `393 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
 - The warnings are from `openpyxl` datetime deprecation during XLSX tests, not from the new skill slices.
