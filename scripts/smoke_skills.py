@@ -161,6 +161,7 @@ def main() -> int:
     _smoke_rss(record, tools, config)
     _smoke_network(record, tools, config)
     _smoke_core_surfaces(record, tools, config)
+    _smoke_foundational_native_tools(record, tools, config)
     _smoke_skill_task_surfaces(record, tools, config)
     _smoke_desktop_autonomy_and_forms(record, tools, config)
     coverage = _write_skill_task_coverage_report(
@@ -1423,6 +1424,123 @@ def _smoke_core_surfaces(record, tools: dict[str, Any], config: AgentConfig) -> 
     ]
     for section, tool_name, payload in scenarios:
         result = tools[tool_name].execute(payload, config)
+        record(section, tool_name, result.status in {ActionStatus.SUCCEEDED, ActionStatus.SKIPPED}, _tool_payload(result))
+
+
+def _smoke_foundational_native_tools(record, tools: dict[str, Any], config: AgentConfig) -> None:
+    dry_config = _dry_config(config)
+    canvas = tools["canvas_a2ui_create"].execute(
+        {
+            "title": "Skill Smoke Foundational Canvas",
+            "nodes": [
+                {"id": "stimulus", "label": "Stimulus", "x": 20, "y": 20, "kind": "input"},
+                {"id": "tool", "label": "Native Tool", "x": 220, "y": 20, "kind": "action"},
+            ],
+            "edges": [{"from": "stimulus", "to": "tool", "label": "select"}],
+            "render_html": True,
+        },
+        config,
+    )
+    canvas_render = tools["canvas_a2ui_render"].execute({"canvas": canvas.output.get("canvas", {})}, config) if _ok(canvas) else canvas
+    foundational_scenarios = [
+        ("foundational", "list_files", {"path": "."}, config),
+        ("foundational", "read_file", {"path": "docs/SKILL_CAPABILITY_GOAL_PROGRESS.md"}, config),
+        ("foundational", "search_workspace", {"query": "Skill Capability Goal Progress"}, config),
+        ("foundational", "run_shell_command", {"argv": ["python", "--version"], "command_profile": "read_only"}, dry_config),
+        (
+            "foundational",
+            "python_interpreter",
+            {
+                "code": "result = {'ok': True, 'purpose': 'skill smoke'}\nprint(result)",
+                "sandbox_profile": "read_only",
+                "import_mode": "stdlib",
+                "reason": "Skill smoke dry-run for interpreter planning.",
+            },
+            dry_config,
+        ),
+        ("foundational", "python_interpreter_runs", {"limit": 10}, config),
+        ("foundational", "plugin_catalog", {"include_contracts": True}, config),
+        ("foundational", "channel_catalog", {}, config),
+        ("foundational", "agent_skill_read", {"skill_id": "workspace:skills/system-health-check/SKILL.md"}, config),
+        (
+            "foundational",
+            "agent_skill_script_read",
+            {"script_id": "workspace:skills/codebase-inspection/scripts/inspect_repo.py"},
+            config,
+        ),
+        ("foundational", "memory_search", {"query": "Skill smoke", "limit": 5}, config),
+        ("foundational", "memory_summary", {"period": "recent", "query": "Skill smoke", "limit": 10}, config),
+        ("foundational", "memory_profile", {"limit": 20}, config),
+        ("foundational", "activity_policy", {}, config),
+        ("foundational", "activity_search", {"query": "skill smoke", "limit": 5}, config),
+        (
+            "foundational",
+            "activity_ingest",
+            {
+                "source": "manual",
+                "text": "Skill smoke synthetic activity event.",
+                "app_name": "Humungousaur",
+                "metadata": {"purpose": "coverage"},
+            },
+            dry_config,
+        ),
+        (
+            "foundational",
+            "conversation_response_prepare",
+            {"text": "Skill smoke response prepared.", "reason": "Verify conversational response preparation.", "tone": "concise"},
+            config,
+        ),
+        (
+            "foundational",
+            "email_draft_prepare",
+            {
+                "to": ["person@example.com"],
+                "subject": "Humungousaur foundational smoke",
+                "body": "This local email draft was prepared by skill smoke and was not sent.",
+                "reason": "Verify generic email draft preparation.",
+            },
+            config,
+        ),
+        ("foundational", "cognitive_self_review", {"purpose": "skill_smoke", "limit": 5}, dry_config),
+        ("foundational", "cognitive_interaction_review", {"purpose": "skill_smoke", "limit": 5}, dry_config),
+        (
+            "foundational",
+            "cognitive_commitment_record",
+            {
+                "title": "Continue skill smoke coverage",
+                "owner": "assistant",
+                "source": "skill_smoke",
+                "evidence_refs": ["scripts/smoke_skills.py"],
+                "confidence": 0.8,
+            },
+            dry_config,
+        ),
+        ("foundational", "cognitive_commitment_review", {"purpose": "skill_smoke", "limit": 5}, dry_config),
+        (
+            "foundational",
+            "cognitive_commitment_update",
+            {"commitment_id": "commitment-skill-smoke", "status": "satisfied", "evidence_refs": ["scripts/smoke_skills.py"]},
+            dry_config,
+        ),
+        ("foundational", "cognitive_memory_curate", {"purpose": "skill_smoke", "limit": 5}, dry_config),
+        ("foundational", "cognitive_skill_evolve", {"purpose": "skill_smoke", "limit": 5}, dry_config),
+        (
+            "foundational",
+            "skill_forge_draft",
+            {
+                "request": "Draft a reusable skill for a synthetic smoke workflow.",
+                "evidence": [{"source": "skill_smoke", "summary": "Foundational capability coverage."}],
+                "available_tools": ["tool_search", "agent_skill_read"],
+                "write_pack": False,
+            },
+            dry_config,
+        ),
+        ("foundational", "skill_forge_packs", {"limit": 10}, config),
+    ]
+    record("foundational", "canvas_a2ui_create", _ok(canvas), _tool_payload(canvas))
+    record("foundational", "canvas_a2ui_render", _ok(canvas_render), _tool_payload(canvas_render))
+    for section, tool_name, payload, execution_config in foundational_scenarios:
+        result = tools[tool_name].execute(payload, execution_config)
         record(section, tool_name, result.status in {ActionStatus.SUCCEEDED, ActionStatus.SKIPPED}, _tool_payload(result))
 
 

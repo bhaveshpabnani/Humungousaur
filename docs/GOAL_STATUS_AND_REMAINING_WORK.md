@@ -17,11 +17,11 @@ The core standard for this goal is:
 ## Current Repository Status
 
 - Branch: `main`.
-- Last fully pushed capability commit before this slice: `075a02a Harden remaining thin skills`.
-- Latest documented full skill smoke: `471` sections, `0` failures.
-- Latest documented full regression: `392 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
+- Last fully pushed capability commit before this slice: `0869eff Add per-skill task smoke coverage`.
+- Latest documented full skill smoke: `500` sections, `0` failures.
+- Latest documented full regression: `393 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
 - Latest per-skill audit matrix: `132` skills audited, `132` native-capable or script-backed, `0` thin-tool-map skills needing deeper detail, `0` prompt-only, `0` unresolved Tool Map entries, `0` attention items.
-- Latest per-skill task-smoke coverage: `132` skills covered, `131` direct task-smoked, `1` composition-smoked, `0` pending task-smoke skills, `148` native tools seen in smoke evidence.
+- Latest per-skill task-smoke coverage: `132` skills covered, `132` direct task-smoked, `0` composition-smoked, `0` pending task-smoke skills, `177` native tools seen in smoke evidence, `72` skills with mapped native tools still pending narrower smoke.
 - Current tool-domain folders observed: `33`.
 - Current skills observed: more than `130`.
 - Current working tree note: per-skill task-smoke coverage and direct task scenarios have been added in this slice; final commit/push status should be checked with `git status` and `git log`.
@@ -67,7 +67,8 @@ These areas have native implementation, skill wiring, smoke/regression coverage,
 | Voice provider surfaces | Done as tool surfaces | Voice provider status, transcription, response preparation, speech, response listing, Deepgram, ElevenLabs, Windows SAPI, and local Whisper provider paths are represented. |
 | OS and browser control surfaces | Done as native surfaces | Browser, screen, keyboard, mouse, window, app, clipboard, and virtual desktop tool surfaces exist. |
 | Cognition and memory | Done as native surfaces | Memory, persona, reflection, self-assessment, automations, autonomous loop, and multi-agent coordination surfaces exist. |
-| Per-skill task-smoke coverage | Done in current slice | Full skill smoke now emits Markdown/JSON coverage artifacts, records exact native tool evidence, directly task-smokes 131 skills, composition-smokes the remaining wrapper skill, and reports 0 skills without task-smoke evidence. |
+| Per-skill task-smoke coverage | Done in current slice | Full skill smoke now emits Markdown/JSON coverage artifacts, records exact native tool evidence, directly task-smokes all 132 skills, and reports 0 skills without task-smoke evidence. |
+| Foundational native-tool smoke | Done in current slice | Safe/dry-run smokes now cover file/search/shell/code catalogs, memory, activity, conversation, email, cognition review, skill forge, and canvas tools, raising native tools seen in evidence from 148 to 177 and reducing skills with pending mapped tools from 116 to 72. |
 
 ## Implemented But Still Needs Deeper Live Validation
 

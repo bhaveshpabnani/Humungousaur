@@ -11,9 +11,9 @@ Smoke test each skill task one by one, identify skills that are only prompt/proc
 - Repository state reviewed during the final thin-skill hardening slice.
 - Current workspace skill count: `132`.
 - Current tool-domain folders: `33`.
-- Latest full skill smoke result: `471` sections, `0` failures.
+- Latest full skill smoke result: `500` sections, `0` failures.
 - Latest per-skill audit matrix: `132` skills audited, `132` native-capable or script-backed, `0` thin-tool-map skills needing deeper workflow/safety/verification detail, `0` prompt-only, `0` unresolved Tool Map entries, `0` attention items.
-- Latest per-skill task-smoke coverage: `132` skills covered, `131` directly task-smoked, `1` composition-smoked, `0` pending task-smoke skills, `148` native tools seen in smoke evidence.
+- Latest per-skill task-smoke coverage: `132` skills covered, `132` directly task-smoked, `0` composition-smoked, `0` pending task-smoke skills, `177` native tools seen in smoke evidence, `72` skills with mapped native tools still pending narrower smoke.
 - The goal is still active. The current work proves strong incremental progress, but not exhaustive completion across every skill and external/live integration.
 
 ## Completed Capability Slices
@@ -55,6 +55,7 @@ These slices have been implemented, smoke-tested, regression-tested, committed, 
 | current slice | Voice/audio/meeting skill hardening | Speech operations, local speech, spoken response style, voice loop, voice wakeup, voice call gateway, audio summaries, meeting transcription, meeting follow-up, and music/sound generation now document native workflows, safety rules, native implementation boundaries, and verification expectations. |
 | current slice | Final thin-skill hardening | Ambient room context, bot-loop protection, capability audit/surfaces, channel gateway, Codex/coding delegation, daily planning, gog, session wrap-up, skill authoring/security review, and wacli now meet native workflow, safety, boundary, and verification standards. |
 | current slice | Per-skill task-smoke coverage | Full skill smoke now writes Markdown/JSON task-coverage artifacts, records exact native tool evidence, directly task-smokes 131 skills, composition-smokes the remaining wrapper skill, and reports 0 skills without task-smoke evidence. |
+| current slice | Foundational native-tool smoke | Added safe/dry-run smokes for file/search/shell/code catalogs, memory, activity, conversation, email, cognition review, skill forge, and canvas tools, raising native tools seen in evidence from 148 to 177 and reducing skills with pending mapped tools from 116 to 72. |
 
 ## Current Native Capability Areas
 
@@ -109,8 +110,8 @@ The recurring verification pattern for each completed slice has been:
 
 Latest verified results:
 
-- Full skill smoke after per-skill task-smoke coverage slice: `471` sections, `0` failures.
-- Per-skill task coverage artifact after the same smoke: `132` skills, `131` direct task-smoked, `1` composition-smoked, `0` pending task-smoke, `0` unresolved Tool Maps.
+- Full skill smoke after foundational native-tool smoke slice: `500` sections, `0` failures.
+- Per-skill task coverage artifact after the same smoke: `132` skills, `132` direct task-smoked, `0` composition-smoked, `0` pending task-smoke, `177` native tools seen in smoke evidence, `72` skills with mapped native tools still pending narrower smoke, `0` unresolved Tool Maps.
 - Full regression after per-skill task-smoke coverage slice: `393 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
 - The warnings are from `openpyxl` datetime deprecation during XLSX tests, not from the new skill slices.
 
@@ -222,7 +223,7 @@ Needed work:
 
 ### 10. Resolve Exhaustive Skill Audit Findings
 
-Current status: the native audit matrix now proves Tool Map resolution and implementation classification across all 132 skills, and the full smoke now writes per-skill task-coverage artifacts. Current task coverage is 131 direct task-smoked skills, 1 composition-smoked wrapper skill, 0 pending task-smoke skills, and 0 unresolved Tool Map entries.
+Current status: the native audit matrix now proves Tool Map resolution and implementation classification across all 132 skills, and the full smoke now writes per-skill task-coverage artifacts. Current task coverage is 132 direct task-smoked skills, 0 composition-smoked wrapper skills, 0 pending task-smoke skills, 177 native tools seen in smoke evidence, 72 skills with mapped native tools still pending narrower smoke, and 0 unresolved Tool Map entries.
 
 Needed work:
 
