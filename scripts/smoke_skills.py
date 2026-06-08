@@ -189,6 +189,24 @@ def main() -> int:
             "pending_examples": coverage.get("pending_examples", []),
         },
     )
+    live_boundary = _write_live_boundary_coverage_report(
+        _build_live_boundary_coverage(skill_records, sections, tools),
+        config,
+    )
+    record(
+        "skills",
+        "live_boundary_coverage_report",
+        live_boundary["summary"].get("skill_count", 0) >= 100
+        and live_boundary["summary"].get("skills_with_missing_boundary_evidence_count", 0) == 0
+        and Path(live_boundary["path"]).exists()
+        and Path(live_boundary["json_path"]).exists(),
+        {
+            "path": live_boundary["path"],
+            "json_path": live_boundary["json_path"],
+            "summary": live_boundary["summary"],
+            "attention_examples": live_boundary.get("attention_examples", []),
+        },
+    )
 
     failed = [item for item in sections if not item["ok"]]
     config.data_dir.mkdir(parents=True, exist_ok=True)
@@ -2067,6 +2085,144 @@ def _build_skill_task_coverage(
     }
 
 
+def _build_live_boundary_coverage(
+    skill_records: list[dict[str, Any]],
+    sections: list[dict[str, Any]],
+    tools: dict[str, Any],
+) -> dict[str, Any]:
+    tool_evidence = _smoked_tool_evidence_details(sections, set(tools))
+    tool_metadata = {
+        name: {
+            "risk_level": str(getattr(tool, "risk_level", "")),
+            "requires_approval": bool(getattr(tool, "requires_approval", False)),
+            "capability_group": str(getattr(tool, "capability_group", "")),
+        }
+        for name, tool in tools.items()
+    }
+    boundary_tool_names = {
+        name
+        for name, metadata in tool_metadata.items()
+        if bool(metadata.get("requires_approval"))
+        or str(metadata.get("risk_level", "")).lower() in {"risklevel.high", "risklevel.medium", "high", "medium"}
+    }
+    tool_rows: list[dict[str, Any]] = []
+    for tool_name in sorted(boundary_tool_names):
+        evidence = tool_evidence.get(tool_name, [])
+        statuses = sorted({str(item.get("status", "")) for item in evidence if str(item.get("status", ""))})
+        tool_rows.append(
+            {
+                "tool_name": tool_name,
+                **tool_metadata.get(tool_name, {}),
+                "evidence_count": len(evidence),
+                "evidence_statuses": statuses,
+                "evidence_refs": [item["evidence_ref"] for item in evidence[:5]],
+                "live_boundary_state": _live_boundary_state(evidence),
+                "representative_summaries": [str(item.get("summary", ""))[:180] for item in evidence[:3]],
+            }
+        )
+
+    rows: list[dict[str, Any]] = []
+    for skill in skill_records:
+        native_tools = [str(item) for item in skill.get("native_tools", [])]
+        boundary_tools = [tool for tool in native_tools if tool in boundary_tool_names]
+        if not boundary_tools:
+            rows.append(
+                {
+                    "skill_id": str(skill.get("skill_id", "")),
+                    "name": str(skill.get("name", "")),
+                    "boundary_tools": [],
+                    "boundary_evidence_refs": [],
+                    "missing_boundary_tools": [],
+                    "dry_run_or_skipped_boundary_tools": [],
+                    "live_boundary_state": "no_boundary_tools",
+                    "recommended_next_live_smoke": "No approval-gated or medium/high-risk mapped tools for this skill.",
+                }
+            )
+            continue
+        missing = [tool for tool in boundary_tools if not tool_evidence.get(tool)]
+        skipped_only = [
+            tool
+            for tool in boundary_tools
+            if tool_evidence.get(tool)
+            and all(str(item.get("status", "")) == ActionStatus.SKIPPED.value for item in tool_evidence.get(tool, []))
+        ]
+        state = "boundary_evidence_present_live_not_proven"
+        if missing:
+            state = "missing_boundary_evidence"
+        elif skipped_only and len(skipped_only) == len(boundary_tools):
+            state = "dry_run_boundary_only"
+        rows.append(
+            {
+                "skill_id": str(skill.get("skill_id", "")),
+                "name": str(skill.get("name", "")),
+                "boundary_tools": boundary_tools,
+                "boundary_evidence_refs": _coverage_evidence_refs(boundary_tools, tool_evidence),
+                "missing_boundary_tools": missing,
+                "dry_run_or_skipped_boundary_tools": skipped_only,
+                "live_boundary_state": state,
+                "recommended_next_live_smoke": _recommended_live_boundary_smoke(state, boundary_tools, missing, skipped_only),
+            }
+        )
+
+    state_counts: dict[str, int] = {}
+    for row in rows:
+        state = str(row.get("live_boundary_state", "unknown"))
+        state_counts[state] = state_counts.get(state, 0) + 1
+    summary = {
+        "skill_count": len(rows),
+        "boundary_tool_count": len(boundary_tool_names),
+        "boundary_tools_seen_in_evidence_count": sum(1 for row in tool_rows if row["evidence_count"] > 0),
+        "skills_with_boundary_tools_count": sum(1 for row in rows if row.get("boundary_tools")),
+        "skills_with_missing_boundary_evidence_count": sum(1 for row in rows if row.get("missing_boundary_tools")),
+        "skills_with_dry_run_only_boundaries_count": sum(1 for row in rows if row.get("live_boundary_state") == "dry_run_boundary_only"),
+        "skills_needing_live_or_credentialed_validation_count": sum(1 for row in rows if row.get("boundary_tools")),
+        "state_counts": state_counts,
+    }
+    attention = [
+        row
+        for row in rows
+        if row.get("missing_boundary_tools") or row.get("dry_run_or_skipped_boundary_tools")
+    ][:30]
+    return {
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "source": "skill_live_boundary_coverage",
+        "summary": summary,
+        "boundary_tools": tool_rows,
+        "skills": rows,
+        "attention_examples": [
+            {
+                "name": row["name"],
+                "state": row["live_boundary_state"],
+                "missing_boundary_tools": row.get("missing_boundary_tools", [])[:8],
+                "dry_run_or_skipped_boundary_tools": row.get("dry_run_or_skipped_boundary_tools", [])[:8],
+                "next": row.get("recommended_next_live_smoke", ""),
+            }
+            for row in attention
+        ],
+    }
+
+
+def _live_boundary_state(evidence: list[dict[str, Any]]) -> str:
+    if not evidence:
+        return "missing_smoke_evidence"
+    statuses = {str(item.get("status", "")) for item in evidence}
+    if statuses == {ActionStatus.SKIPPED.value}:
+        return "dry_run_or_unavailable_boundary_smoked"
+    if ActionStatus.SUCCEEDED.value in statuses:
+        return "local_or_prepared_boundary_smoked"
+    return "boundary_smoked_with_non_success_status"
+
+
+def _recommended_live_boundary_smoke(state: str, boundary_tools: list[str], missing: list[str], skipped_only: list[str]) -> str:
+    if state == "missing_boundary_evidence":
+        return "Add a non-destructive local/dry-run smoke for boundary tools: " + ", ".join(missing[:8])
+    if state == "dry_run_boundary_only":
+        return "Add credentialed/live validation where safe, or keep explicit unavailable/setup evidence for: " + ", ".join(skipped_only[:8])
+    if boundary_tools:
+        return "Local boundary evidence exists; next step is credentialed/live smoke for user-approved daily-use paths."
+    return "No live-boundary smoke needed for this skill."
+
+
 def _smoked_tool_evidence(sections: list[dict[str, Any]], tool_names: set[str]) -> dict[str, list[dict[str, Any]]]:
     evidence: dict[str, list[dict[str, Any]]] = {}
     for item in sections:
@@ -2083,6 +2239,30 @@ def _smoked_tool_evidence(sections: list[dict[str, Any]], tool_names: set[str]) 
                         "name": str(item.get("name", "")),
                         "status": str(payload.get("status", "")),
                         "summary": str(payload.get("summary", "")),
+                    }
+                )
+    return evidence
+
+
+def _smoked_tool_evidence_details(sections: list[dict[str, Any]], tool_names: set[str]) -> dict[str, list[dict[str, Any]]]:
+    evidence: dict[str, list[dict[str, Any]]] = {}
+    for item in sections:
+        if not item.get("ok"):
+            continue
+        payload = item.get("payload")
+        payload = payload if isinstance(payload, dict) else {}
+        candidates = [str(item.get("name", "")), str(payload.get("tool_name", ""))]
+        for candidate in candidates:
+            if candidate in tool_names:
+                evidence.setdefault(candidate, []).append(
+                    {
+                        "section": str(item.get("section", "")),
+                        "name": str(item.get("name", "")),
+                        "evidence_ref": f"{item.get('section')}:{item.get('name')}",
+                        "status": str(payload.get("status", "")),
+                        "summary": str(payload.get("summary", "")),
+                        "error": str(payload.get("error", "")),
+                        "output_keys": sorted(payload.get("output", {}).keys()) if isinstance(payload.get("output"), dict) else [],
                     }
                 )
     return evidence
@@ -2141,6 +2321,17 @@ def _write_skill_task_coverage_report(coverage: dict[str, Any], config: AgentCon
     return payload
 
 
+def _write_live_boundary_coverage_report(coverage: dict[str, Any], config: AgentConfig) -> dict[str, Any]:
+    coverage_dir = config.data_dir / "live_boundary_coverage"
+    coverage_dir.mkdir(parents=True, exist_ok=True)
+    markdown_path = coverage_dir / "skill-live-boundary-coverage.md"
+    json_path = coverage_dir / "skill-live-boundary-coverage.json"
+    payload = {**coverage, "path": str(markdown_path), "json_path": str(json_path)}
+    markdown_path.write_text(_render_live_boundary_coverage_markdown(payload), encoding="utf-8")
+    json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return payload
+
+
 def _render_skill_task_coverage_markdown(payload: dict[str, Any]) -> str:
     summary = payload["summary"]
     lines = [
@@ -2193,6 +2384,88 @@ def _render_skill_task_coverage_markdown(payload: dict[str, Any]) -> str:
     for item in payload.get("pending_examples", []):
         lines.append(f"- `{item['name']}` ({item['status']}): {item['next']}")
     if not payload.get("pending_examples"):
+        lines.append("- None.")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _render_live_boundary_coverage_markdown(payload: dict[str, Any]) -> str:
+    summary = payload["summary"]
+    lines = [
+        "# Skill Live Boundary Coverage",
+        "",
+        f"Created: {payload['created_at']}",
+        f"Source: `{payload['source']}`",
+        "",
+        "This report tracks approval-gated, medium-risk, and high-risk mapped tools separately from ordinary task smoke. It proves local boundary evidence exists; it does not claim credentialed/live provider validation unless a future smoke records that evidence explicitly.",
+        "",
+        "## Summary",
+        "",
+        f"- Skills covered: {summary['skill_count']}",
+        f"- Boundary tools tracked: {summary['boundary_tool_count']}",
+        f"- Boundary tools seen in smoke evidence: {summary['boundary_tools_seen_in_evidence_count']}",
+        f"- Skills with boundary tools: {summary['skills_with_boundary_tools_count']}",
+        f"- Skills with missing boundary evidence: {summary['skills_with_missing_boundary_evidence_count']}",
+        f"- Skills with dry-run-only boundaries: {summary['skills_with_dry_run_only_boundaries_count']}",
+        f"- Skills needing live or credentialed validation: {summary['skills_needing_live_or_credentialed_validation_count']}",
+        "",
+        "## State Counts",
+        "",
+    ]
+    for state, count in sorted(summary["state_counts"].items()):
+        lines.append(f"- {state}: {count}")
+    lines.extend(
+        [
+            "",
+            "## Skill Matrix",
+            "",
+            "| Skill | Boundary State | Boundary Tools | Missing Evidence | Dry-Run/Skipped Tools | Next Live Smoke |",
+            "| --- | --- | --- | --- | --- | --- |",
+        ]
+    )
+    for row in payload["skills"]:
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _md_cell(str(row["name"])),
+                    _md_cell(str(row["live_boundary_state"])),
+                    _md_cell(", ".join(row.get("boundary_tools", [])[:10]) or "-"),
+                    _md_cell(", ".join(row.get("missing_boundary_tools", [])[:10]) or "-"),
+                    _md_cell(", ".join(row.get("dry_run_or_skipped_boundary_tools", [])[:10]) or "-"),
+                    _md_cell(str(row.get("recommended_next_live_smoke", ""))),
+                ]
+            )
+            + " |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Boundary Tool Evidence",
+            "",
+            "| Tool | Group | Risk | Approval | State | Evidence |",
+            "| --- | --- | --- | --- | --- | --- |",
+        ]
+    )
+    for row in payload["boundary_tools"]:
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _md_cell(str(row["tool_name"])),
+                    _md_cell(str(row.get("capability_group", ""))),
+                    _md_cell(str(row.get("risk_level", ""))),
+                    _md_cell(str(row.get("requires_approval", False))),
+                    _md_cell(str(row.get("live_boundary_state", ""))),
+                    _md_cell(", ".join(row.get("evidence_refs", [])[:5]) or "-"),
+                ]
+            )
+            + " |"
+        )
+    lines.extend(["", "## Attention Examples", ""])
+    for item in payload.get("attention_examples", []):
+        lines.append(f"- `{item['name']}` ({item['state']}): {item['next']}")
+    if not payload.get("attention_examples"):
         lines.append("- None.")
     lines.append("")
     return "\n".join(lines)

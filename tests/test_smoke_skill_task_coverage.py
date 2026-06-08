@@ -4,7 +4,7 @@ import unittest
 
 from humungousaur.schemas import ActionStatus, RiskLevel, ToolResult
 from humungousaur.tools.base import Tool, object_input_schema
-from scripts.smoke_skills import _build_skill_task_coverage
+from scripts.smoke_skills import _build_live_boundary_coverage, _build_skill_task_coverage
 
 
 class DummyTool(Tool):
@@ -111,6 +111,54 @@ class SmokeSkillTaskCoverageTests(unittest.TestCase):
         self.assertEqual(coverage["summary"]["task_smoked_count"], 2)
         self.assertEqual(coverage["summary"]["composition_smoked_count"], 1)
         self.assertEqual(coverage["summary"]["pending_task_smoke_count"], 1)
+
+    def test_live_boundary_coverage_tracks_boundary_evidence_separately(self) -> None:
+        tools = {
+            "safe_tool": DummyTool("safe_tool"),
+            "approval_tool": DummyTool("approval_tool", requires_approval=True, risk_level=RiskLevel.HIGH),
+            "dry_run_tool": DummyTool("dry_run_tool", risk_level=RiskLevel.MEDIUM),
+        }
+        skills = [
+            {
+                "skill_id": "workspace:skills/safe/SKILL.md",
+                "name": "safe",
+                "native_tools": ["safe_tool"],
+                "skill_refs": [],
+                "missing": [],
+            },
+            {
+                "skill_id": "workspace:skills/live/SKILL.md",
+                "name": "live",
+                "native_tools": ["approval_tool", "dry_run_tool"],
+                "skill_refs": [],
+                "missing": [],
+            },
+        ]
+        sections = [
+            {
+                "section": "approval",
+                "name": "approval_tool",
+                "ok": True,
+                "payload": {"tool_name": "approval_tool", "status": "succeeded", "summary": "Prepared approved packet."},
+            },
+            {
+                "section": "approval",
+                "name": "dry_run_tool",
+                "ok": True,
+                "payload": {"tool_name": "dry_run_tool", "status": "skipped", "summary": "Dry-run boundary."},
+            },
+        ]
+
+        coverage = _build_live_boundary_coverage(skills, sections, tools)
+
+        rows = {row["name"]: row for row in coverage["skills"]}
+        self.assertEqual(rows["safe"]["live_boundary_state"], "no_boundary_tools")
+        self.assertEqual(rows["live"]["live_boundary_state"], "boundary_evidence_present_live_not_proven")
+        self.assertEqual(rows["live"]["missing_boundary_tools"], [])
+        self.assertEqual(rows["live"]["dry_run_or_skipped_boundary_tools"], ["dry_run_tool"])
+        self.assertEqual(coverage["summary"]["skills_with_boundary_tools_count"], 1)
+        self.assertEqual(coverage["summary"]["skills_with_missing_boundary_evidence_count"], 0)
+        self.assertEqual(coverage["summary"]["boundary_tools_seen_in_evidence_count"], 2)
 
 
 if __name__ == "__main__":
