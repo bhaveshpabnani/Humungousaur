@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import importlib.util
 import json
@@ -39,6 +40,7 @@ def main() -> int:
     tools = default_tools(config)
     tool_names = set(tools)
     sections: list[dict[str, Any]] = []
+    skill_records: list[dict[str, Any]] = []
 
     def record(section: str, name: str, ok: bool, payload: Any) -> None:
         sections.append({"section": section, "name": name, "ok": ok, "payload": _jsonable(payload)})
@@ -53,6 +55,22 @@ def main() -> int:
         content = read.output.get("content", "") if read.status == ActionStatus.SUCCEEDED else ""
         tool_map = _tool_map_entries(content)
         missing = [entry for entry in tool_map if entry not in tool_names and entry not in skill_names]
+        native_tools = [entry for entry in tool_map if entry in tool_names]
+        skill_refs = [entry for entry in tool_map if entry in skill_names]
+        skill_records.append(
+            {
+                "skill_id": skill_id,
+                "name": str(skill.get("name", "")),
+                "description": str(skill.get("description", "")),
+                "relative_path": str(skill.get("relative_path", "")),
+                "script_count": int(skill.get("script_count", 0) or 0),
+                "tool_map": tool_map,
+                "native_tools": native_tools,
+                "skill_refs": skill_refs,
+                "missing": missing,
+                "content_length": len(content),
+            }
+        )
         record(
             "skills",
             f"read:{skill['name']}",
@@ -66,8 +84,8 @@ def main() -> int:
             {
                 "skill_id": skill_id,
                 "tool_map": tool_map,
-                "native_tools": [entry for entry in tool_map if entry in tool_names],
-                "skill_refs": [entry for entry in tool_map if entry in skill_names],
+                "native_tools": native_tools,
+                "skill_refs": skill_refs,
                 "missing": missing,
                 "has_tool_map": bool(tool_map),
             },
@@ -92,6 +110,7 @@ def main() -> int:
 
     script_catalog = AgentSkillScriptCatalogTool().execute({"limit": 300}, config)
     scripts = script_catalog.output.get("scripts", []) if script_catalog.status == ActionStatus.SUCCEEDED else []
+    script_skill_ids = {str(script.get("script_id", "")): str(script.get("skill_id", "")) for script in scripts}
     record("skills", "script_catalog", script_catalog.status == ActionStatus.SUCCEEDED, _tool_payload(script_catalog))
     _prepare_script_fixtures(config)
     for script in scripts:
@@ -113,6 +132,7 @@ def main() -> int:
             script_run.status == ActionStatus.SUCCEEDED,
             {
                 "script_id": script["script_id"],
+                "skill_id": script.get("skill_id", ""),
                 "status": script_run.status.value,
                 "summary": script_run.summary,
                 "returncode": script_run.output.get("returncode"),
@@ -142,6 +162,25 @@ def main() -> int:
     _smoke_network(record, tools, config)
     _smoke_core_surfaces(record, tools, config)
     _smoke_skill_task_surfaces(record, tools, config)
+    _smoke_desktop_autonomy_and_forms(record, tools, config)
+    coverage = _write_skill_task_coverage_report(
+        _build_skill_task_coverage(skill_records, sections, tools, script_skill_ids),
+        config,
+    )
+    record(
+        "skills",
+        "task_coverage_report",
+        coverage["summary"].get("skill_count", 0) >= 100
+        and coverage["summary"].get("unresolved_tool_map_count", 0) == 0
+        and Path(coverage["path"]).exists()
+        and Path(coverage["json_path"]).exists(),
+        {
+            "path": coverage["path"],
+            "json_path": coverage["json_path"],
+            "summary": coverage["summary"],
+            "pending_examples": coverage.get("pending_examples", []),
+        },
+    )
 
     failed = [item for item in sections if not item["ok"]]
     config.data_dir.mkdir(parents=True, exist_ok=True)
@@ -902,10 +941,34 @@ class _SkillSmokeHttpHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self) -> None:
+        if self.path.startswith("/form"):
+            body = b"""<!doctype html>
+<html><head><title>Humungousaur Skill Form</title></head>
+<body>
+  <h1>Skill Smoke Form</h1>
+  <form action="/submitted" method="post">
+    <label>Name <input name="name" value=""></label>
+    <label>Message <textarea name="message"></textarea></label>
+    <button type="submit">Send</button>
+  </form>
+</body></html>"""
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.end_headers()
+            self.wfile.write(body)
+            return
         self.send_response(200)
         self.send_header("Content-Type", "text/plain")
         self.end_headers()
         self.wfile.write(b"Humungousaur skill smoke network endpoint")
+
+    def do_POST(self) -> None:
+        length = int(self.headers.get("Content-Length", "0") or 0)
+        _body = self.rfile.read(length) if length else b""
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html")
+        self.end_headers()
+        self.wfile.write(b"<!doctype html><html><head><title>Submitted</title></head><body>Submitted skill smoke form.</body></html>")
 
     def log_message(self, format: str, *args: Any) -> None:
         return
@@ -1364,22 +1427,7 @@ def _smoke_core_surfaces(record, tools: dict[str, Any], config: AgentConfig) -> 
 
 
 def _smoke_skill_task_surfaces(record, tools: dict[str, Any], config: AgentConfig) -> None:
-    dry_config = AgentConfig(
-        workspace=config.workspace,
-        data_dir=config.data_dir,
-        max_file_bytes=config.max_file_bytes,
-        max_search_results=config.max_search_results,
-        dry_run=True,
-        planner_provider=config.planner_provider,
-        model_provider=config.model_provider,
-        model_name=config.model_name,
-        model_base_url=config.model_base_url,
-        model_api_key_env=config.model_api_key_env,
-        model_timeout_seconds=config.model_timeout_seconds,
-        runtime_secrets=config.runtime_secrets,
-        allowed_read_roots=config.allowed_read_roots,
-        allowed_write_roots=config.allowed_write_roots,
-    ).normalized()
+    dry_config = _dry_config(config)
     scenarios = [
         ("capability_surfaces", "tool_describe", {"record_id": "tool:channel_message_prepare"}),
         ("capability_surfaces", "tool_search", {"query": "voice response", "limit": 5}),
@@ -1437,12 +1485,143 @@ def _smoke_skill_task_surfaces(record, tools: dict[str, Any], config: AgentConfi
         record(section, tool_name, result.status in {ActionStatus.SUCCEEDED, ActionStatus.SKIPPED}, _tool_payload(result))
 
 
+def _smoke_desktop_autonomy_and_forms(record, tools: dict[str, Any], config: AgentConfig) -> None:
+    dry_config = _dry_config(config)
+    desktop_scenarios = [
+        ("desktop", "active_window", {}, config),
+        ("desktop", "os_windows", {"limit": 10}, config),
+        ("desktop", "os_apps", {"query": "notepad", "limit": 10}, config),
+        ("desktop", "os_virtual_desktops", {"limit": 10}, config),
+        ("desktop", "os_cursor", {}, config),
+        ("desktop", "screen_captures", {"limit": 10}, config),
+        ("desktop", "os_launch_app", {"app": "notepad", "reason": "Skill smoke dry-run; do not launch an app."}, dry_config),
+        ("desktop", "open_app", {"app_id": "notepad"}, dry_config),
+        ("desktop", "os_observe_ui", {"max_elements": 5, "reason": "Skill smoke dry-run; do not read UI."}, dry_config),
+        ("desktop", "os_send_keys", {"shortcut": "Ctrl+Shift+S", "reason": "Skill smoke dry-run; do not send keys."}, dry_config),
+        ("desktop", "os_click_coordinates", {"x": 1, "y": 1, "reason": "Skill smoke dry-run; do not click coordinates."}, dry_config),
+        ("desktop", "screenshot_capture", {"reason": "Skill smoke dry-run; do not capture screen contents."}, dry_config),
+        ("desktop", "screen_capture_delete", {"filename": "skill-smoke.png", "reason": "Skill smoke dry-run; do not delete captures."}, dry_config),
+        ("desktop", "os_switch_window", {"window_id": "window:1", "reason": "Skill smoke dry-run; do not switch windows."}, dry_config),
+        ("desktop", "os_resize_window", {"window_id": "window:1", "x": 0, "y": 0, "width": 800, "height": 600, "reason": "Skill smoke dry-run; do not resize windows."}, dry_config),
+        ("desktop", "os_window_state", {"window_id": "window:1", "action": "restore", "reason": "Skill smoke dry-run; do not change window state."}, dry_config),
+        (
+            "desktop",
+            "os_move_window_to_desktop",
+            {"window_id": "window:1", "desktop_id": "00000000-0000-0000-0000-000000000001", "reason": "Skill smoke dry-run; do not move windows."},
+            dry_config,
+        ),
+        ("desktop", "os_virtual_desktop_action", {"action": "next", "reason": "Skill smoke dry-run; do not switch desktops."}, dry_config),
+    ]
+    for section, tool_name, payload, execution_config in desktop_scenarios:
+        result = tools[tool_name].execute(payload, execution_config)
+        record(section, tool_name, _ok_or_declared_unavailable(result), _tool_payload(result))
+
+    cognition_scenarios = [
+        ("autonomy", "automation_daemon_status", {"limit": 10}, config),
+        ("autonomy", "automation_daemon_configure", {"enabled": True, "poll_seconds": 30, "allow_initiative": False, "note": "Skill smoke dry-run."}, dry_config),
+        ("autonomy", "automation_daemon_tick", {"max_cycles_per_tick": 1, "allow_initiative": False, "approve_high_risk": False}, dry_config),
+        ("autonomy", "cognitive_state", {"limit": 5}, config),
+        ("autonomy", "cognitive_priority_review", {"purpose": "skill_smoke", "limit": 5}, dry_config),
+        ("autonomy", "cognitive_priority_status", {"limit": 5}, config),
+        ("autonomy", "cognitive_environment_status", {"limit": 5}, config),
+        ("autonomy", "cognitive_commitment_status", {"limit": 5}, config),
+        (
+            "autonomy",
+            "cognitive_trigger_record",
+            {
+                "name": "Skill smoke trigger",
+                "match_source": "skill_smoke",
+                "conditions": {"text_equals": "run skill smoke"},
+                "text": "Run the skill smoke follow-up.",
+                "event_source": "skill_smoke",
+                "reason": "Skill smoke dry-run.",
+            },
+            dry_config,
+        ),
+        ("autonomy", "cognitive_trigger_status", {"limit": 5}, config),
+        (
+            "autonomy",
+            "cognitive_trigger_evaluate",
+            {"source": "skill_smoke", "stimulus_type": "test", "text": "run skill smoke", "metadata": {"purpose": "coverage"}, "limit": 5},
+            dry_config,
+        ),
+        ("autonomy", "cognitive_trigger_cancel", {"trigger_id": "trigger-skill-smoke", "reason": "Skill smoke dry-run."}, dry_config),
+    ]
+    for section, tool_name, payload, execution_config in cognition_scenarios:
+        result = tools[tool_name].execute(payload, execution_config)
+        record(section, tool_name, result.status in {ActionStatus.SUCCEEDED, ActionStatus.SKIPPED}, _tool_payload(result))
+
+    _smoke_web_form_task(record, tools, config, dry_config)
+
+
+def _smoke_web_form_task(record, tools: dict[str, Any], config: AgentConfig, dry_config: AgentConfig) -> None:
+    server = HTTPServer(("127.0.0.1", 0), _SkillSmokeHttpHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = int(server.server_address[1])
+        base_url = f"http://127.0.0.1:{port}/form"
+        opened = tools["browser_open"].execute({"url": base_url}, config)
+        session_id = opened.output.get("session_id", "") if _ok(opened) else ""
+        observed = tools["browser_observe"].execute({"session_id": session_id}, config) if session_id else opened
+        typed = tools["browser_type"].execute({"session_id": session_id, "element_id": "form:0:field:name", "text": "Humungousaur", "clear": True}, config) if session_id else opened
+        filled = (
+            tools["browser_fill_form"].execute({"session_id": session_id, "form_index": 0, "values": {"name": "Humungousaur", "message": "Skill smoke form draft."}}, config)
+            if session_id
+            else opened
+        )
+        submitted = tools["browser_submit_form"].execute({"session_id": session_id, "form_index": 0}, config) if session_id and _ok(filled) else filled
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+    browser_live_scenarios = [
+        ("web_forms", "browser_live_open", {"url": "http://127.0.0.1:1/form", "headless": True}, dry_config),
+        ("web_forms", "browser_live_wait", {"live_session_id": "live-skill-smoke", "mode": "timeout", "timeout_ms": 100}, dry_config),
+        ("web_forms", "browser_live_query_selector", {"live_session_id": "live-skill-smoke", "selector": "form"}, dry_config),
+        ("web_forms", "browser_live_select_option", {"live_session_id": "live-skill-smoke", "element_id": "live:select", "values": ["option"], "reason": "Skill smoke dry-run."}, dry_config),
+        ("web_forms", "browser_live_press_key", {"live_session_id": "live-skill-smoke", "shortcut": "Enter", "reason": "Skill smoke dry-run."}, dry_config),
+        ("web_forms", "browser_live_screenshot", {"live_session_id": "live-skill-smoke", "reason": "Skill smoke dry-run."}, dry_config),
+    ]
+    record("web_forms", "browser_open", _ok(opened), _tool_payload(opened))
+    record("web_forms", "browser_observe", _ok(observed) and any(item.get("element_id") == "form:0" for item in observed.output.get("interactive_elements", [])), _tool_payload(observed))
+    record("web_forms", "browser_type", _ok(typed), _tool_payload(typed))
+    record("web_forms", "browser_fill_form", _ok(filled), _tool_payload(filled))
+    record("web_forms", "browser_submit_form", _ok(submitted) and submitted.output.get("title") == "Submitted", _tool_payload(submitted))
+    for section, tool_name, payload, execution_config in browser_live_scenarios:
+        result = tools[tool_name].execute(payload, execution_config)
+        record(section, tool_name, result.status in {ActionStatus.SUCCEEDED, ActionStatus.SKIPPED}, _tool_payload(result))
+
+
+def _dry_config(config: AgentConfig) -> AgentConfig:
+    return AgentConfig(
+        workspace=config.workspace,
+        data_dir=config.data_dir,
+        max_file_bytes=config.max_file_bytes,
+        max_search_results=config.max_search_results,
+        dry_run=True,
+        planner_provider=config.planner_provider,
+        model_provider=config.model_provider,
+        model_name=config.model_name,
+        model_base_url=config.model_base_url,
+        model_api_key_env=config.model_api_key_env,
+        model_timeout_seconds=config.model_timeout_seconds,
+        runtime_secrets=config.runtime_secrets,
+        allowed_read_roots=config.allowed_read_roots,
+        allowed_write_roots=config.allowed_write_roots,
+    ).normalized()
+
+
+def _ok_or_declared_unavailable(result: ToolResult) -> bool:
+    return result.status in {ActionStatus.SUCCEEDED, ActionStatus.SKIPPED} or result.output.get("supported") is False
+
+
 def _ok(result: ToolResult) -> bool:
     return result.status == ActionStatus.SUCCEEDED
 
 
 def _tool_payload(result: ToolResult) -> dict[str, Any]:
-    return {"status": result.status.value, "summary": result.summary, "error": result.error, "output": result.output}
+    return {"tool_name": result.tool_name, "status": result.status.value, "summary": result.summary, "error": result.error, "output": result.output}
 
 
 def _jsonable(value: Any) -> Any:
@@ -1468,6 +1647,256 @@ def _tool_map_entries(content: str) -> list[str]:
         if match:
             entries.append(match.group(1))
     return entries
+
+
+def _build_skill_task_coverage(
+    skill_records: list[dict[str, Any]],
+    sections: list[dict[str, Any]],
+    tools: dict[str, Any],
+    script_skill_ids: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    script_skill_ids = script_skill_ids or {}
+    tool_evidence = _smoked_tool_evidence(sections, set(tools))
+    script_evidence = _smoked_script_evidence(sections, script_skill_ids)
+    tool_metadata = {
+        name: {
+            "risk_level": str(getattr(tool, "risk_level", "")),
+            "requires_approval": bool(getattr(tool, "requires_approval", False)),
+            "capability_group": str(getattr(tool, "capability_group", "")),
+        }
+        for name, tool in tools.items()
+    }
+
+    rows: list[dict[str, Any]] = []
+    for skill in skill_records:
+        skill_id = str(skill.get("skill_id", ""))
+        native_tools = [str(item) for item in skill.get("native_tools", [])]
+        direct_tools = [tool for tool in native_tools if tool in tool_evidence]
+        pending_tools = [tool for tool in native_tools if tool not in tool_evidence]
+        script_runs = script_evidence.get(skill_id, [])
+        boundary_tools = [
+            tool
+            for tool in native_tools
+            if tool_metadata.get(tool, {}).get("requires_approval")
+            or tool_metadata.get(tool, {}).get("risk_level") in {"high", "medium"}
+        ]
+        if direct_tools or script_runs:
+            status = "task_smoked"
+        elif skill.get("skill_refs"):
+            status = "composition_pending_resolution"
+        elif native_tools:
+            status = "native_tool_pending_task_smoke"
+        else:
+            status = "no_native_task_evidence"
+        rows.append(
+            {
+                "skill_id": skill_id,
+                "name": str(skill.get("name", "")),
+                "description": str(skill.get("description", "")),
+                "relative_path": str(skill.get("relative_path", "")),
+                "tool_map_count": len(skill.get("tool_map", [])),
+                "native_tool_count": len(native_tools),
+                "skill_refs": [str(item) for item in skill.get("skill_refs", [])],
+                "unresolved_entries": [str(item) for item in skill.get("missing", [])],
+                "smoked_native_tools": direct_tools,
+                "pending_native_tools": pending_tools,
+                "script_task_evidence": script_runs,
+                "approval_or_external_boundary_tools": boundary_tools,
+                "task_evidence_status": status,
+                "evidence_refs": _coverage_evidence_refs(direct_tools, tool_evidence) + [item["evidence_ref"] for item in script_runs],
+                "recommended_next_smoke": _recommended_task_smoke(status, pending_tools, skill.get("skill_refs", [])),
+            }
+        )
+
+    by_name = {row["name"]: row for row in rows}
+    for row in rows:
+        if row["task_evidence_status"] != "composition_pending_resolution":
+            continue
+        ref_evidence = []
+        for ref in row["skill_refs"]:
+            ref_row = by_name.get(ref)
+            if ref_row and ref_row.get("task_evidence_status") in {"task_smoked", "composition_smoked"}:
+                ref_evidence.append({"skill": ref, "status": ref_row["task_evidence_status"], "evidence_refs": ref_row.get("evidence_refs", [])[:5]})
+        if ref_evidence:
+            row["task_evidence_status"] = "composition_smoked"
+            row["referenced_skill_evidence"] = ref_evidence
+            row["recommended_next_smoke"] = "Add a direct wrapper-task smoke only if this skill should do more than compose referenced skills."
+        else:
+            row["referenced_skill_evidence"] = []
+
+    status_counts: dict[str, int] = {}
+    for row in rows:
+        status = str(row.get("task_evidence_status", "unknown"))
+        status_counts[status] = status_counts.get(status, 0) + 1
+    pending = [
+        row
+        for row in rows
+        if row.get("task_evidence_status") not in {"task_smoked", "composition_smoked"}
+        or row.get("pending_native_tools")
+        or row.get("approval_or_external_boundary_tools")
+    ]
+    summary = {
+        "skill_count": len(rows),
+        "task_smoked_count": status_counts.get("task_smoked", 0),
+        "composition_smoked_count": status_counts.get("composition_smoked", 0),
+        "pending_task_smoke_count": sum(1 for row in rows if row.get("task_evidence_status") not in {"task_smoked", "composition_smoked"}),
+        "skills_with_pending_native_tools_count": sum(1 for row in rows if row.get("pending_native_tools")),
+        "skills_with_approval_or_external_boundaries_count": sum(1 for row in rows if row.get("approval_or_external_boundary_tools")),
+        "unresolved_tool_map_count": sum(1 for row in rows if row.get("unresolved_entries")),
+        "smoked_native_tool_count": len(tool_evidence),
+        "status_counts": status_counts,
+    }
+    return {
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "source": "skill_task_smoke_coverage",
+        "summary": summary,
+        "smoked_tools": sorted(tool_evidence),
+        "skills": rows,
+        "pending_examples": [
+            {
+                "name": row["name"],
+                "status": row["task_evidence_status"],
+                "pending_native_tools": row.get("pending_native_tools", [])[:8],
+                "next": row.get("recommended_next_smoke", ""),
+            }
+            for row in pending[:20]
+        ],
+    }
+
+
+def _smoked_tool_evidence(sections: list[dict[str, Any]], tool_names: set[str]) -> dict[str, list[dict[str, Any]]]:
+    evidence: dict[str, list[dict[str, Any]]] = {}
+    for item in sections:
+        if not item.get("ok"):
+            continue
+        payload = item.get("payload")
+        payload = payload if isinstance(payload, dict) else {}
+        candidates = [str(item.get("name", "")), str(payload.get("tool_name", ""))]
+        for candidate in candidates:
+            if candidate in tool_names:
+                evidence.setdefault(candidate, []).append(
+                    {
+                        "section": str(item.get("section", "")),
+                        "name": str(item.get("name", "")),
+                        "status": str(payload.get("status", "")),
+                        "summary": str(payload.get("summary", "")),
+                    }
+                )
+    return evidence
+
+
+def _smoked_script_evidence(sections: list[dict[str, Any]], script_skill_ids: dict[str, str]) -> dict[str, list[dict[str, Any]]]:
+    evidence: dict[str, list[dict[str, Any]]] = {}
+    for item in sections:
+        if item.get("section") != "skills" or not str(item.get("name", "")).startswith("script_run:") or not item.get("ok"):
+            continue
+        payload = item.get("payload")
+        payload = payload if isinstance(payload, dict) else {}
+        script_id = str(payload.get("script_id", ""))
+        skill_id = str(payload.get("skill_id") or script_skill_ids.get(script_id, ""))
+        if not script_id or not skill_id:
+            continue
+        evidence.setdefault(skill_id, []).append(
+            {
+                "script_id": script_id,
+                "status": str(payload.get("status", "")),
+                "summary": str(payload.get("summary", "")),
+                "evidence_ref": f"{item.get('section')}:{item.get('name')}",
+            }
+        )
+    return evidence
+
+
+def _coverage_evidence_refs(tool_names: list[str], evidence: dict[str, list[dict[str, Any]]]) -> list[str]:
+    refs: list[str] = []
+    for tool_name in tool_names:
+        for item in evidence.get(tool_name, [])[:3]:
+            refs.append(f"{item['section']}:{item['name']}")
+    return refs
+
+
+def _recommended_task_smoke(status: str, pending_tools: list[str], skill_refs: list[str]) -> str:
+    if status == "task_smoked" and pending_tools:
+        return "Add narrower smoke for remaining mapped native tools: " + ", ".join(pending_tools[:8])
+    if status == "task_smoked":
+        return "Keep current local task smoke and add credentialed/live smoke where the tool boundary requires it."
+    if status == "composition_pending_resolution" and skill_refs:
+        return "Resolve referenced skill evidence, then decide whether a direct composition smoke is needed."
+    if pending_tools:
+        return "Add a task scenario that executes: " + ", ".join(pending_tools[:8])
+    return "Add native tools, scripts, or a concrete task artifact before marking this skill task-smoked."
+
+
+def _write_skill_task_coverage_report(coverage: dict[str, Any], config: AgentConfig) -> dict[str, Any]:
+    coverage_dir = config.data_dir / "skill_task_coverage"
+    coverage_dir.mkdir(parents=True, exist_ok=True)
+    markdown_path = coverage_dir / "skill-task-coverage.md"
+    json_path = coverage_dir / "skill-task-coverage.json"
+    payload = {**coverage, "path": str(markdown_path), "json_path": str(json_path)}
+    markdown_path.write_text(_render_skill_task_coverage_markdown(payload), encoding="utf-8")
+    json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return payload
+
+
+def _render_skill_task_coverage_markdown(payload: dict[str, Any]) -> str:
+    summary = payload["summary"]
+    lines = [
+        "# Skill Task Smoke Coverage",
+        "",
+        f"Created: {payload['created_at']}",
+        f"Source: `{payload['source']}`",
+        "",
+        "## Summary",
+        "",
+        f"- Skills covered: {summary['skill_count']}",
+        f"- Direct task-smoked skills: {summary['task_smoked_count']}",
+        f"- Composition-smoked skills: {summary['composition_smoked_count']}",
+        f"- Pending task-smoke skills: {summary['pending_task_smoke_count']}",
+        f"- Skills with pending native tools: {summary['skills_with_pending_native_tools_count']}",
+        f"- Skills with approval/external boundaries: {summary['skills_with_approval_or_external_boundaries_count']}",
+        f"- Unresolved Tool Maps: {summary['unresolved_tool_map_count']}",
+        f"- Native tools seen in smoke evidence: {summary['smoked_native_tool_count']}",
+        "",
+        "## Status Counts",
+        "",
+    ]
+    for status, count in sorted(summary["status_counts"].items()):
+        lines.append(f"- {status}: {count}")
+    lines.extend(
+        [
+            "",
+            "## Matrix",
+            "",
+            "| Skill | Task Evidence | Smoked Tools | Pending Tools | Boundary Tools | Next Smoke |",
+            "| --- | --- | --- | --- | --- | --- |",
+        ]
+    )
+    for row in payload["skills"]:
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _md_cell(str(row["name"])),
+                    _md_cell(str(row["task_evidence_status"])),
+                    _md_cell(", ".join(row.get("smoked_native_tools", [])[:8]) or "-"),
+                    _md_cell(", ".join(row.get("pending_native_tools", [])[:8]) or "-"),
+                    _md_cell(", ".join(row.get("approval_or_external_boundary_tools", [])[:8]) or "-"),
+                    _md_cell(str(row.get("recommended_next_smoke", ""))),
+                ]
+            )
+            + " |"
+        )
+    lines.extend(["", "## Pending Examples", ""])
+    for item in payload.get("pending_examples", []):
+        lines.append(f"- `{item['name']}` ({item['status']}): {item['next']}")
+    if not payload.get("pending_examples"):
+        lines.append("- None.")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _md_cell(value: str) -> str:
+    return value.replace("|", "\\|").replace("\n", " ")[:240]
 
 
 if __name__ == "__main__":

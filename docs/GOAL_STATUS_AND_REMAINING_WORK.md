@@ -17,13 +17,14 @@ The core standard for this goal is:
 ## Current Repository Status
 
 - Branch: `main`.
-- Last fully pushed capability commit before this slice: `8961a6f Harden voice audio meeting skills`.
-- Latest documented full skill smoke: `429` sections, `0` failures.
+- Last fully pushed capability commit before this slice: `075a02a Harden remaining thin skills`.
+- Latest documented full skill smoke: `471` sections, `0` failures.
 - Latest documented full regression: `392 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
 - Latest per-skill audit matrix: `132` skills audited, `132` native-capable or script-backed, `0` thin-tool-map skills needing deeper detail, `0` prompt-only, `0` unresolved Tool Map entries, `0` attention items.
+- Latest per-skill task-smoke coverage: `132` skills covered, `131` direct task-smoked, `1` composition-smoked, `0` pending task-smoke skills, `148` native tools seen in smoke evidence.
 - Current tool-domain folders observed: `33`.
 - Current skills observed: more than `130`.
-- Current working tree note: final thin-skill hardening has been completed and skill-smoke tested in this slice; final commit/push status should be checked with `git status` and `git log`.
+- Current working tree note: per-skill task-smoke coverage and direct task scenarios have been added in this slice; final commit/push status should be checked with `git status` and `git log`.
 
 ## Done And Pushed
 
@@ -66,6 +67,7 @@ These areas have native implementation, skill wiring, smoke/regression coverage,
 | Voice provider surfaces | Done as tool surfaces | Voice provider status, transcription, response preparation, speech, response listing, Deepgram, ElevenLabs, Windows SAPI, and local Whisper provider paths are represented. |
 | OS and browser control surfaces | Done as native surfaces | Browser, screen, keyboard, mouse, window, app, clipboard, and virtual desktop tool surfaces exist. |
 | Cognition and memory | Done as native surfaces | Memory, persona, reflection, self-assessment, automations, autonomous loop, and multi-agent coordination surfaces exist. |
+| Per-skill task-smoke coverage | Done in current slice | Full skill smoke now emits Markdown/JSON coverage artifacts, records exact native tool evidence, directly task-smokes 131 skills, composition-smokes the remaining wrapper skill, and reports 0 skills without task-smoke evidence. |
 
 ## Implemented But Still Needs Deeper Live Validation
 
@@ -85,11 +87,12 @@ These areas have code and skills, but they are not yet finished as daily-use, li
 
 ## Still To Do
 
-### 1. Complete Task-Specific Skill Smoke
+### 1. Expand Narrow Per-Tool And Live Skill Smoke
 
 - The generated per-skill audit matrix now reports `0` thin-tool-map skills and `0` attention items.
-- Add missing task-specific smoke for each high-value skill.
-- Flag live-capable skills that still lack credentialed/live smoke evidence.
+- The generated per-skill task-smoke coverage now reports `0` pending task-smoke skills.
+- Add narrower smoke for mapped native tools that are still pending inside otherwise task-smoked skills.
+- Flag and live-test credentialed/provider-backed skills that still only have local, dry-run, or prepare/approve evidence.
 
 ### 2. Complete Desktop App End-To-End Validation
 
@@ -198,7 +201,7 @@ For each channel:
 
 ## Suggested Next Order
 
-1. Create the exhaustive per-skill audit matrix.
+1. Expand live/credentialed smoke for the highest-value skills now that representative per-skill task smoke is complete.
 2. Complete the desktop app settings/runtime surface.
 3. Run the full voice-to-agent-to-voice Windows smoke.
 4. Live-test the top channels.
