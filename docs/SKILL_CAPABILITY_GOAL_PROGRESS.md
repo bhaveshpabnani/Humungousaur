@@ -8,11 +8,11 @@ Smoke test each skill task one by one, identify skills that are only prompt/proc
 
 ## Current Status
 
-- Repository state reviewed during the voice/audio/meeting skill-hardening slice.
+- Repository state reviewed during the final thin-skill hardening slice.
 - Current workspace skill count: `132`.
 - Current tool-domain folders: `33`.
 - Latest full skill smoke result: `429` sections, `0` failures.
-- Latest per-skill audit matrix: `132` skills audited, `119` native-capable or script-backed, `13` thin-tool-map skills needing deeper workflow/safety/verification detail, `0` prompt-only, `0` unresolved Tool Map entries.
+- Latest per-skill audit matrix: `132` skills audited, `132` native-capable or script-backed, `0` thin-tool-map skills needing deeper workflow/safety/verification detail, `0` prompt-only, `0` unresolved Tool Map entries, `0` attention items.
 - The goal is still active. The current work proves strong incremental progress, but not exhaustive completion across every skill and external/live integration.
 
 ## Completed Capability Slices
@@ -52,6 +52,7 @@ These slices have been implemented, smoke-tested, regression-tested, committed, 
 | current slice | Browser/computer-use skill hardening | Browser/computer-use, OpenAI-style computer-use, and Claude-style computer-use skills now document native observe-act-verify workflows, approval boundaries, implementation limits, and verification against browser/OS smoke and tests. |
 | current slice | Cognition/orchestration skill hardening | Self-assessment, self-reflection, team orchestration, worker handoff, autonomous loop, memory metabolism, persona evolution, taskflow, task tracking, priority review, and wakeup scheduling now document safety/approval and native-boundary contracts. |
 | current slice | Voice/audio/meeting skill hardening | Speech operations, local speech, spoken response style, voice loop, voice wakeup, voice call gateway, audio summaries, meeting transcription, meeting follow-up, and music/sound generation now document native workflows, safety rules, native implementation boundaries, and verification expectations. |
+| current slice | Final thin-skill hardening | Ambient room context, bot-loop protection, capability audit/surfaces, channel gateway, Codex/coding delegation, daily planning, gog, session wrap-up, skill authoring/security review, and wacli now meet native workflow, safety, boundary, and verification standards. |
 
 ## Current Native Capability Areas
 
@@ -106,8 +107,8 @@ The recurring verification pattern for each completed slice has been:
 
 Latest verified results:
 
-- Full skill smoke after voice/audio/meeting skill-hardening slice: `429` sections, `0` failures.
-- Full regression after voice/audio/meeting skill-hardening slice: `392 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
+- Full skill smoke after final thin-skill hardening slice: `429` sections, `0` failures.
+- Full regression after final thin-skill hardening slice: `392 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
 - The warnings are from `openpyxl` datetime deprecation during XLSX tests, not from the new skill slices.
 
 ## Still To Do
@@ -218,11 +219,10 @@ Needed work:
 
 ### 10. Resolve Exhaustive Skill Audit Findings
 
-Current status: the native audit matrix now proves Tool Map resolution and implementation classification across all 132 skills. It currently reports 119 native-capable/script-backed skills, 13 thin-tool-map skills, 0 prompt-only skills, and 0 unresolved Tool Map entries.
+Current status: the native audit matrix now proves Tool Map resolution and implementation classification across all 132 skills. It currently reports 132 native-capable/script-backed skills, 0 thin-tool-map skills, 0 prompt-only skills, 0 unresolved Tool Map entries, and 0 attention items.
 
 Needed work:
 
-- Improve the 13 remaining thin-tool-map skills with richer workflow, safety, boundary, and verification detail.
 - Add task-specific smoke for each high-value skill, not only representative grouped smoke.
 - Flag live-capable skills that still lack credentialed/live smoke evidence.
 - Prioritize high-value assistant skills first: Google Workspace, channels, desktop/OS/browser, voice, coding/delegation, security, memory/cognition.

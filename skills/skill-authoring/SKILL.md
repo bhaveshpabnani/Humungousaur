@@ -48,12 +48,18 @@ Use when creating new skills, improving existing skills, integrating upstream sk
 9. For each native script, add first-line metadata, enforce allowed root boundaries, accept the standard JSON envelope, emit bounded JSON output when possible, and list it under `Native Scripts`.
 10. Run the workspace skill format and skill-tool tests.
 
-## Safety And Boundaries
+## Safety
 
 - Do not copy third-party code or instructions blindly.
 - Do not import, execute, or rely on third-party skill implementation code as the native implementation of a Humungousaur skill.
 - Do not include secrets, tokens, or private paths unless they are user-provided repo-local references.
 - Do not create skills that implement brittle keyword routing.
+
+## Native Implementation Boundaries
+
+- Use `skill_forge_draft`, skill catalog/read/script tools, filesystem tools, and tests as the native authoring path.
+- Upstream skills, OpenClaw extensions, Hermes tools, Codex plugin skills, and Anthropic skills are references only unless reimplemented as Humungousaur-owned tools/scripts.
+- Scripts must be repo-local, schema-bounded, and safe under configured workspace roots before they are advertised as capability.
 
 ## Verification
 

@@ -5,6 +5,10 @@ description: Delegate bounded repository work to Codex CLI or another trusted co
 
 # Coding Agent Delegation
 
+## Purpose
+
+Coordinate bounded coding work through native Codex CLI and multi-agent tools while preserving user changes, test evidence, and explicit completion reporting.
+
 ## Tool Map
 
 - `codex_cli_status`
@@ -39,6 +43,15 @@ Delegate when the work is:
 4. Use `codex_cli_run` only when the user requested implementation or verification that fits delegation.
 5. Verify important claims locally after the worker completes.
 
+## Workflow
+
+1. Decide whether delegation is warranted or whether the current agent should do the work directly.
+2. Check `codex_cli_status` and current repository state.
+3. Build a scoped handoff with `codex_cli_plan` or `multi_agent_coordinate`.
+4. Use `codex_cli_run` only after reviewing the generated task, sandbox, and approval requirements.
+5. Re-read local git status, diffs, and relevant files after completion.
+6. Run focused verification locally before accepting the worker's result.
+
 ## Prompt Shape
 
 Include:
@@ -68,3 +81,16 @@ Completion:
 - Do not ask a worker to edit outside the intended workspace.
 - Do not let a worker push or deploy unless the user explicitly asked.
 - Treat worker output as evidence, not truth; verify.
+
+## Native Implementation Boundaries
+
+- Use native Codex and multi-agent Humungousaur tools for handoffs; do not shell out to unmodeled assistants or import third-party agent harnesses.
+- Keep deterministic code limited to command construction, sandbox validation, and result capture.
+- Mark unavailable CLIs as setup blockers instead of simulating delegation.
+
+## Verification
+
+- Confirm the worker ran in the intended workspace and sandbox.
+- Confirm changed files are scoped to the delegated objective.
+- Confirm test output or blocker evidence locally.
+- Confirm no secrets or unrelated user changes were staged, committed, or reported as agent work.

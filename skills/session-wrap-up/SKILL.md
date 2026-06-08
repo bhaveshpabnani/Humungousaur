@@ -40,11 +40,17 @@ Use when the user asks to wrap up, summarize the session, checkpoint progress, p
 5. If the user requested commit, stage only intended files and commit after verification.
 6. Produce a concise handoff with next actions.
 
-## Safety And Boundaries
+## Safety
 
 - Never push, deploy, or send external updates unless explicitly requested.
 - Do not include secrets in summaries or commits.
 - Do not claim tests passed unless command output proves it.
+
+## Native Implementation Boundaries
+
+- Use memory, commitment, self-review, shell, note, and Codex planning tools as the native wrap-up path.
+- Treat git and test output as evidence; do not infer clean status or passing checks from prior intent.
+- Use `write_note` or `memory_write` only for useful durable state, not for every transient thought.
 
 ## Verification
 

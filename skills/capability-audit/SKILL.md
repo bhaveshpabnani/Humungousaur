@@ -46,11 +46,17 @@ Use before large architecture changes, after adding tools/skills/plugins, when d
 6. Identify gaps as missing, partially wired, untested, blocked by credentials, or blocked by policy.
 7. Recommend the next implementation batch with verification steps.
 
-## Safety And Boundaries
+## Safety
 
 - Do not claim a provider is usable because config exists; use status or smoke evidence.
 - Do not treat catalog declarations as direct execution support.
 - Keep external secrets redacted.
+
+## Native Implementation Boundaries
+
+- Use `capability_surface`, `tool_search`, `tool_describe`, catalogs, and status tools as authoritative current-state inputs.
+- Use `agent_skill_capability_audit` for skill implementation status; do not classify skills from informal names or reference repos.
+- Report live readiness separately from native local support when credentials, CLIs, local models, or network access are unavailable.
 
 ## Verification
 

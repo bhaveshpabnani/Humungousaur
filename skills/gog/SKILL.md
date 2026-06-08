@@ -5,6 +5,14 @@ description: Google Workspace CLI operations for Gmail, Calendar, Drive, Contact
 
 # gog
 
+## Purpose
+
+Operate a locally authenticated Google Workspace CLI only when the user explicitly wants the `gog` path and approval boundaries are clear. Prefer Humungousaur-native packets and drafts when live CLI execution is not required.
+
+## When To Use
+
+Use this skill when the user asks for Gmail, Calendar, Drive, Contacts, Sheets, or Docs work and a local `gog` CLI is available. For Gmail drafting inside Humungousaur, prefer the native `gmail_draft_prepare` artifact tool first; use `gog` only when configured and approved.
+
 ## Tool Map
 
 - `gmail_draft_prepare`
@@ -13,9 +21,7 @@ description: Google Workspace CLI operations for Gmail, Calendar, Drive, Contact
 - `xlsx_workbook_inspect`
 - `run_shell_command`
 
-Use this skill when the user asks for Gmail, Calendar, Drive, Contacts, Sheets, or Docs work and a local `gog` CLI is available. For Gmail drafting inside Humungousaur, prefer the native `gmail_draft_prepare` artifact tool first; use `gog` only when configured and approved.
-
-## Setup
+## Workflow
 
 1. Check `gog` with a shell status command such as `gog auth list`.
 2. If not configured, the user must complete OAuth setup:
@@ -23,6 +29,8 @@ Use this skill when the user asks for Gmail, Calendar, Drive, Contacts, Sheets, 
    - `gog auth add <account> --services gmail,calendar,drive,contacts,docs,sheets`
 3. Set `GOG_ACCOUNT=<email>` to avoid repeating account flags.
 4. Prefer `--json` and `--no-input` for machine-readable commands.
+5. Prefer native draft/packet tools before live CLI mutation.
+6. Require explicit approval before sends, calendar creation, sheet mutation, deletes, clears, or sharing changes.
 
 ## Safety
 
@@ -30,6 +38,12 @@ Use this skill when the user asks for Gmail, Calendar, Drive, Contacts, Sheets, 
 - Prefer drafts over sends when wording or recipient identity is unclear.
 - Never infer a recipient from a fuzzy name when email address is absent.
 - Keep OAuth tokens out of prompts and logs.
+
+## Native Implementation Boundaries
+
+- Use Humungousaur native tools for Gmail drafts, email drafts, XLSX artifacts, and operation packets when possible.
+- Use `run_shell_command` for `gog` only as an approved local CLI adapter path, with exact arguments and no hidden shell expansion.
+- Treat missing `gog`, missing OAuth, ambiguous account state, or non-JSON output as setup/blocker evidence.
 
 ## Gmail
 
@@ -123,3 +137,10 @@ Read:
 ```bash
 gog docs cat <docId>
 ```
+
+## Verification
+
+- Confirm `gog auth list` or an equivalent status command shows the intended account and services before live reads or writes.
+- Confirm native draft/packet artifacts exist when using Humungousaur-native preparation.
+- Confirm CLI JSON output or a concrete command result before reporting a read/update.
+- For sends or mutations, report whether the action was only prepared, blocked, or actually executed.

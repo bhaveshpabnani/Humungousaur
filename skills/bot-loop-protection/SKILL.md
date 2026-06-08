@@ -38,11 +38,17 @@ Use for Slack, Discord, Telegram, Teams, WebChat, SMS, or any channel where inbo
 5. Let model-led cognition review ambiguous cases; do not build hardcoded phrase triggers.
 6. Record suppression reason for diagnostics.
 
-## Safety And Boundaries
+## Safety
 
 - Never let two bot accounts repeatedly call each other's message tools.
 - Do not bypass bot-loop protection because the text appears urgent.
 - Do not import OpenClaw bot-loop code directly.
+
+## Native Implementation Boundaries
+
+- Use native channel metadata, outbox history, and cognitive review to distinguish bot-authored context from user intent.
+- Use `activity_ingest` for safe passive context and `channel_message_prepare` only when policy allows a response.
+- Treat missing bot metadata from an adapter as a channel implementation gap; do not infer bot identity from vague text patterns.
 
 ## Verification
 

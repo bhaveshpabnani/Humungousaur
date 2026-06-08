@@ -43,12 +43,17 @@ Use when the user asks to plan a day, morning, evening, sprint, work block, or p
 5. Use `daily_plan_inspect` before responding or before creating any wakeups/commitments.
 6. If responding by voice, prepare a brief spoken summary and leave detailed steps in text or notes.
 
-## Safety And Boundaries
+## Safety
 
 - Do not infer private calendar details unless provided by tools or user text.
 - Do not create reminders, messages, purchases, or external actions without explicit approval.
 - Avoid over-scheduling; preserve focus and recovery time when evidence suggests overload.
+
+## Native Implementation Boundaries
+
+- Use cognition, commitment, memory, activity, and daily-plan tools as the native planning path.
 - `daily_plan_create` prepares a local plan only; reminder drafts are not scheduled until separate approved wakeup/cognition tools run.
+- Do not import upstream daily-planner code; adapt concepts into Humungousaur-owned plan artifacts and cognitive tools.
 
 ## Verification
 
