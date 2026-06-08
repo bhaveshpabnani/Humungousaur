@@ -41,12 +41,17 @@ Use for meeting recordings, voice notes, call transcripts, Teams/Zoom notes, sta
 5. Use `transcript_summary_inspect` before writing a note, recording commitments, or preparing a spoken summary.
 6. Record commitments only when action items are explicit enough and user intent allows it.
 
-## Safety And Boundaries
+## Safety
 
 - Do not transcribe private meeting audio without user permission.
 - Do not infer owners or due dates from ambiguous statements.
 - Do not depend on Hermes Teams pipeline code; implement meeting workflows through Humungousaur tools.
+
+## Native Implementation Boundaries
+
+- Use `voice_transcribe` for meeting audio and `transcript_summary_create` / `transcript_summary_inspect` for structured meeting artifacts.
 - Transcript-summary artifacts remain prepared locally until the user asks to share, send, or persist derived commitments.
+- Use commitment and memory tools only for explicit, verified action items or user-approved persistence.
 
 ## Verification
 

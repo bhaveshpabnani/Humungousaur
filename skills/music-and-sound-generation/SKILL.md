@@ -39,12 +39,17 @@ Use when the user asks to write a song, generate a music prompt, create sound ef
 5. If generated audio is requested and no native generator exists, label the output as a prepared spec rather than generated audio.
 6. Save prompts or drafts when the user wants reusable assets.
 
-## Safety And Boundaries
+## Safety
 
 - Do not imitate living artists' voices or copyrighted songs too closely.
 - Do not execute third-party generation scripts from Hermes or OpenClaw directly.
 - Do not claim audio was generated unless a native tool actually produced an artifact.
+
+## Native Implementation Boundaries
+
+- Use `sound_spec_create` and `sound_spec_inspect` as the native implementation path for music and sound planning.
 - `sound_spec_create` creates local specs only; it does not generate, upload, or publish audio.
+- Use `capability_surface` or `tool_search` before claiming an audio generation provider is available.
 
 ## Verification
 

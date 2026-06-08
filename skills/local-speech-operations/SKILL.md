@@ -39,11 +39,17 @@ Use when the user asks why the agent depends on cloud speech, wants offline voic
 5. Use cloud providers only as explicit alternatives, not as the default implementation.
 6. When a local model is missing, report the missing native setup instead of importing upstream skill code.
 
-## Safety And Boundaries
+## Safety
 
 - Do not send private audio to cloud services without user intent.
 - Do not write transcripts outside configured data directories.
+- Do not speak private content aloud unless the user requested immediate local playback.
+
+## Native Implementation Boundaries
+
+- Use `voice_provider_status`, `voice_transcribe`, `voice_response_prepare`, and `voice_speak` as the native implementation path.
 - Do not execute third-party voice scripts from upstream repositories as implementation.
+- Treat missing local model files, missing `faster-whisper`, or unavailable Windows SAPI as setup findings, not as permission to silently switch to cloud providers.
 
 ## Verification
 

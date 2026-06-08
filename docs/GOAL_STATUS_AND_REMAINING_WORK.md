@@ -17,13 +17,13 @@ The core standard for this goal is:
 ## Current Repository Status
 
 - Branch: `main`.
-- Last fully pushed capability commit before this slice: `3b5b254 Harden browser computer use skills`.
+- Last fully pushed capability commit before this slice: `b6cd6c9 Align desktop runtime defaults and channel listening`.
 - Latest documented full skill smoke: `429` sections, `0` failures.
 - Latest documented full regression: `392 passed`, `6 skipped`, `8 warnings`, `264 subtests passed`.
-- Latest per-skill audit matrix: `132` skills audited, `109` native-capable or script-backed, `23` thin-tool-map skills needing deeper detail, `0` prompt-only, `0` unresolved Tool Map entries.
+- Latest per-skill audit matrix: `132` skills audited, `119` native-capable or script-backed, `13` thin-tool-map skills needing deeper detail, `0` prompt-only, `0` unresolved Tool Map entries.
 - Current tool-domain folders observed: `33`.
 - Current skills observed: more than `130`.
-- Current working tree note: cognition/orchestration skill hardening has been completed and tested in this slice; final commit/push status should be checked with `git status` and `git log`.
+- Current working tree note: voice/audio/meeting skill hardening has been completed and tested in this slice; final commit/push status should be checked with `git status` and `git log`.
 
 ## Done And Pushed
 
@@ -41,6 +41,7 @@ These areas have native implementation, skill wiring, smoke/regression coverage,
 | Channel skill hardening | Done in current slice | Shared channel operations plus Slack, Telegram, Discord, and WhatsApp skills now document native workflows, safety/approval rules, implementation boundaries, and verification against the existing channel smoke path. |
 | Browser/computer-use skill hardening | Done in current slice | Browser, OpenAI-style computer-use, and Claude-style computer-use skills now document native observe-act-verify workflows, approval boundaries, native implementation limits, and verification against browser/OS smoke and tests. |
 | Cognition/orchestration skill hardening | Done in current slice | Self-assessment, self-reflection, team orchestration, worker handoff, autonomy, memory metabolism, persona evolution, taskflow, task tracking, priority review, and wakeup scheduling now have explicit safety/approval and native-boundary contracts. |
+| Voice/audio/meeting skill hardening | Done in current slice | Speech operations, local speech, spoken response style, voice loop, voice wakeup, voice call gateway, audio summaries, meeting transcription, meeting follow-up, and music/sound generation now have explicit safety, native-boundary, workflow, and verification contracts. |
 | PDF and OCR surfaces | Done | PDF merge/extract/read support and OCR provider status surface. |
 | RSS/feed monitoring | Done | Native RSS/feed monitoring tools and smoke coverage. |
 | Transcript and spoken-content summaries | Done | Native transcript/audio/video summary artifacts. |
@@ -85,7 +86,7 @@ These areas have code and skills, but they are not yet finished as daily-use, li
 
 ### 1. Resolve Per-Skill Audit Findings
 
-- Use the generated per-skill audit matrix to target the `42` thin-tool-map skills.
+- Use the generated per-skill audit matrix to target the `13` remaining thin-tool-map skills.
 - Add missing task-specific smoke for each high-value skill.
 - Flag skills whose tool maps pass but whose workflow is still too abstract.
 

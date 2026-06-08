@@ -40,12 +40,17 @@ Use for podcast notes, voice memos, recorded calls, YouTube transcripts, trainin
 5. Use `transcript_summary_inspect` before reporting completion or passing the artifact to notes/memory tools.
 6. Record durable memory or commitments only when supported and desired.
 
-## Safety And Boundaries
+## Safety
 
 - Do not summarize copyrighted media by reproducing long verbatim sections.
 - Do not send private audio to cloud transcription without explicit choice.
 - Do not run upstream media tools directly as implementation.
+
+## Native Implementation Boundaries
+
+- Use `voice_transcribe` for audio-to-text and `transcript_summary_create` / `transcript_summary_inspect` for structured summary artifacts.
 - The native summary tool accepts provided transcripts or allowed local transcript files; audio transcription remains provider-mediated through `voice_transcribe`.
+- Use `write_note`, `memory_write`, and `cognitive_commitment_record` only after the summary artifact has been inspected.
 
 ## Verification
 

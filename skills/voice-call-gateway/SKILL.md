@@ -39,11 +39,17 @@ Use when the user asks about phone calls, voice-call channel setup, call transcr
 5. Prepare responses as voice artifacts or call-channel messages according to the adapter contract.
 6. Audit every external-visible call action.
 
-## Safety And Boundaries
+## Safety
 
 - Phone calls require strict identity, consent, and loop protection.
 - Do not record or transcribe calls without permission.
 - Do not import OpenClaw telephony plugins directly.
+
+## Native Implementation Boundaries
+
+- Use `channel_catalog`, `channel_manifest`, `channel_setup_requirements`, and `channel_doctor` to prove whether a native call-capable adapter exists.
+- Use Humungousaur STT/TTS and channel tools for transcript turns and prepared replies.
+- If no native call adapter exists, report the implementation gap and prepare setup/design artifacts only.
 
 ## Verification
 

@@ -43,11 +43,17 @@ Use after a meeting summary, call transcript, standup, planning conversation, or
 6. Create notes or documents when the user wants a durable record.
 7. End with a clear checklist of recorded, drafted, and still-unconfirmed items.
 
-## Safety And Boundaries
+## Safety
 
 - Do not send messages, emails, or channel replies automatically.
 - Do not assign tasks to people unless meeting evidence or user instruction supports it.
 - Do not use upstream meeting pipeline code as implementation.
+
+## Native Implementation Boundaries
+
+- Use `meeting_followup_packet_create` for the local durable follow-up plan before drafting or recording multiple actions.
+- Use `writing_draft_create`, `channel_message_prepare`, and commitment tools as native implementations; external-visible sends remain approval-gated.
+- Treat upstream meeting pipelines as reference patterns only, never as imported runtime dependencies.
 
 ## Verification
 

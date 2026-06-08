@@ -5,6 +5,14 @@ description: Operate speech-to-text, text-to-speech, wake-word, voice response, 
 
 # Speech Operations
 
+## Purpose
+
+Operate the full speech surface through Humungousaur-native providers: speech-to-text, text-to-speech, wake-word response preparation, and voice response artifacts. This skill is the shared voice capability wrapper for local, OpenAI, Deepgram, ElevenLabs, and Windows speech paths.
+
+## When To Use
+
+Use this skill when the task involves STT, TTS, voice wakeup, spoken responses, voice calls, recorded audio, or voice response mode selection.
+
 ## Tool Map
 
 - `voice_provider_status`
@@ -13,7 +21,12 @@ description: Operate speech-to-text, text-to-speech, wake-word, voice response, 
 - `voice_speak`
 - `voice_responses`
 
-Use this skill when the task involves STT, TTS, voice wakeup, spoken responses, voice calls, or audio files.
+## Inputs And Evidence
+
+- Audio path, transcript text, or wake-word activation payload.
+- Requested response mode: `text`, `voice_prepare`, `voice_speak`, or `silent`.
+- Provider settings and runtime secrets from the app/API request.
+- Voice provider status, transcript output, response artifact path, and playback status.
 
 ## Providers
 
@@ -39,6 +52,15 @@ Check:
 - TTS configured providers.
 - wake-word availability.
 - output paths for prepared audio.
+
+## Workflow
+
+1. Inspect the input modality and response mode before choosing a provider.
+2. Call `voice_provider_status` for provider readiness when testing or debugging speech.
+3. For audio input, call `voice_transcribe` with the requested provider or the configured local/cloud default.
+4. Route transcripts as `source: "voice_transcript"` so cognition decides whether to respond, analyze, observe, or ignore.
+5. Use `voice_response_prepare` for audio artifacts and `voice_speak` only when immediate playback is appropriate.
+6. Use `voice_responses` to inspect generated responses before claiming voice readiness.
 
 ## Harness Behavior
 
@@ -70,3 +92,16 @@ The cognitive decision provider decides whether to respond, observe, analyze, or
 - Avoid speaking secrets aloud.
 - For shared spaces, default to `voice_prepare` unless playback is clearly desired.
 - For phone calls, use strict allowlists.
+
+## Native Implementation Boundaries
+
+- Use Humungousaur voice tools and provider clients; do not import Hermes, OpenClaw, or other upstream speech implementations directly.
+- Treat cloud provider use as configured runtime capability, not as a hardcoded default.
+- Report missing keys, voice IDs, local models, or unavailable playback as explicit setup findings.
+
+## Verification
+
+- Confirm provider readiness with `voice_provider_status` for the requested STT/TTS path.
+- Confirm `voice_transcribe` returns non-empty transcript text or a provider-specific setup/error result.
+- Confirm `voice_response_prepare` or `voice_speak` returns a success status and an audio artifact path when audio is prepared.
+- Confirm user-facing responses do not expose raw API keys, full tokens, or sensitive ambient audio.

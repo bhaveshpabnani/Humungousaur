@@ -37,11 +37,17 @@ Use when response mode is `voice_prepare` or `voice_speak`, after wake-word acti
 5. If the task is still running or blocked, speak status rather than pretending completion.
 6. Verify the voice tool returned success or an artifact path.
 
-## Safety And Boundaries
+## Safety
 
 - Do not speak private or embarrassing information in shared contexts.
 - Do not use ElevenLabs or cloud TTS unless configured and chosen.
 - Do not bypass text response requirements when the user also needs details.
+
+## Native Implementation Boundaries
+
+- Use `voice_response_prepare` for prepared audio and `voice_speak` for immediate playback; do not fabricate audio paths.
+- Use `cognitive_interaction_review` or current harness output to align spoken text with the actual response posture.
+- Keep style adaptation in the response text; provider selection and artifact creation must remain in native voice tools.
 
 ## Verification
 

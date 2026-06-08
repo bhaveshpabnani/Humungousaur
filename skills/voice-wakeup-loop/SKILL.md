@@ -39,12 +39,17 @@ Use when the user asks to test voice wakeup, process activation JSON, transcribe
 5. Prepare a spoken response artifact with `voice_response_prepare`; use `voice_speak` only when immediate playback is appropriate.
 6. Review the activation, transcription, run, and voice artifact when debugging.
 
-## Safety And Boundaries
+## Safety
 
 - Do not transcribe ambient audio unless the user enabled that workflow.
 - Do not speak secrets aloud.
 - Do not bypass cognitive decision or approval policy because input came from voice.
+
+## Native Implementation Boundaries
+
+- Use Humungousaur-native activation, voice, cognition, runtime, and response tools for the wakeup path.
 - Do not import Hermes/OpenClaw wake-word code; use Humungousaur-native adapters or the local voice-wakeup module only through approved integration paths.
+- Treat wakeup JSON, recorded audio, and transcripts as stimuli with provenance; do not hardcode wake phrase behavior into the skill.
 
 ## Verification
 
