@@ -714,6 +714,8 @@ class ReleaseReadinessTests(unittest.TestCase):
         macos_text = MACOS_VERIFY_PATH.read_text(encoding="utf-8")
         windows_text = WINDOWS_VERIFY_PATH.read_text(encoding="utf-8")
 
+        self.assertTrue(windows_text.lstrip().startswith("param("))
+
         for expected in [
             "CFBundleShortVersionString",
             "CFBundleVersion",
