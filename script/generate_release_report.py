@@ -121,9 +121,13 @@ def main() -> int:
         artifact_section(release_dir),
     ]
 
+    hygiene_command = [sys.executable, "script/verify_open_source_hygiene.py"]
+    if args.skip_website:
+        hygiene_command.append("--skip-website")
+
     checks: list[tuple[str, list[str], Path, dict[str, str] | None]] = [
         ("Backend Regression", [sys.executable, "-m", "unittest", "discover", "-v"], ROOT, None),
-        ("Open-Source Hygiene", [sys.executable, "script/verify_open_source_hygiene.py"], ROOT, None),
+        ("Open-Source Hygiene", hygiene_command, ROOT, None),
         ("Desktop Parity", [sys.executable, "script/verify_desktop_parity.py"], ROOT, None),
         ("Desktop Runtime Smoke", [sys.executable, "script/verify_desktop_runtime_smoke.py"], ROOT, None),
     ]

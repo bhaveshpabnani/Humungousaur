@@ -193,6 +193,10 @@ jobs:
           cp ./* ..
       - name: Verify release assets
         run: python3 ./script/verify_release_readiness.py --skip-website --require-assets --release-dir artifacts/release/final --release-tag "$HUMUNGOUSAUR_RELEASE_TAG"
+      - name: Prepare skipped website hygiene root
+        run: |
+          mkdir -p ../Humungousaur-Website
+          git -C ../Humungousaur-Website init
       - name: Generate release readiness report
         run: |
           python3 ./script/generate_release_report.py \
