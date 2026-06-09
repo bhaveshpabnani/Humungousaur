@@ -6,8 +6,14 @@ using Microsoft.UI.Xaml.Media;
 
 namespace Humungousaur.App;
 
-public sealed class MarkdownTextBlock : RichTextBlock
+public sealed class MarkdownTextBlock : UserControl
 {
+    private readonly RichTextBlock _block = new()
+    {
+        IsTextSelectionEnabled = true,
+        TextWrapping = TextWrapping.WrapWholeWords,
+    };
+
     public static readonly DependencyProperty MarkdownProperty = DependencyProperty.Register(
         nameof(Markdown),
         typeof(string),
@@ -22,8 +28,7 @@ public sealed class MarkdownTextBlock : RichTextBlock
 
     public MarkdownTextBlock()
     {
-        IsTextSelectionEnabled = true;
-        TextWrapping = TextWrapping.WrapWholeWords;
+        Content = _block;
     }
 
     private static void OnMarkdownChanged(DependencyObject dependencyObject, DependencyPropertyChangedEventArgs args)
@@ -36,14 +41,14 @@ public sealed class MarkdownTextBlock : RichTextBlock
 
     private void RenderMarkdown(string markdown)
     {
-        Blocks.Clear();
+        _block.Blocks.Clear();
         var lines = markdown.Replace("\r\n", "\n").Split('\n');
         foreach (var rawLine in lines)
         {
             var line = rawLine.TrimEnd();
             if (line.Length == 0)
             {
-                Blocks.Add(new Paragraph());
+                _block.Blocks.Add(new Paragraph());
                 continue;
             }
 
@@ -76,7 +81,7 @@ public sealed class MarkdownTextBlock : RichTextBlock
             {
                 AppendInline(paragraph, line);
             }
-            Blocks.Add(paragraph);
+            _block.Blocks.Add(paragraph);
         }
     }
 
