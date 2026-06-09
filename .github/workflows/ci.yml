@@ -16,8 +16,8 @@ jobs:
     name: Backend and release source checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Install test extras
@@ -48,7 +48,7 @@ jobs:
     name: macOS app package smoke
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Build macOS app
         run: swift build --package-path apps/macos
       - name: Package macOS zip
@@ -56,7 +56,7 @@ jobs:
       - name: Verify macOS zip
         run: ./script/verify_macos_package.sh
       - name: Upload macOS CI artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Humungousaur-macOS-ci
           path: |
@@ -67,8 +67,8 @@ jobs:
     name: Windows app package smoke
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "8.0.x"
       - name: Package Windows zip
@@ -78,7 +78,7 @@ jobs:
         shell: pwsh
         run: ./script/verify_windows_package.ps1
       - name: Upload Windows CI artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Humungousaur-Windows-ci
           path: |

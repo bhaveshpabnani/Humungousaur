@@ -128,7 +128,7 @@ class ReleaseReadinessTests(unittest.TestCase):
             self.assertIn(expected, workflow_text)
         publish_block = workflow_text.split("\n  publish:", 1)[1]
         for expected in [
-            "actions/setup-python@v5",
+            "actions/setup-python@v6",
             'python -m pip install -e ".[browser,pdf,ocr,office,test]"',
             "generate_release_report.py",
             "HUMUNGOUSAUR_RELEASE_TAG",
@@ -148,6 +148,23 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("permissions:\n  contents: read", before_jobs)
         self.assertIn("permissions:\n      contents: write", publish_block)
         self.assertNotIn("contents: write", before_jobs)
+        for deprecated_action in [
+            "actions/checkout@v4",
+            "actions/setup-python@v5",
+            "actions/setup-dotnet@v4",
+            "actions/upload-artifact@v4",
+            "actions/download-artifact@v4",
+        ]:
+            self.assertNotIn(deprecated_action, ci_text)
+            self.assertNotIn(deprecated_action, workflow_text)
+        for node24_action in [
+            "actions/checkout@v6",
+            "actions/setup-python@v6",
+            "actions/setup-dotnet@v5",
+            "actions/upload-artifact@v7",
+            "actions/download-artifact@v8",
+        ]:
+            self.assertIn(node24_action, ci_text + workflow_text)
 
     def test_real_world_smoke_runs_safe_app_browser_and_calendar_checks(self) -> None:
         module = load_real_world_smoke_module()

@@ -625,7 +625,7 @@ def check_source_tree(preflight: Preflight) -> None:
     publish_missing = [
         needle
         for needle in [
-            "actions/setup-python@v5",
+            "actions/setup-python@v6",
             'python -m pip install -e ".[browser,pdf,ocr,office,test]"',
             "generate_release_report.py",
             "--fail-on-check-failure",
@@ -636,6 +636,20 @@ def check_source_tree(preflight: Preflight) -> None:
         preflight.fail(f"GitHub release publish job is missing Python/test setup for release evidence {publish_missing}")
     else:
         preflight.ok("GitHub release publish job installs test extras before generating release evidence")
+    deprecated_actions = [
+        "actions/checkout@v4",
+        "actions/setup-python@v5",
+        "actions/setup-dotnet@v4",
+        "actions/upload-artifact@v4",
+        "actions/download-artifact@v4",
+    ]
+    for action_ref in deprecated_actions:
+        if action_ref in workflow_text:
+            preflight.fail(f"GitHub release workflow still uses deprecated Node 20 action {action_ref}")
+    ci_text_for_actions = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    for action_ref in deprecated_actions:
+        if action_ref in ci_text_for_actions:
+            preflight.fail(f"GitHub CI workflow still uses deprecated Node 20 action {action_ref}")
 
     parity = subprocess.run(
         [sys.executable, str(ROOT / "script/verify_desktop_parity.py")],

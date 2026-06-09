@@ -131,7 +131,7 @@ The `publish` job must explicitly depend on `preflight`, `macos`, and `windows` 
 
 The workflow token must be least-privilege: CI and release jobs default to `contents: read`, and only the `publish` job may request `contents: write` for GitHub release creation and asset repair.
 
-The `publish` job must also run `actions/setup-python@v5` and `python -m pip install -e ".[browser,pdf,ocr,office,test]"` before generating `release-readiness.md`, because the generated release evidence runs the backend regression a final time.
+The `publish` job must also run `actions/setup-python@v6` and `python -m pip install -e ".[browser,pdf,ocr,office,test]"` before generating `release-readiness.md`, because the generated release evidence runs the backend regression a final time.
 
 The workflow is rerunnable. It should use `gh release view`, `gh release create`, or `gh release upload --clobber` so a failed or partial run can be repaired without renaming the release. Post-publish verification should use `gh release download` for `checksums.txt` and both desktop zips, then confirm each downloaded zip matches its SHA-256 row.
 
