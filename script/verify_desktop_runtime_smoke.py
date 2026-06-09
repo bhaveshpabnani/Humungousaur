@@ -103,6 +103,15 @@ def main() -> int:
             system_status = api_get(base_url, "/system/status")
             smoke.require(system_status.get("workspace") == str(workspace.resolve()), "system status reports desktop workspace")
 
+            updates = api_get(base_url, "/updates/latest?offline=1&platform=macos")
+            smoke.require(updates.get("current_version") == "0.1.0", "update endpoint reports installed app version", updates)
+            smoke.require(updates.get("latest_tag") == "v0.1.0", "update endpoint exposes release tag", updates)
+            smoke.require(
+                str(updates.get("platform_download_url", "")).endswith("/Humungousaur-macOS.zip"),
+                "update endpoint exposes platform download URL",
+                updates.get("platform_download_url"),
+            )
+
             tools = api_get(base_url, "/tools")
             group_names = {group.get("name") for group in tools.get("groups", [])}
             tool_names = {tool.get("name") for tool in tools.get("tools", [])}

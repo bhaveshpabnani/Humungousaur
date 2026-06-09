@@ -107,6 +107,17 @@ struct SettingsView: View {
                         SecureField("API key", text: $model.secrets.modelAPIKey)
                         Toggle("Allow protected actions without asking", isOn: $model.settings.approveHighRisk)
                     }
+                    Section("App updates") {
+                        Text(model.updateStatusText)
+                        HStack {
+                            Button("Check for Updates") {
+                                Task { await model.checkForUpdates() }
+                            }
+                            if let downloadURL = model.updateInfo?.downloadURL {
+                                Link("Open Download", destination: downloadURL)
+                            }
+                        }
+                    }
                     Section {
                         HStack {
                             Button("Save Settings") {

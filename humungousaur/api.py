@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 import uuid
@@ -11,7 +12,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
+from urllib.request import Request, urlopen
 
+from humungousaur import __version__
 from humungousaur.config import AgentConfig
 from humungousaur.cognition.loop import AutonomousLoopRunner, autonomous_loop_result_to_dict, autonomous_status
 from humungousaur.cognition.queue import RuntimeEventQueue
@@ -81,6 +84,12 @@ from humungousaur.tools.workflow_tools import (
 
 
 DASHBOARD_DIR = Path(__file__).resolve().parent / "dashboard"
+RELEASE_OWNER = os.environ.get("HUMUNGOUSAUR_RELEASE_OWNER", "bhaveshpabnani")
+RELEASE_REPO = os.environ.get("HUMUNGOUSAUR_RELEASE_REPO", "Humungousaur")
+RELEASE_API_BASE = os.environ.get("HUMUNGOUSAUR_RELEASE_API_BASE", "https://api.github.com")
+RELEASE_WEB_BASE = f"https://github.com/{RELEASE_OWNER}/{RELEASE_REPO}/releases"
+WINDOWS_RELEASE_ASSET = "Humungousaur-Windows.zip"
+MACOS_RELEASE_ASSET = "Humungousaur-macOS.zip"
 
 
 def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
@@ -121,6 +130,14 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                     return
                 if path == "/system/status":
                     self._send_json(collect_system_status(effective_config()))
+                    return
+                if path == "/updates/latest":
+                    self._send_json(
+                        _latest_update_payload(
+                            platform=_str_arg(query, "platform"),
+                            offline=_bool_arg(query, "offline", False),
+                        )
+                    )
                     return
                 if path == "/tools":
                     self._send_json(_tool_catalog_payload(effective_config()))
@@ -965,6 +982,129 @@ def _tool_catalog_payload(config: AgentConfig) -> dict[str, Any]:
         "groups": [{"name": name, "tool_count": count} for name, count in sorted(groups.items())],
         "tools": items,
     }
+
+
+def _latest_update_payload(*, platform: str = "", offline: bool = False) -> dict[str, Any]:
+    current_version = __version__
+    release_url = f"{RELEASE_WEB_BASE}/latest"
+    latest_tag = f"v{current_version}"
+    latest_version = current_version
+    assets = _default_release_assets(release_url)
+    source = "default"
+    error = ""
+    published_at = ""
+
+    if not offline:
+        try:
+            release = _fetch_latest_github_release()
+            latest_tag = str(release.get("tag_name") or latest_tag)
+            latest_version = latest_tag.removeprefix("v")
+            release_url = str(release.get("html_url") or release_url)
+            published_at = str(release.get("published_at") or "")
+            assets = _release_assets_from_github(release, release_url)
+            source = "github"
+        except Exception as exc:
+            error = str(exc)
+
+    normalized_platform = _normal_platform(platform)
+    platform_download = assets.get(normalized_platform, "")
+    return {
+        "current_version": current_version,
+        "latest_version": latest_version,
+        "latest_tag": latest_tag,
+        "update_available": _is_newer_version(latest_version, current_version),
+        "release_url": release_url,
+        "published_at": published_at,
+        "platform": normalized_platform,
+        "platform_download_url": platform_download,
+        "downloads": assets,
+        "checksum_url": assets.get("checksums", f"{RELEASE_WEB_BASE}/latest/download/checksums.txt"),
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+        "source": source,
+        "error": error,
+    }
+
+
+def _fetch_latest_github_release() -> dict[str, Any]:
+    url = f"{RELEASE_API_BASE.rstrip('/')}/repos/{RELEASE_OWNER}/{RELEASE_REPO}/releases/latest"
+    request = Request(
+        url,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "humungousaur-desktop-update-check",
+        },
+    )
+    token = os.environ.get("GITHUB_TOKEN", "")
+    if token:
+        request.add_header("Authorization", f"Bearer {token}")
+    with urlopen(request, timeout=4) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("GitHub release response was not an object.")
+    return payload
+
+
+def _release_assets_from_github(release: dict[str, Any], release_url: str) -> dict[str, str]:
+    assets = _default_release_assets(release_url)
+    for item in release.get("assets", []):
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "")
+        download_url = str(item.get("browser_download_url") or "")
+        if not download_url:
+            continue
+        if name == WINDOWS_RELEASE_ASSET:
+            assets["windows"] = download_url
+        elif name == MACOS_RELEASE_ASSET:
+            assets["macos"] = download_url
+        elif name == "checksums.txt":
+            assets["checksums"] = download_url
+    return assets
+
+
+def _default_release_assets(release_url: str) -> dict[str, str]:
+    base = release_url.rstrip("/")
+    if not base.endswith("/latest"):
+        tag = base.rsplit("/", 1)[-1]
+        base = f"{RELEASE_WEB_BASE}/download/{tag}"
+    else:
+        base = f"{RELEASE_WEB_BASE}/latest/download"
+    return {
+        "windows": f"{base}/{WINDOWS_RELEASE_ASSET}",
+        "macos": f"{base}/{MACOS_RELEASE_ASSET}",
+        "checksums": f"{base}/checksums.txt",
+    }
+
+
+def _normal_platform(platform: str) -> str:
+    clean = platform.strip().casefold()
+    if clean in {"win", "windows", "windows_nt"}:
+        return "windows"
+    if clean in {"mac", "macos", "darwin", "osx"}:
+        return "macos"
+    return clean or "unknown"
+
+
+def _is_newer_version(latest: str, current: str) -> bool:
+    latest_parts = _version_parts(latest)
+    current_parts = _version_parts(current)
+    length = max(len(latest_parts), len(current_parts), 3)
+    latest_parts.extend([0] * (length - len(latest_parts)))
+    current_parts.extend([0] * (length - len(current_parts)))
+    return latest_parts > current_parts
+
+
+def _version_parts(version: str) -> list[int]:
+    clean = version.strip().removeprefix("v")
+    parts: list[int] = []
+    for item in clean.replace("-", ".").split("."):
+        if item.isdigit():
+            parts.append(int(item))
+        else:
+            digits = "".join(char for char in item if char.isdigit())
+            if digits:
+                parts.append(int(digits))
+    return parts
 
 
 def _int_arg(query: dict[str, list[str]], name: str, default: int) -> int:

@@ -16,6 +16,8 @@ final class AppViewModel: ObservableObject {
     @Published var outbox = OutboxEnvelope(messages: [])
     @Published var autonomousStatus: JSONValue = .object([:])
     @Published var voiceStatus: JSONValue = .object([:])
+    @Published var updateInfo: UpdateInfo?
+    @Published var updateStatusText = "Check for release updates."
     @Published var messages: [ChatMessage] = []
     @Published var selectedRun: RunItem?
     @Published var selectedApproval: ApprovalItem?
@@ -235,6 +237,20 @@ final class AppViewModel: ObservableObject {
         keychain.write(secrets.elevenLabsAPIKey, account: "elevenlabs_api_key")
         api.setBaseURL(settings.apiBaseURL)
         notice = "Settings saved."
+    }
+
+    func checkForUpdates() async {
+        api.setBaseURL(settings.apiBaseURL)
+        do {
+            let info = try await api.latestUpdate()
+            updateInfo = info
+            updateStatusText = info.statusText
+            notice = info.updateAvailable ? "Update \(info.latestTag) is available." : "Humungousaur is up to date."
+        } catch {
+            updateInfo = nil
+            updateStatusText = error.localizedDescription
+            notice = "Update check failed."
+        }
     }
 
     func settingsWithChannelSecrets() -> AppSettings {

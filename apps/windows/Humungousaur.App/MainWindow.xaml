@@ -685,6 +685,18 @@
                                 <Button Content="Start agent" Click="StartAgentButton_Click" />
                                 <Button Content="Stop agent" Click="StopAgentButton_Click" />
                             </StackPanel>
+                            <Border Grid.Row="6" Grid.ColumnSpan="2" Padding="12" CornerRadius="8" Background="{StaticResource AppSubtleBrush}" BorderBrush="{StaticResource AppStrokeBrush}" BorderThickness="1">
+                                <Grid ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock x:Name="UpdateStatusText" Text="Check for release updates." VerticalAlignment="Center" TextWrapping="WrapWholeWords" />
+                                    <Button Grid.Column="1" Content="Check for updates" Click="CheckForUpdatesButton_Click" />
+                                    <Button Grid.Column="2" x:Name="OpenDownloadButton" Content="Open download" Click="OpenDownloadButton_Click" IsEnabled="False" />
+                                </Grid>
+                            </Border>
                         </Grid>
                     </Border>
                 </Grid>

@@ -819,6 +819,7 @@ def check_source_tree(preflight: Preflight) -> None:
             "Desktop runtime smoke",
             "create_api_server",
             "/health",
+            "/updates/latest",
             "/tools",
             "/channels/status",
             "/channels/message/prepare",

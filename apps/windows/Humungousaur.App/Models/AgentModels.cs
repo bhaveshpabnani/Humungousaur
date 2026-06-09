@@ -90,6 +90,48 @@ public sealed class OutboxEnvelope
     public List<JsonObject> Messages { get; set; } = [];
 }
 
+public sealed class UpdateInfo
+{
+    [JsonPropertyName("current_version")]
+    public string CurrentVersion { get; set; } = "";
+
+    [JsonPropertyName("latest_version")]
+    public string LatestVersion { get; set; } = "";
+
+    [JsonPropertyName("latest_tag")]
+    public string LatestTag { get; set; } = "";
+
+    [JsonPropertyName("update_available")]
+    public bool UpdateAvailable { get; set; }
+
+    [JsonPropertyName("release_url")]
+    public string ReleaseUrl { get; set; } = "";
+
+    [JsonPropertyName("platform")]
+    public string Platform { get; set; } = "";
+
+    [JsonPropertyName("platform_download_url")]
+    public string PlatformDownloadUrl { get; set; } = "";
+
+    [JsonPropertyName("checksum_url")]
+    public string ChecksumUrl { get; set; } = "";
+
+    [JsonPropertyName("source")]
+    public string Source { get; set; } = "";
+
+    [JsonPropertyName("error")]
+    public string Error { get; set; } = "";
+
+    public string StatusText =>
+        UpdateAvailable
+            ? $"Update {LatestTag} is available"
+            : string.IsNullOrWhiteSpace(Error)
+                ? $"Current version {CurrentVersion}"
+                : $"Using {CurrentVersion}; release check unavailable";
+
+    public string DownloadUrl => string.IsNullOrWhiteSpace(PlatformDownloadUrl) ? ReleaseUrl : PlatformDownloadUrl;
+}
+
 public sealed class RuntimeRunItem
 {
     [JsonPropertyName("run_id")]

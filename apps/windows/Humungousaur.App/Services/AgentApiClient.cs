@@ -27,6 +27,11 @@ public sealed class AgentApiClient
 
     public Task<JsonObject> GetSystemStatusAsync() => GetJsonObjectAsync("system/status");
 
+    public async Task<UpdateInfo> GetLatestUpdateAsync()
+    {
+        return await GetAsync<UpdateInfo>("updates/latest?platform=windows") ?? new UpdateInfo();
+    }
+
     public async Task<List<ChannelInfo>> GetChannelsAsync()
     {
         return await GetAsync<List<ChannelInfo>>("channels") ?? [];

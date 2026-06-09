@@ -27,6 +27,7 @@ MACOS_VOICE_AUTONOMY_SETTINGS = ROOT / "apps/macos/Sources/VoiceAutonomySettings
 REQUIRED_API_SURFACES: dict[str, tuple[str, ...]] = {
     "health": ("health",),
     "system status": ("system/status",),
+    "update check": ("updates/latest",),
     "tool catalog": ("tools",),
     "runs list": ("runs?limit",),
     "run timeline": ("runs/", "timeline?limit"),
@@ -108,6 +109,10 @@ REQUIRED_UI_SURFACES: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "settings and model configuration": (
         ("SettingsPage", "WorkspacePathBox", "PythonPathBox", "ModelProviderBox", "ModelApiKeyBox", "ApproveHighRiskSwitch"),
         ("SettingsView()", "Project folder", "Python path", "Provider", "API key", "Allow protected actions without asking"),
+    ),
+    "app update check": (
+        ("UpdateStatusText", "CheckForUpdatesButton_Click", "OpenDownloadButton_Click"),
+        ("checkForUpdates", "Check for Updates", "Open Download"),
     ),
 }
 

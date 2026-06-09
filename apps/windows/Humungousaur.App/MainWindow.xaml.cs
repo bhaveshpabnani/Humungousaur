@@ -6,6 +6,7 @@ using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Windows.System;
 
 namespace Humungousaur.App;
 
@@ -23,6 +24,7 @@ public sealed partial class MainWindow : Window
     private List<ToolInfo> _tools = [];
     private List<RuntimeRunItem> _runs = [];
     private List<ApprovalItem> _approvals = [];
+    private string _latestDownloadUrl = "";
     private bool _autonomyCycleRunning;
     private bool _channelListenerTickRunning;
 
@@ -65,6 +67,7 @@ public sealed partial class MainWindow : Window
         await RefreshAutonomyAsync();
         await RefreshOutboxAsync();
         await RefreshRuntimeAsync();
+        await RefreshUpdateAsync();
     }
 
     private async Task RefreshHealthAsync()
@@ -199,6 +202,23 @@ public sealed partial class MainWindow : Window
         {
             RuntimeDetailText.Text = exc.Message;
             AddProcessLine(exc.Message);
+        }
+    }
+
+    private async Task RefreshUpdateAsync()
+    {
+        try
+        {
+            var update = await _api.GetLatestUpdateAsync();
+            _latestDownloadUrl = update.DownloadUrl;
+            UpdateStatusText.Text = update.StatusText;
+            OpenDownloadButton.IsEnabled = !string.IsNullOrWhiteSpace(_latestDownloadUrl);
+        }
+        catch (Exception exc)
+        {
+            _latestDownloadUrl = "";
+            UpdateStatusText.Text = exc.Message;
+            OpenDownloadButton.IsEnabled = false;
         }
     }
 
@@ -762,6 +782,22 @@ public sealed partial class MainWindow : Window
         _settingsStore.Save(_settings);
         _api.SetBaseUrl(_settings.ApiBaseUrl);
         ShowNotice("Settings saved.", InfoBarSeverity.Success);
+    }
+
+    private async void CheckForUpdatesButton_Click(object sender, RoutedEventArgs e)
+    {
+        ReadSettingsFromUi();
+        _api.SetBaseUrl(_settings.ApiBaseUrl);
+        await RefreshUpdateAsync();
+        ShowNotice(UpdateStatusText.Text, InfoBarSeverity.Informational);
+    }
+
+    private async void OpenDownloadButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (Uri.TryCreate(_latestDownloadUrl, UriKind.Absolute, out var uri))
+        {
+            await Launcher.LaunchUriAsync(uri);
+        }
     }
 
     private void ShellNav_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)

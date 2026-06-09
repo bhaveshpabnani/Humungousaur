@@ -32,6 +32,10 @@ final class AgentAPIClient {
         try await get("system/status")
     }
 
+    func latestUpdate() async throws -> UpdateInfo {
+        try await get("updates/latest?platform=macos")
+    }
+
     func tools() async throws -> ToolCatalog {
         try await get("tools")
     }

@@ -241,6 +241,46 @@ struct OutboxEnvelope: Decodable {
     var messages: [JSONValue]
 }
 
+struct UpdateInfo: Decodable, Equatable {
+    var currentVersion: String
+    var latestVersion: String
+    var latestTag: String
+    var updateAvailable: Bool
+    var releaseURL: String
+    var platform: String
+    var platformDownloadURL: String
+    var checksumURL: String
+    var source: String
+    var error: String
+
+    enum CodingKeys: String, CodingKey {
+        case currentVersion = "current_version"
+        case latestVersion = "latest_version"
+        case latestTag = "latest_tag"
+        case updateAvailable = "update_available"
+        case releaseURL = "release_url"
+        case platform
+        case platformDownloadURL = "platform_download_url"
+        case checksumURL = "checksum_url"
+        case source
+        case error
+    }
+
+    var statusText: String {
+        if updateAvailable {
+            return "Update \(latestTag) is available"
+        }
+        if !error.isEmpty {
+            return "Using \(currentVersion); release check unavailable"
+        }
+        return "Current version \(currentVersion)"
+    }
+
+    var downloadURL: URL? {
+        URL(string: platformDownloadURL.isEmpty ? releaseURL : platformDownloadURL)
+    }
+}
+
 struct AgentRunResponse: Decodable {
     var runId: String?
     var finalResponse: String?

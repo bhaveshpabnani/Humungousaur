@@ -58,6 +58,23 @@ Humungousaur treats cognition as a product surface, not an internal implementati
 - **Desktop parity by design:** Windows and macOS clients talk to the same local runtime instead of splitting into separate products.
 - **Local-first trust:** secrets stay in env/runtime secret stores, generated artifacts stay local, and release hygiene scans publish candidates before public release.
 
+## API Surface Compared
+
+Reference checkouts under `external_repos/` are useful peers, but they expose different product shapes. Hermes Agent has a strong gateway API around `/v1/runs`, run events, approvals, stops, and toolsets. OpenClaw has deep exec/channel approval mechanics and mobile/watch surfaces. Open Interpreter exposes simple chat/history server examples. browser-use and windows-use are focused automation libraries. screenpipe is a local activity capture/search API.
+
+Humungousaur's novelty is the combined loopback API: cognition, native desktop control, update delivery, channels, voice, approvals, tools, memory, browser sessions, workflows, and autonomy are all one governed runtime surface.
+
+| Humungousaur API | Capability exposed to apps | Not observed as a combined desktop REST surface in the local references |
+| --- | --- | --- |
+| `/stimuli`, `/stimuli/stream` | Normalize user text, voice transcripts, activity, channel events, and other stimuli into one response/observe/monitor harness with live run events. | Peers usually expose chat/run entrypoints, not a stimulus API tied to attention decisions and desktop response modes. |
+| `/channels/*` | Channel catalog, requirements, setup save, doctor, smoke test, inbound preview, listener tick, outbox, prepared sends, and approval-gated live sends. | Hermes/OpenClaw have messaging channels, but not this setup/doctor/smoke/outbox contract consumed by both native desktop apps. |
+| `/voice/status` | Let desktop clients pass runtime STT/TTS secrets without echoing values, then show provider readiness before voice workflows. | Other refs include voice features or providers, but not this shared app-facing voice readiness API. |
+| `/approvals`, `/runs/*/timeline`, `/runs/*/cancel` | Review pending high-risk actions, inspect evidence timelines, approve/reject/edit, and cancel active work from the same UI. | Hermes has run approvals; Humungousaur adds the native desktop timeline/cancel/approval contract across all local tools. |
+| `/memory/*`, `/autonomous/*`, `/triggers/evaluate` | Surface durable memory, summaries, autonomous queue state, wakeups, and trigger evaluation for ongoing cognition. | Reference APIs did not show this cognition state as a first-class desktop API. |
+| `/tools`, `/tools/search`, `/tools/describe`, `/capabilities` | Publish the active governed tool catalog, schemas, risk levels, and capability groups to the UI. | browser-use/windows-use expose tool libraries; Humungousaur exposes a governed cross-domain catalog to native clients. |
+| `/browser/sessions`, `/screen/captures`, `/permissions` | Inspect browser sessions, local screen evidence, and permission posture before or after tool use. | screenpipe has local capture APIs and browser-use has browser actions; this ties those surfaces into the agent approval/audit runtime. |
+| `/updates/latest` | Existing desktop users can check the latest GitHub release and open the platform-specific download without leaving the app. | The local references checked did not expose a shared release-update endpoint for native desktop shells. |
+
 ## Quick Install
 
 Humungousaur currently targets Python 3.12+.
@@ -124,7 +141,7 @@ python3 -m humungousaur serve --workspace . --port 8765
 swift run --package-path apps/macos HumungousaurMac
 ```
 
-The macOS and Windows apps share backend routes for chat, tools, channels, channel setup, channel doctors, prepared outbound messages, approvals, recent runs, runtime start/stop, voice settings, model/provider settings, and bounded autonomy cycles.
+The macOS and Windows apps share backend routes for chat, tools, channels, channel setup, channel doctors, prepared outbound messages, approvals, recent runs, runtime start/stop, release update checks, voice settings, model/provider settings, and bounded autonomy cycles.
 
 ## Model Setup
 
