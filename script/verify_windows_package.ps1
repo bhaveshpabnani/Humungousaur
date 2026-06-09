@@ -35,9 +35,9 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 $ZipArchive = [IO.Compression.ZipFile]::OpenRead($ZipPath)
 try {
   foreach ($Entry in $ZipArchive.Entries) {
-    $Name = $Entry.FullName
-    $Normalized = $Name.Replace("\", "/")
-    $Parts = $Normalized.Split("/") | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    $Name = [string]$Entry.FullName
+    $Normalized = [string]$Name.Replace("\", "/")
+    [string[]]$Parts = @($Normalized.Split("/") | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     $BaseName = if ($Parts.Count -gt 0) { $Parts[-1] } else { $Normalized }
     if (
       $Normalized.StartsWith("/") -or
