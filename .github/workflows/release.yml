@@ -205,13 +205,7 @@ jobs:
               echo "::group::release-readiness.md"
               sed -n '1,260p' artifacts/release/final/release-readiness.md
               echo "::endgroup::"
-              python3 - <<'PY'
-from pathlib import Path
-report = Path("artifacts/release/final/release-readiness.md")
-for number, line in enumerate(report.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
-    if line.startswith("## ") or "- Status:" in line:
-        print(f"{number}: {line}")
-PY
+              awk '/^## / || /- Status:/ { print NR ": " $0 }' artifacts/release/final/release-readiness.md
               exit 1
             }
       - name: Verify release readiness report
