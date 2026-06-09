@@ -102,8 +102,9 @@ try {
   if ($VersionInfo.FileVersion -ne $WindowsFileVersion) {
     throw "Humungousaur.App.exe FileVersion mismatch. Expected $WindowsFileVersion, got $($VersionInfo.FileVersion)"
   }
-  if ($VersionInfo.ProductVersion -ne $ProjectVersion) {
-    throw "Humungousaur.App.exe ProductVersion mismatch. Expected $ProjectVersion, got $($VersionInfo.ProductVersion)"
+  $ProductVersion = [string]$VersionInfo.ProductVersion
+  if ($ProductVersion -ne $ProjectVersion -and -not $ProductVersion.StartsWith("$ProjectVersion+")) {
+    throw "Humungousaur.App.exe ProductVersion mismatch. Expected $ProjectVersion or $ProjectVersion+<source-revision>, got $ProductVersion"
   }
 
   if (Test-Path $ChecksumPath) {

@@ -737,6 +737,7 @@ class ReleaseReadinessTests(unittest.TestCase):
             "Windows package verification must run on Windows",
             "FileVersion",
             "ProductVersion",
+            'StartsWith("$ProjectVersion+")',
             "Version: $ProjectVersion",
             "python -m humungousaur serve",
             "OPENAI_API_KEY",
