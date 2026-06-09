@@ -13,6 +13,7 @@ STAGE_DIR="$ROOT_DIR/artifacts/package/macos"
 APP_BUNDLE="$STAGE_DIR/$BUNDLE_NAME.app"
 APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_MACOS="$APP_CONTENTS/MacOS"
+APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$APP_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
 ZIP_PATH="$RELEASE_DIR/Humungousaur-macOS.zip"
@@ -29,12 +30,15 @@ if [[ -z "$PROJECT_VERSION" ]]; then
 fi
 
 swift build --package-path "$MACOS_DIR" -c release
-BUILD_BINARY="$(swift build --package-path "$MACOS_DIR" -c release --show-bin-path)/$APP_NAME"
+BUILD_DIR="$(swift build --package-path "$MACOS_DIR" -c release --show-bin-path)"
+BUILD_BINARY="$BUILD_DIR/$APP_NAME"
 
 rm -rf "$STAGE_DIR"
-mkdir -p "$APP_MACOS" "$RELEASE_DIR"
+mkdir -p "$APP_MACOS" "$APP_RESOURCES" "$RELEASE_DIR"
 cp "$BUILD_BINARY" "$APP_BINARY"
 chmod +x "$APP_BINARY"
+cp "$MACOS_DIR/Sources/Resources/HumungousaurIcon.icns" "$APP_RESOURCES/HumungousaurIcon.icns"
+find "$BUILD_DIR" -maxdepth 1 -type d \( -name "*.resources" -o -name "*.bundle" \) -exec cp -R {} "$APP_RESOURCES/" \;
 
 cat >"$INFO_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -47,6 +51,8 @@ cat >"$INFO_PLIST" <<PLIST
   <string>$BUNDLE_ID</string>
   <key>CFBundleName</key>
   <string>$BUNDLE_NAME</string>
+  <key>CFBundleIconFile</key>
+  <string>HumungousaurIcon</string>
   <key>CFBundleShortVersionString</key>
   <string>$PROJECT_VERSION</string>
   <key>CFBundleVersion</key>

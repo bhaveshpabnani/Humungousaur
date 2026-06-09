@@ -64,9 +64,12 @@ trap cleanup EXIT
 APP_BUNDLE="$TMP_DIR/Humungousaur.app"
 APP_BINARY="$APP_BUNDLE/Contents/MacOS/HumungousaurMac"
 INFO_PLIST="$APP_BUNDLE/Contents/Info.plist"
+APP_ICON="$APP_BUNDLE/Contents/Resources/HumungousaurIcon.icns"
+APP_RESOURCE_BUNDLE="$APP_BUNDLE/Contents/Resources/HumungousaurMac_HumungousaurMac.bundle"
+STATUS_BAR_ICON="$APP_RESOURCE_BUNDLE/humungousaur-logo-mark-32.png"
 INSTALL_DOC="$TMP_DIR/INSTALL.txt"
 
-for path in "$INSTALL_DOC" "$APP_BUNDLE" "$APP_BINARY" "$INFO_PLIST"; do
+for path in "$INSTALL_DOC" "$APP_BUNDLE" "$APP_BINARY" "$INFO_PLIST" "$APP_ICON" "$APP_RESOURCE_BUNDLE" "$STATUS_BAR_ICON"; do
   if [[ ! -e "$path" ]]; then
     echo "macOS package is missing $(basename "$path")" >&2
     exit 1
@@ -74,6 +77,11 @@ for path in "$INSTALL_DOC" "$APP_BUNDLE" "$APP_BINARY" "$INFO_PLIST"; do
 done
 
 /usr/bin/plutil -lint "$INFO_PLIST" >/dev/null
+PLIST_ICON="$(/usr/bin/plutil -extract CFBundleIconFile raw "$INFO_PLIST")"
+if [[ "$PLIST_ICON" != "HumungousaurIcon" ]]; then
+  echo "macOS Info.plist icon mismatch. Expected HumungousaurIcon, got $PLIST_ICON" >&2
+  exit 1
+fi
 PLIST_VERSION="$(/usr/bin/plutil -extract CFBundleShortVersionString raw "$INFO_PLIST")"
 PLIST_BUILD="$(/usr/bin/plutil -extract CFBundleVersion raw "$INFO_PLIST")"
 if [[ "$PLIST_VERSION" != "$PROJECT_VERSION" || "$PLIST_BUILD" != "$PROJECT_VERSION" ]]; then
