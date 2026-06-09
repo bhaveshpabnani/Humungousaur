@@ -675,6 +675,7 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
 
         def _send_json(self, payload: Any, status: HTTPStatus = HTTPStatus.OK) -> None:
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            self._log_response(status, payload)
             self.send_response(status.value)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
@@ -683,17 +684,16 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             self.end_headers()
             self.wfile.write(body)
-            self._log_response(status, payload)
 
         def _send_text(self, payload: str, status: HTTPStatus = HTTPStatus.OK) -> None:
             body = payload.encode("utf-8")
+            self._log_response(status, {"content_type": "text/plain", "text_length": len(payload)})
             self.send_response(status.value)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Access-Control-Allow-Origin", "http://127.0.0.1")
             self.end_headers()
             self.wfile.write(body)
-            self._log_response(status, {"content_type": "text/plain", "text_length": len(payload)})
 
         def _send_dashboard_asset(self, path: str) -> None:
             relative = "index.html" if path == "/" else path.removeprefix("/dashboard/")
@@ -706,12 +706,12 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                 return
             content_type = _content_type(asset_path)
             body = asset_path.read_bytes()
+            self._log_response(HTTPStatus.OK, {"asset": relative, "content_type": content_type, "bytes": len(body)})
             self.send_response(HTTPStatus.OK.value)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
-            self._log_response(HTTPStatus.OK, {"asset": relative, "content_type": content_type, "bytes": len(body)})
 
         def _send_error(self, status: HTTPStatus, message: str) -> None:
             self._send_json({"error": message}, status)
