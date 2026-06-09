@@ -7,8 +7,54 @@
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
             </ResourceDictionary.MergedDictionaries>
-            <SolidColorBrush x:Key="AssistantAccentBrush" Color="#0E7C86" />
+
+            <SolidColorBrush x:Key="AppCanvasBrush" Color="#F6F7F4" />
+            <SolidColorBrush x:Key="AppPaneBrush" Color="#F0F2EF" />
+            <SolidColorBrush x:Key="AppCardBrush" Color="#FDFDFC" />
+            <SolidColorBrush x:Key="AppSubtleBrush" Color="#F4F5F2" />
+            <SolidColorBrush x:Key="AppStrokeBrush" Color="#1A111827" />
+            <SolidColorBrush x:Key="MutedTextBrush" Color="#8A111827" />
+            <SolidColorBrush x:Key="AssistantAccentBrush" Color="#C43126" />
+            <SolidColorBrush x:Key="AssistantAccentSoftBrush" Color="#1FC43126" />
             <SolidColorBrush x:Key="AssistantWarmBrush" Color="#B45309" />
+
+            <Style x:Key="CardBorderStyle" TargetType="Border">
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="Background" Value="{StaticResource AppCardBrush}" />
+                <Setter Property="BorderBrush" Value="{StaticResource AppStrokeBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Padding" Value="16" />
+            </Style>
+
+            <Style x:Key="CompactCardBorderStyle" TargetType="Border">
+                <Setter Property="CornerRadius" Value="8" />
+                <Setter Property="Background" Value="{StaticResource AppCardBrush}" />
+                <Setter Property="BorderBrush" Value="{StaticResource AppStrokeBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="Padding" Value="12" />
+            </Style>
+
+            <Style x:Key="PageTitleStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="32" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="LineHeight" Value="36" />
+            </Style>
+
+            <Style x:Key="PageSubtitleStyle" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+                <Setter Property="TextWrapping" Value="WrapWholeWords" />
+            </Style>
+
+            <Style x:Key="CardTitleStyle" TargetType="TextBlock">
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="FontSize" Value="15" />
+            </Style>
+
+            <Style x:Key="MonoTextStyle" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="Consolas" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>
