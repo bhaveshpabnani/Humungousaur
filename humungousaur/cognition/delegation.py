@@ -3,10 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from humungousaur.config import AgentConfig
+from humungousaur.planning.prompt_templates import render_prompt_template
 from humungousaur.schemas import AgentRunResult
 
 from .models import SpecialistRecord, TaskRecord
 from .specialists import SpecialistStore
+
+COGNITION_PROMPT_RESOURCE = "resources/prompts/cognition.yaml"
+SPECIALIST_DELEGATION_TEMPLATE = "specialist_delegation_request"
 
 
 @dataclass(slots=True)
@@ -44,13 +48,14 @@ class SpecialistDelegationRunner:
             return request
         if _looks_like_explicit_tool_command(request):
             return request
-        return (
-            "Specialist contract:\n"
-            f"name: {specialist.name}\n"
-            f"purpose: {specialist.purpose}\n"
-            f"instructions: {specialist.contract}\n"
-            f"success criteria: {specialist.success_criteria}\n\n"
-            f"Task request: {request}"
+        return render_prompt_template(
+            SPECIALIST_DELEGATION_TEMPLATE,
+            resource=COGNITION_PROMPT_RESOURCE,
+            specialist_name=specialist.name,
+            specialist_purpose=specialist.purpose,
+            specialist_contract=specialist.contract,
+            specialist_success_criteria=_format_success_criteria(specialist.success_criteria),
+            task_request=request,
         )
 
 
@@ -62,3 +67,9 @@ def _looks_like_explicit_tool_command(value: str) -> bool:
         return False
     tool_name, _, payload = text.partition(" ")
     return bool(tool_name.replace("_", "").isalnum() and payload.strip().startswith("{"))
+
+
+def _format_success_criteria(criteria: list[str]) -> str:
+    if not criteria:
+        return "- No explicit specialist criteria supplied."
+    return "\n".join(f"- {criterion}" for criterion in criteria)

@@ -1,0 +1,233 @@
+name: Release Desktop Apps
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing tag to package/publish, such as v0.1.0. Required when publish_release is true.
+        required: false
+        default: ""
+        type: string
+      publish_release:
+        description: Publish or repair GitHub release assets for release_tag.
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    name: Release preflight
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate manual release dispatch
+        if: ${{ github.event_name == 'workflow_dispatch' && (inputs.publish_release || inputs.release_tag != '') }}
+        run: |
+          RELEASE_TAG="${{ inputs.release_tag }}"
+          if [[ -z "$RELEASE_TAG" ]]; then
+            echo "release_tag is required when publish_release is true." >&2
+            exit 1
+          fi
+          case "$RELEASE_TAG" in
+            v*) ;;
+            *)
+              echo "release_tag must look like v<project.version>, for example v0.1.0." >&2
+              exit 1
+              ;;
+          esac
+          git fetch --tags --force
+          git rev-parse -q --verify "refs/tags/$RELEASE_TAG"
+          git checkout --detach "$RELEASE_TAG"
+      - name: Install test extras
+        run: python -m pip install -e ".[browser,pdf,ocr,office,test]"
+      - name: Compile release scripts
+        run: |
+          python -m py_compile \
+            script/generate_release_report.py \
+            script/collect_release_artifacts.py \
+            script/verify_desktop_runtime_smoke.py \
+            script/verify_release_report.py \
+            script/verify_desktop_parity.py \
+            script/verify_open_source_hygiene.py \
+            script/verify_publication_state.py \
+            script/verify_release_readiness.py
+      - name: Check release source readiness
+        run: python3 ./script/verify_release_readiness.py --skip-website
+      - name: Verify desktop runtime smoke
+        run: python3 ./script/verify_desktop_runtime_smoke.py
+      - name: Run backend tests
+        run: python -m unittest discover -v
+
+  macos:
+    name: Package macOS
+    runs-on: macos-15
+    needs: preflight
+    env:
+      MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
+      HUMUNGOUSAUR_MACOS_CODESIGN_IDENTITY: ${{ secrets.MACOS_CODESIGN_IDENTITY }}
+      HUMUNGOUSAUR_RELEASE_BUILD: ${{ startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.publish_release) }}
+      HUMUNGOUSAUR_MACOS_NOTARIZE: ${{ (startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.publish_release)) && '1' || secrets.MACOS_NOTARIZE }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref }}
+          fetch-depth: 0
+      - name: Import macOS signing certificate
+        if: ${{ env.MACOS_CERTIFICATE_P12_BASE64 != '' }}
+        run: |
+          CERT_PATH="$RUNNER_TEMP/humungousaur-signing.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/humungousaur-signing.keychain-db"
+          echo "$MACOS_CERTIFICATE_P12_BASE64" | base64 --decode > "$CERT_PATH"
+          security create-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+      - name: Build macOS zip
+        run: ./script/package_macos.sh
+      - name: Verify macOS zip
+        run: |
+          if [[ "$HUMUNGOUSAUR_RELEASE_BUILD" == "true" ]]; then
+            ./script/verify_macos_package.sh --require-signature --require-notarization
+          else
+            ./script/verify_macos_package.sh
+          fi
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Humungousaur-macOS
+          path: |
+            artifacts/release/Humungousaur-macOS.zip
+
+  windows:
+    name: Package Windows
+    runs-on: windows-latest
+    needs: preflight
+    env:
+      WINDOWS_CERTIFICATE_PFX_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_PFX_BASE64 }}
+      HUMUNGOUSAUR_RELEASE_BUILD: ${{ startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.publish_release) }}
+      HUMUNGOUSAUR_WINDOWS_SIGN: ${{ (startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.publish_release)) && '1' || secrets.WINDOWS_SIGN }}
+      HUMUNGOUSAUR_WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+      HUMUNGOUSAUR_WINDOWS_TIMESTAMP_URL: ${{ secrets.WINDOWS_TIMESTAMP_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Materialize Windows signing certificate
+        if: ${{ env.WINDOWS_CERTIFICATE_PFX_BASE64 != '' }}
+        shell: pwsh
+        run: |
+          $CertPath = Join-Path $env:RUNNER_TEMP "humungousaur-signing.pfx"
+          [IO.File]::WriteAllBytes($CertPath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_PFX_BASE64))
+          "HUMUNGOUSAUR_WINDOWS_CERT_PATH=$CertPath" >> $env:GITHUB_ENV
+      - name: Build Windows zip
+        shell: pwsh
+        run: ./script/package_windows.ps1
+      - name: Verify Windows zip
+        shell: pwsh
+        run: |
+          if ($env:HUMUNGOUSAUR_RELEASE_BUILD -eq "true") {
+            ./script/verify_windows_package.ps1 -RequireSignature
+          } else {
+            ./script/verify_windows_package.ps1
+          }
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Humungousaur-Windows
+          path: |
+            artifacts/release/Humungousaur-Windows.zip
+
+  publish:
+    name: Publish GitHub release
+    runs-on: ubuntu-latest
+    needs: [preflight, macos, windows]
+    if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.publish_release && inputs.release_tag != '')
+    permissions:
+      contents: write
+    env:
+      HUMUNGOUSAUR_RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test extras for release evidence
+        run: python -m pip install -e ".[browser,pdf,ocr,office,test]"
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts/release/downloaded
+      - name: Prepare release assets
+        run: |
+          mkdir -p artifacts/release/final
+          cp artifacts/release/downloaded/Humungousaur-macOS/Humungousaur-macOS.zip artifacts/release/final/
+          cp artifacts/release/downloaded/Humungousaur-Windows/Humungousaur-Windows.zip artifacts/release/final/
+          cd artifacts/release/final
+          sha256sum Humungousaur-Windows.zip Humungousaur-macOS.zip > checksums.txt
+          cp ./* ..
+      - name: Verify release assets
+        run: python3 ./script/verify_release_readiness.py --skip-website --require-assets --release-dir artifacts/release/final --release-tag "$HUMUNGOUSAUR_RELEASE_TAG"
+      - name: Generate release readiness report
+        run: |
+          python3 ./script/generate_release_report.py \
+            --skip-website \
+            --require-assets \
+            --release-tag "$HUMUNGOUSAUR_RELEASE_TAG" \
+            --release-dir artifacts/release/final \
+            --output artifacts/release/final/release-readiness.md \
+            --fail-on-check-failure
+      - name: Verify release readiness report
+        run: python3 ./script/verify_release_report.py --report artifacts/release/final/release-readiness.md --skip-website --require-assets --require-pass-status
+      - name: Verify final release asset set
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          expected = {
+              "Humungousaur-Windows.zip",
+              "Humungousaur-macOS.zip",
+              "checksums.txt",
+              "release-readiness.md",
+          }
+          final_dir = Path("artifacts/release/final")
+          actual = {path.name for path in final_dir.iterdir() if path.is_file()}
+          if actual != expected:
+              raise SystemExit(f"Unexpected final release asset set: expected {sorted(expected)}, got {sorted(actual)}")
+          PY
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$HUMUNGOUSAUR_RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$HUMUNGOUSAUR_RELEASE_TAG" artifacts/release/final/* --clobber
+          else
+            gh release create "$HUMUNGOUSAUR_RELEASE_TAG" artifacts/release/final/* --title "$HUMUNGOUSAUR_RELEASE_TAG" --generate-notes --verify-tag
+          fi
+      - name: Verify published release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 ./script/verify_release_readiness.py --skip-website --require-assets --release-dir artifacts/release/final --require-github-release --github-release-tag "$HUMUNGOUSAUR_RELEASE_TAG" --release-tag "$HUMUNGOUSAUR_RELEASE_TAG"

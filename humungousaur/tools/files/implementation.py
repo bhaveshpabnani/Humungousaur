@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -875,23 +876,36 @@ class ShellCommandTool(Tool):
         env = dict(os.environ)
         if command_profile == "read_only":
             env["PYTHONDONTWRITEBYTECODE"] = "1"
-        completed = subprocess.run(
-            argv,
-            cwd=config.workspace,
-            capture_output=True,
-            text=True,
-            timeout=SHELL_TIMEOUT_SECONDS,
-            shell=False,
-            check=False,
-            env=env,
-        )
+        requested_argv = list(argv)
+        execution_argv = _resolve_shell_argv(argv)
+        try:
+            completed = subprocess.run(
+                execution_argv,
+                cwd=config.workspace,
+                capture_output=True,
+                text=True,
+                timeout=SHELL_TIMEOUT_SECONDS,
+                shell=False,
+                check=False,
+                env=env,
+            )
+        except FileNotFoundError as exc:
+            return ToolResult(
+                self.name,
+                ActionStatus.FAILED,
+                self.risk_level,
+                f"Command executable not found: {argv[0]}.",
+                {"argv": requested_argv, "command_profile": command_profile, "error": str(exc)},
+                str(exc),
+            )
         return ToolResult(
             self.name,
             ActionStatus.SUCCEEDED if completed.returncode == 0 else ActionStatus.FAILED,
             self.risk_level,
             f"Command exited with code {completed.returncode}.",
             {
-                "argv": argv,
+                "argv": requested_argv,
+                "executed_argv": execution_argv,
                 "command_profile": command_profile,
                 "returncode": completed.returncode,
                 "stdout": completed.stdout[-4000:],
@@ -904,6 +918,12 @@ class ShellCommandTool(Tool):
 def _read_only_shell_argv(argv: list[str]) -> bool:
     normalized = [argv[0].lower(), *argv[1:]]
     return tuple(normalized) in READ_ONLY_SHELL_ARGV
+
+
+def _resolve_shell_argv(argv: list[str]) -> list[str]:
+    if argv and argv[0].lower() == "python" and shutil.which("python") is None:
+        return [sys.executable, *argv[1:]]
+    return argv
 
 
 def default_tools() -> dict[str, Tool]:

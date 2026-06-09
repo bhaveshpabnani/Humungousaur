@@ -19,6 +19,12 @@ This first slice focuses on trust and extensibility:
 
 ## Quick Start
 
+Install the runtime with the capability extras you plan to use:
+
+```bash
+python -m pip install -e ".[browser,pdf,ocr,office,test]"
+```
+
 ```powershell
 cd Humungousaur
 python -m humungousaur run "summarize this project and tell me the next best task" --workspace ..
@@ -116,6 +122,8 @@ python -m humungousaur run "channel_catalog {}" --workspace . --planner explicit
 python -m humungousaur run "channel_message_prepare {\"channel_id\":\"slack\",\"conversation_id\":\"C123\",\"text\":\"Prepared reply\",\"reason\":\"smoke\"}" --workspace . --planner explicit
 python -m humungousaur run "agent_skill_catalog {\"source\":\"workspace\"}" --workspace . --planner explicit
 python .\scripts\smoke_agent.py --workspace . --live-groq --live-voice
+python .\scripts\smoke_real_world_tasks.py --workspace .
+python .\scripts\smoke_real_world_tasks.py --workspace . --live-browser
 python -m humungousaur run "say hello there" --workspace .
 python -m humungousaur audit --limit 5
 python -m humungousaur plans --limit 5
@@ -212,6 +220,23 @@ Tools also expose JSON-schema-style `input_schema` metadata, so model planning c
 Tools are grouped by capability (`activity`, `files`, `browser`, `channels`, `code`, `codex`, `cognition`, `integrations`, `memory`, `os`, `plugins`, `screen`, `shell`, `skills`, `system`, `voice`) so the permissions surface can stay understandable as the product grows.
 Before planning, the orchestrator gathers a compact local context bundle: workspace paths, system health, active-window metadata, recent memory, recent browser sessions, and safety flags. This context is treated as untrusted data and its collection is recorded in the run timeline.
 
+## Native Desktop Apps
+
+Humungousaur has native desktop shells for both Windows and macOS. Both apps talk to the same local REST API and keep the agent runtime as the source of truth for tools, channels, approvals, runs, voice status, model/provider settings, and autonomy controls.
+
+- Windows app: `apps/windows/Humungousaur.App`
+- macOS app: `apps/macos`
+
+The macOS app includes the shared channel gateway surface: channel setup requirements, setup save/sync, doctor, non-sending smoke checks, inbound preview, prepared outbound messages, approval-gated send requests, listener status, listener polling, prepared reply outbox, runtime start/stop, approvals, recent runs, tools, voice settings, and bounded autonomy cycles.
+
+```bash
+python -m humungousaur serve --workspace . --port 8765
+cd apps/macos
+swift run HumungousaurMac
+```
+
+Release readiness is tracked in `docs/RELEASE_CHECKLIST.md`; the ordered publication path is in `docs/RELEASE_RUNBOOK.md`.
+
 External reference projects are integrated through explicit adapters, not copied wholesale:
 
 - `external_integrations_status` checks local development availability for Browser Use, Screenpipe, Windows-Use, and Open Interpreter.
@@ -224,6 +249,7 @@ External reference projects are integrated through explicit adapters, not copied
 ## Model Configuration
 
 Model planning is the preferred intelligent orchestration path; the offline fallback accepts only explicit tool commands or JSON plans. The workspace `.env` is authoritative for that workspace and can override stale process environment values. Keep real keys out of git.
+Start from `.env.example`; it documents model providers, voice providers, channel adapters, local tool paths, and release-signing variables without real secret values.
 
 Supported planner transports:
 

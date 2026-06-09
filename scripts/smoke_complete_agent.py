@@ -161,6 +161,28 @@ def record_tool(record, section: str, name: str, result: ToolResult, allow_skipp
     )
 
 
+def record_tool_allow_unsupported(record, section: str, name: str, result: ToolResult) -> None:
+    ok = result.status == ActionStatus.SUCCEEDED or _is_unsupported_platform_result(result)
+    record(
+        section,
+        name,
+        ok,
+        {
+            "status": result.status.value,
+            "summary": result.summary,
+            "error": result.error,
+            "output": result.output,
+            "accepted_as_unsupported_platform": _is_unsupported_platform_result(result),
+        },
+    )
+
+
+def _is_unsupported_platform_result(result: ToolResult) -> bool:
+    output = result.output if isinstance(result.output, dict) else {}
+    error = " ".join(str(value or "") for value in (result.error, output.get("error")))
+    return result.status == ActionStatus.FAILED and output.get("supported") is False and "Windows only" in error
+
+
 def _run_core_agent_and_stimuli(record, config: AgentConfig) -> None:
     readme = config.data_dir / "fixtures" / "complete-smoke-readme.md"
     readme.parent.mkdir(parents=True, exist_ok=True)
@@ -402,10 +424,10 @@ def _run_os_and_screen(record, config: AgentConfig, executor: Executor, *, real_
     )
     observation_id = observation["observation_id"]
     record_tool(record, "os_metadata", "os_active_window", tools["os_active_window"].execute({}, config))
-    record_tool(record, "os_metadata", "os_windows", tools["os_windows"].execute({"limit": 10}, config), allow_skipped=True)
-    record_tool(record, "os_metadata", "os_cursor", tools["os_cursor"].execute({}, config), allow_skipped=True)
-    record_tool(record, "os_metadata", "os_apps", tools["os_apps"].execute({"query": "calc", "limit": 5}, config), allow_skipped=True)
-    record_tool(record, "os_metadata", "os_virtual_desktops", tools["os_virtual_desktops"].execute({"limit": 5}, config), allow_skipped=True)
+    record_tool_allow_unsupported(record, "os_metadata", "os_windows", tools["os_windows"].execute({"limit": 10}, config))
+    record_tool_allow_unsupported(record, "os_metadata", "os_cursor", tools["os_cursor"].execute({}, config))
+    record_tool_allow_unsupported(record, "os_metadata", "os_apps", tools["os_apps"].execute({"query": "calc", "limit": 5}, config))
+    record_tool_allow_unsupported(record, "os_metadata", "os_virtual_desktops", tools["os_virtual_desktops"].execute({"limit": 5}, config))
 
     dry_steps = {
         "os_observe_ui_dry_run": ("os_observe_ui", {"max_elements": 5, "reason": "Complete smoke dry-run UI observation."}),

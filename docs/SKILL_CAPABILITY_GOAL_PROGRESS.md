@@ -207,18 +207,18 @@ Needed work:
 
 ### 8. Desktop App End-To-End
 
-Current status: the Windows app exposes runtime start/stop, recent runs, timeline details, approval approve/reject actions, run cancellation, provider/model settings, voice settings, provider-aware channel setup requirements, channel setup doctor, non-sending channel integration smoke, channel allowlists, listener status, inbound preview, prepared outbound messages, and approval-gated channel sends. Remaining work is full live validation and richer daily-use panels.
+Current status: the Windows and macOS apps expose runtime start/stop, recent runs, approval approve/reject actions, run cancellation, provider/model settings, voice settings, provider-aware channel setup requirements, channel setup doctor, non-sending channel integration smoke, channel allowlists, listener status, inbound preview, prepared outbound messages, approval-gated channel sends, and prepared reply outbox review through the shared agent API. Remaining work is full credentialed live validation and richer daily-use panels.
 
 Needed work:
 
-- Runtime start/stop/status from the app.
+- Live runtime start/stop/status smoke from both desktop apps.
 - Voice wakeup/STT/agent/TTS end-to-end through the app.
-- Tool execution visibility, run timelines, cancellation, and approval UX.
+- Richer tool execution visibility, run timelines, cancellation, and approval UX.
 - Full app smoke with chat message, voice message, channel message, OS/browser task, and response.
 
 ### 9. Live Channel Integrations
 
-Current status: channel manifests, setup requirements, setup/status, setup doctor, non-sending integration smoke, listener status, webhook ingest, inbound preview, prepared outbox, allowlists, and approval-gated outbound send are wired through the backend and Windows app. Live provider-specific execution still needs credentialed smoke.
+Current status: channel manifests, setup requirements, setup/status, setup doctor, non-sending integration smoke, listener status, webhook ingest, inbound preview, prepared outbox, allowlists, and approval-gated outbound send are wired through the backend plus Windows and macOS apps. Live provider-specific execution still needs credentialed smoke.
 
 Needed work:
 

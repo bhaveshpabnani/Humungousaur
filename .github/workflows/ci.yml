@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend and release source checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test extras
+        run: python -m pip install -e ".[browser,pdf,ocr,office,test]"
+      - name: Compile release scripts
+        run: |
+          python -m py_compile \
+            script/generate_release_report.py \
+            script/collect_release_artifacts.py \
+            script/verify_desktop_runtime_smoke.py \
+            script/verify_release_report.py \
+            script/verify_desktop_parity.py \
+            script/verify_open_source_hygiene.py \
+            script/verify_publication_state.py \
+            script/verify_release_readiness.py
+      - name: Verify open-source hygiene
+        run: python script/verify_open_source_hygiene.py --skip-website
+      - name: Verify desktop parity
+        run: python script/verify_desktop_parity.py
+      - name: Verify desktop runtime smoke
+        run: python script/verify_desktop_runtime_smoke.py
+      - name: Verify release source readiness
+        run: python script/verify_release_readiness.py --skip-website
+      - name: Run backend tests
+        run: python -m unittest discover -v
+
+  macos:
+    name: macOS app package smoke
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build macOS app
+        run: swift build --package-path apps/macos
+      - name: Package macOS zip
+        run: ./script/package_macos.sh
+      - name: Verify macOS zip
+        run: ./script/verify_macos_package.sh
+      - name: Upload macOS CI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Humungousaur-macOS-ci
+          path: |
+            artifacts/release/Humungousaur-macOS.zip
+            artifacts/release/checksums.txt
+
+  windows:
+    name: Windows app package smoke
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Package Windows zip
+        shell: pwsh
+        run: ./script/package_windows.ps1
+      - name: Verify Windows zip
+        shell: pwsh
+        run: ./script/verify_windows_package.ps1
+      - name: Upload Windows CI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Humungousaur-Windows-ci
+          path: |
+            artifacts/release/Humungousaur-Windows.zip
+            artifacts/release/checksums.txt

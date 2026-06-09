@@ -4,10 +4,16 @@ import html
 import ipaddress
 import re
 import socket
+import ssl
 import urllib.error
 import urllib.request
 from html.parser import HTMLParser
 from urllib.parse import urlencode, urlparse
+
+try:
+    import certifi
+except Exception:  # pragma: no cover - optional dependency fallback
+    certifi = None
 
 WEB_TIMEOUT_SECONDS = 10
 WEB_MAX_LINKS = 25
@@ -24,6 +30,26 @@ LIVE_ELEMENT_PATTERN = re.compile(r"^live:(\d+)$")
 class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
         return None
+
+
+class _ValidatedRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
+        validation_error = _validate_url(newurl)
+        if validation_error:
+            return None
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _open_url(request: urllib.request.Request, *, timeout: float, allow_redirects: bool = False):
+    redirect_handler = _ValidatedRedirectHandler if allow_redirects else _NoRedirectHandler
+    opener = urllib.request.build_opener(redirect_handler, urllib.request.HTTPSHandler(context=_ssl_context()))
+    return opener.open(request, timeout=timeout)
+
+
+def _ssl_context() -> ssl.SSLContext:
+    if certifi is not None:
+        return ssl.create_default_context(cafile=certifi.where())
+    return ssl.create_default_context()
 
 
 class _HTMLTextExtractor(HTMLParser):
@@ -154,10 +180,9 @@ def _validate_url(url: str) -> str | None:
 
 
 def _fetch_page(url: str, max_bytes: int) -> dict[str, Any]:
-    opener = urllib.request.build_opener(_NoRedirectHandler)
     request = urllib.request.Request(url, headers={"User-Agent": "UmangLocalAssistant/0.1"})
     try:
-        with opener.open(request, timeout=WEB_TIMEOUT_SECONDS) as response:
+        with _open_url(request, timeout=WEB_TIMEOUT_SECONDS, allow_redirects=True) as response:
             content_type = response.headers.get("content-type", "")
             if not _is_supported_content_type(content_type):
                 raise ValueError(f"Unsupported content type: {content_type or 'unknown'}")
@@ -198,7 +223,6 @@ def _submit_form(url: str, method: str, values: dict[str, str], max_bytes: int) 
     if method == "get":
         separator = "&" if urlparse(url).query else "?"
         return _fetch_page(f"{url}{separator}{urlencode(values)}", max_bytes=max_bytes)
-    opener = urllib.request.build_opener(_NoRedirectHandler)
     encoded = urlencode(values).encode("utf-8")
     request = urllib.request.Request(
         url,
@@ -210,7 +234,7 @@ def _submit_form(url: str, method: str, values: dict[str, str], max_bytes: int) 
         method="POST",
     )
     try:
-        with opener.open(request, timeout=WEB_TIMEOUT_SECONDS) as response:
+        with _open_url(request, timeout=WEB_TIMEOUT_SECONDS) as response:
             content_type = response.headers.get("content-type", "")
             if not _is_supported_content_type(content_type):
                 raise ValueError(f"Unsupported content type: {content_type or 'unknown'}")

@@ -8,12 +8,34 @@ version = "0.1.0"
 description = "Local-first personal desktop agent runtime with safety, tools, audit logs, and memory."
 readme = "README.md"
 requires-python = ">=3.12"
+license = {file = "LICENSE"}
+authors = [{name = "Umang"}]
+keywords = ["agent", "desktop", "local-first", "automation", "assistant", "macos", "windows"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/bhaveshpabnani/Humungousaur"
+Repository = "https://github.com/bhaveshpabnani/Humungousaur"
+Issues = "https://github.com/bhaveshpabnani/Humungousaur/issues"
 
 [project.optional-dependencies]
 browser = ["playwright>=1.60,<2"]
+office = ["openpyxl>=3.1,<4", "python-pptx>=1.0,<2"]
 pdf = ["pypdf>=5,<7", "reportlab>=4,<5"]
 ocr = ["pillow>=10,<12", "pytesseract>=0.3.13,<0.4"]
+test = ["pytest>=9,<10", "openpyxl>=3.1,<4", "python-pptx>=1.0,<2"]
+spreadsheets = ["openpyxl>=3.1,<4"]
+presentations = ["python-pptx>=1.0,<2"]
 
 [project.scripts]
 humungousaur = "humungousaur.cli:main"
@@ -22,7 +44,7 @@ humungousaur = "humungousaur.cli:main"
 include = ["humungousaur*"]
 
 [tool.setuptools.package-data]
-humungousaur = ["dashboard/*.html", "dashboard/*.css", "dashboard/*.js", "resources/*.json"]
+humungousaur = ["dashboard/*.html", "dashboard/*.css", "dashboard/*.js", "resources/*.json", "resources/prompts/*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -14,6 +14,7 @@ from humungousaur.safety.policy import PolicyEngine
 from humungousaur.schemas import PlannedStep
 from humungousaur.schemas import ActionStatus
 from humungousaur.tools import default_tools
+from humungousaur.tools.browser import common as browser_common
 from humungousaur.tools.browser_tools import (
     BrowserBackTool,
     BrowserClickElementTool,
@@ -57,6 +58,17 @@ class BrowserToolTests(unittest.TestCase):
 
         self.assertEqual(urls, ["https://example.com/a", "http://127.0.0.1:8000/page"])
 
+    def test_ssl_context_uses_certifi_bundle_when_available(self) -> None:
+        with patch.object(browser_common, "certifi") as certifi, patch.object(
+            browser_common.ssl,
+            "create_default_context",
+        ) as create_default_context:
+            certifi.where.return_value = "/tmp/cacert.pem"
+
+            browser_common._ssl_context()
+
+        create_default_context.assert_called_once_with(cafile="/tmp/cacert.pem")
+
     def test_fetch_web_page_extracts_text_title_and_links(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts", planner_provider="explicit").normalized()
@@ -79,7 +91,18 @@ class BrowserToolTests(unittest.TestCase):
             self.assertEqual(result.status, ActionStatus.SUCCEEDED)
             self.assertEqual(len(result.output["summaries"]), 2)
             self.assertIn("Browser research needle", result.output["summaries"][0]["summary"])
+            self.assertIn("Browser research needle", result.output["summaries"][0]["snippets"][0]["text"])
             self.assertIn("untrusted data", result.output["safety_note"])
+
+    def test_fetch_web_page_follows_validated_redirects(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts", planner_provider="explicit").normalized()
+            with running_web_server({"/redirect": (302, {"location": "/target"}, ""), "/target": SECOND_HTML}) as base_url:
+                result = FetchWebPageTool().execute({"url": f"{base_url}/redirect"}, config)
+
+            self.assertEqual(result.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(result.output["title"], "Second Source")
+            self.assertTrue(result.output["url"].endswith("/target"))
 
     def test_web_search_returns_candidate_urls(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -94,6 +117,15 @@ class BrowserToolTests(unittest.TestCase):
             self.assertEqual(result.output["results"][0]["url"], "https://example.com/rail")
             self.assertEqual(result.output["engine"], "bing")
             self.assertEqual(result.output["source"], "web_search")
+
+    def test_search_result_url_normalizes_absolute_duckduckgo_redirects(self) -> None:
+        from humungousaur.tools.browser.static_tools import _normalize_search_result_url
+
+        url = _normalize_search_result_url(
+            "https://duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.ixigo.com%2Fby-train-rail%2Fnagpur-to-kharagpur-by-train"
+        )
+
+        self.assertEqual(url, "https://www.ixigo.com/by-train-rail/nagpur-to-kharagpur-by-train")
 
     def test_research_web_pages_discovers_urls_from_query(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -344,6 +376,38 @@ class BrowserToolTests(unittest.TestCase):
                 self.skipTest("Playwright is installed in this runtime.")
             self.assertEqual(result.status, ActionStatus.FAILED)
             self.assertIn("Playwright", result.error or "")
+
+    def test_live_browser_open_reuses_existing_session_on_async_loop_launch_error(self) -> None:
+        class FakeLiveBrowserManager:
+            def __init__(self) -> None:
+                self.sessions = {"live-123": {}}
+
+            def available(self) -> bool:
+                return True
+
+            def open(self, *args, **kwargs):
+                del args, kwargs
+                raise RuntimeError("It looks like you are using Playwright Sync API inside the asyncio loop.")
+
+            def new_tab(self, session_id: str, url: str):
+                return {
+                    "live_session_id": session_id,
+                    "tabs": [{"active": True, "url": url, "title": "Source"}],
+                    "active_index": 0,
+                    "source": "live_browser_tabs",
+                }
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
+            with (
+                running_web_server({"/": SAMPLE_HTML}) as base_url,
+                patch("humungousaur.tools.browser.live_tools.LIVE_BROWSER_MANAGER", FakeLiveBrowserManager()),
+            ):
+                result = BrowserLiveOpenTool().execute({"url": base_url}, config)
+
+        self.assertEqual(result.status, ActionStatus.SUCCEEDED)
+        self.assertTrue(result.output["reused_existing_session"])
+        self.assertEqual(result.output["live_session_id"], "live-123")
 
     def test_live_browser_screenshot_dry_run_does_not_capture(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -830,7 +894,7 @@ FORM_HTML = """
 
 
 class running_web_server:
-    def __init__(self, routes: dict[str, str]) -> None:
+    def __init__(self, routes: dict[str, str | tuple[int, dict[str, str], str]]) -> None:
         self.routes = routes
         handler = self._handler()
         self.server = HTTPServer(("127.0.0.1", 0), handler)
@@ -855,6 +919,16 @@ class running_web_server:
                 if body is None:
                     self.send_response(404)
                     self.end_headers()
+                    return
+                if isinstance(body, tuple):
+                    status, headers, response_body = body
+                    encoded = response_body.encode("utf-8")
+                    self.send_response(status)
+                    for name, value in headers.items():
+                        self.send_header(name, value)
+                    self.send_header("content-length", str(len(encoded)))
+                    self.end_headers()
+                    self.wfile.write(encoded)
                     return
                 encoded = body.encode("utf-8")
                 self.send_response(200)

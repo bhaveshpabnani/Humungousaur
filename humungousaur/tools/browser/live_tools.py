@@ -49,7 +49,10 @@ class BrowserLiveOpenTool(Tool):
     def __init__(self) -> None:
         super().__init__(
             name="browser_live_open",
-            description="Open an HTTP(S) URL in a native Playwright-backed live browser session.",
+            description=(
+                "Open an HTTP(S) URL in a native Playwright-backed live browser session. "
+                "Use when static fetch/research is insufficient, or the task depends on visible page state, JavaScript, forms, date pickers, or interactive controls."
+            ),
             risk_level=RiskLevel.MEDIUM,
             input_schema=object_input_schema(
                 {
@@ -89,6 +92,21 @@ class BrowserLiveOpenTool(Tool):
                 viewport_height=viewport_height,
             )
         except Exception as exc:
+            if LIVE_BROWSER_MANAGER.sessions and "Playwright Sync API inside the asyncio loop" in str(exc):
+                try:
+                    live_session_id = next(iter(LIVE_BROWSER_MANAGER.sessions))
+                    output = LIVE_BROWSER_MANAGER.new_tab(live_session_id, url)
+                    output["reused_existing_session"] = True
+                    output["reuse_reason"] = "Opening a separate Playwright session failed inside an active async loop, so the URL was opened in an existing live session."
+                    return ToolResult(
+                        self.name,
+                        ActionStatus.SUCCEEDED,
+                        self.risk_level,
+                        f"Reused live browser session {live_session_id} and opened the URL in a new tab.",
+                        output,
+                    )
+                except Exception:
+                    pass
             return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Live browser open failed.", error=str(exc))
         return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Opened live browser session {output['live_session_id']}.", output)
 
@@ -97,7 +115,10 @@ class BrowserLiveObserveTool(Tool):
     def __init__(self) -> None:
         super().__init__(
             name="browser_live_observe",
-            description="Observe a Playwright-backed live browser session: URL, title, live element ids, and optional text.",
+            description=(
+                "Observe a Playwright-backed live browser session: URL, title, live element ids, and optional visible text. "
+                "Use after opening or changing an interactive page to inspect current browser-visible evidence."
+            ),
             risk_level=RiskLevel.LOW,
             input_schema=object_input_schema(
                 {
@@ -380,7 +401,10 @@ class BrowserLiveSearchTool(Tool):
     def __init__(self) -> None:
         super().__init__(
             name="browser_live_search",
-            description="Search DuckDuckGo, Google, or Bing in an existing Playwright-backed live browser session.",
+            description=(
+                "Search DuckDuckGo, Google, or Bing in an existing Playwright-backed live browser session. "
+                "Use when search result pages or follow-up navigation need live browser-visible state."
+            ),
             risk_level=RiskLevel.MEDIUM,
             input_schema=object_input_schema(
                 {

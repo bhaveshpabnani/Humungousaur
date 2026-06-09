@@ -22,6 +22,11 @@ APP_ALLOWLIST: dict[str, tuple[str, ...]] = {
     "explorer": ("explorer.exe",),
     "notepad": ("notepad.exe",),
 }
+MAC_APP_ALLOWLIST: dict[str, tuple[str, ...]] = {
+    "calculator": ("open", "-a", "Calculator"),
+    "explorer": ("open", "-a", "Finder"),
+    "notepad": ("open", "-a", "TextEdit"),
+}
 UI_OBSERVATION_TTL_SECONDS = 300
 
 
@@ -918,17 +923,48 @@ class OsLaunchAppTool(Tool):
         reason = str(tool_input.get("reason", "")).strip()
         if not app:
             return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "App name or AppID is required.", error="App name or AppID is required.")
-        output = {"app": app, "reason": reason}
+        app_id = _normalize_app_id(app)
+        output = {"app": app, "app_id": app_id, "reason": reason}
         if config.dry_run:
+            command = _open_app_command(app_id)
             return ToolResult(
                 self.name,
                 ActionStatus.SKIPPED,
                 self.risk_level,
-                f"Dry run: would launch Windows app {app}.",
-                {**output, "process_not_started": True},
+                f"Dry run: would launch {app_id}.",
+                {**output, "command": list(command) if command else None, "process_not_started": True},
+            )
+        if platform.system().lower() == "darwin":
+            command = _open_app_command(app_id)
+            if command is None:
+                return ToolResult(
+                    self.name,
+                    ActionStatus.BLOCKED,
+                    self.risk_level,
+                    "App is not allowlisted.",
+                    {**output, "allowed_apps": sorted(APP_ALLOWLIST)},
+                    "App is not allowlisted.",
+                )
+            try:
+                subprocess.Popen(command, cwd=config.workspace)
+            except Exception as exc:
+                return ToolResult(
+                    self.name,
+                    ActionStatus.FAILED,
+                    self.risk_level,
+                    f"Could not launch {app_id}.",
+                    {**output, "command": list(command)},
+                    str(exc),
+                )
+            return ToolResult(
+                self.name,
+                ActionStatus.SUCCEEDED,
+                self.risk_level,
+                f"Launched {app_id}.",
+                {**output, "command": list(command), "source": "macos_open"},
             )
         if platform.system().lower() != "windows":
-            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Windows app launch is currently implemented for Windows only.")
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "OS app launch is currently implemented for Windows and macOS allowlisted apps only.")
         result = _run_powershell_ui_action(_launch_start_app_script(app))
         if result.get("status") != "ok":
             return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Windows app launch failed.", result, result.get("error"))
@@ -1054,8 +1090,8 @@ class OpenAppTool(Tool):
         )
 
     def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
-        app_id = str(tool_input.get("app_id", "")).strip().lower()
-        command = APP_ALLOWLIST.get(app_id)
+        app_id = _normalize_app_id(str(tool_input.get("app_id", "")))
+        command = _open_app_command(app_id)
         if command is None:
             return ToolResult(
                 self.name,
@@ -1091,6 +1127,16 @@ class OpenAppTool(Tool):
             f"Opened {app_id}.",
             {"app_id": app_id, "command": list(command)},
         )
+
+
+def _open_app_command(app_id: str) -> tuple[str, ...] | None:
+    if platform.system().lower() == "darwin":
+        return MAC_APP_ALLOWLIST.get(app_id)
+    return APP_ALLOWLIST.get(app_id)
+
+
+def _normalize_app_id(app_id: str) -> str:
+    return " ".join(app_id.strip().lower().split())
 
 
 class ScreenshotCaptureTool(Tool):

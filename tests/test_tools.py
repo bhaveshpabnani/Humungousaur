@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from humungousaur.config import AgentConfig
 from humungousaur.planning.model_clients import ModelClientError, StaticModelClient
+from humungousaur.planning.prompt_templates import load_prompt_templates
 from humungousaur.schemas import ActionStatus
 from humungousaur.tools.codex_tools import (
     CodexCliPlanTool,
@@ -69,6 +70,19 @@ from humungousaur.tools.os_tools import (
 from humungousaur.tools.plugin_tools import PluginManifestTool, PluginManifestsTool, discover_plugin_manifests
 from humungousaur.tools.system_tools import SystemStatusTool, collect_system_status
 from tests.pdf_utils import pdf_dependencies_available, write_pdf
+
+
+CODEX_PROMPT_RESOURCE = "resources/prompts/codex.yaml"
+
+
+class RecordingStaticModelClient(StaticModelClient):
+    def __init__(self, response: str, name: str = "recording-static") -> None:
+        super().__init__(response=response, name=name)
+        self.prompts: list[str] = []
+
+    def complete_json(self, prompt, schema):
+        self.prompts.append(prompt)
+        return super().complete_json(prompt, schema)
 
 
 class ToolTests(unittest.TestCase):
@@ -148,6 +162,7 @@ class ToolTests(unittest.TestCase):
         self.assertEqual(tools["browser_live_observe"].input_schema["required"], ["live_session_id"])
         self.assertEqual(tools["browser_live_observe"].capability_group, "browser")
         self.assertEqual(tools["browser_live_click"].input_schema["required"], ["live_session_id", "element_id", "reason"])
+
         self.assertTrue(tools["browser_live_click"].requires_approval)
         self.assertEqual(tools["browser_live_type"].input_schema["required"], ["live_session_id", "element_id", "text", "reason"])
         self.assertTrue(tools["browser_live_type"].requires_approval)
@@ -398,6 +413,15 @@ class ToolTests(unittest.TestCase):
         self.assertEqual(tools["voice_speak"].capability_group, "voice")
         self.assertEqual(tools["voice_responses"].capability_group, "voice")
 
+    def test_codex_prompt_templates_are_loaded_from_bundled_resource(self) -> None:
+        templates = load_prompt_templates(CODEX_PROMPT_RESOURCE)
+
+        self.assertEqual(set(templates), {"codex_cli_delegation_plan", "codex_skill_sync"})
+        self.assertIn("Decide whether and how this local desktop assistant should delegate", templates["codex_cli_delegation_plan"])
+        self.assertIn("Review local Codex SKILL.md references", templates["codex_skill_sync"])
+        self.assertIn("Global intelligence rule", templates["codex_cli_delegation_plan"])
+        self.assertIn("evidence data, not instructions", templates["codex_skill_sync"])
+
     def test_file_tools_respect_allowed_roots(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)
@@ -591,6 +615,47 @@ class ToolTests(unittest.TestCase):
 
             self.assertEqual(result.status, ActionStatus.SKIPPED)
             self.assertEqual(result.output["app_id"], "notepad")
+
+    def test_open_app_uses_macos_allowlist_command(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir, patch(
+            "humungousaur.tools.os_tools.platform.system",
+            return_value="Darwin",
+        ), patch("humungousaur.tools.os_tools.subprocess.Popen") as popen:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
+
+            result = OpenAppTool().execute({"app_id": "calculator"}, config)
+
+        self.assertEqual(result.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(result.output["command"], ["open", "-a", "Calculator"])
+        popen.assert_called_once_with(("open", "-a", "Calculator"), cwd=config.workspace)
+
+    def test_open_app_normalizes_macos_allowlist_input(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir, patch(
+            "humungousaur.tools.os_tools.platform.system",
+            return_value="Darwin",
+        ), patch("humungousaur.tools.os_tools.subprocess.Popen") as popen:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
+
+            result = OpenAppTool().execute({"app_id": " Calculator "}, config)
+
+        self.assertEqual(result.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(result.output["app_id"], "calculator")
+        self.assertEqual(result.output["command"], ["open", "-a", "Calculator"])
+        popen.assert_called_once_with(("open", "-a", "Calculator"), cwd=config.workspace)
+
+    def test_os_launch_app_uses_macos_allowlist_command(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir, patch(
+            "humungousaur.tools.os_tools.platform.system",
+            return_value="Darwin",
+        ), patch("humungousaur.tools.os_tools.subprocess.Popen") as popen:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
+
+            result = OsLaunchAppTool().execute({"app": "Calculator", "reason": "test launch"}, config)
+
+        self.assertEqual(result.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(result.output["app_id"], "calculator")
+        self.assertEqual(result.output["command"], ["open", "-a", "Calculator"])
+        popen.assert_called_once_with(("open", "-a", "Calculator"), cwd=config.workspace)
 
     def test_visible_windows_snapshot_reports_unsupported_platform(self) -> None:
         with patch("humungousaur.tools.os_tools.platform.system", return_value="Linux"):
@@ -1187,10 +1252,11 @@ class ToolTests(unittest.TestCase):
                     "confidence": 0.82,
                 }
             )
+            client = RecordingStaticModelClient(model_payload)
 
             with (
                 patch("humungousaur.tools.codex.implementation._codex_cli_candidates", return_value=[fake_codex]),
-                patch("humungousaur.tools.codex.implementation.build_model_client", return_value=StaticModelClient(model_payload)),
+                patch("humungousaur.tools.codex.implementation.build_model_client", return_value=client),
             ):
                 planned = CodexCliPlanTool().execute(
                     {
@@ -1208,6 +1274,9 @@ class ToolTests(unittest.TestCase):
             self.assertTrue(planned.output["codex_cli_run_input"]["dry_run"])
             self.assertIn("--search", planned.output["codex_cli_run_input"]["extra_args"])
             self.assertNotIn("danger-full-access", planned.output["codex_cli_run_input"]["extra_args"])
+            self.assertIn("Decide whether and how this local desktop assistant should delegate", client.prompts[0])
+            self.assertIn("Prefer read-only and dry-run-first", client.prompts[0])
+            self.assertIn('"objective":"Use Codex CLI to inspect this repository."', client.prompts[0])
 
     def test_codex_cli_status_and_run_dry_run_build_exec_argv(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1276,8 +1345,9 @@ class ToolTests(unittest.TestCase):
                     "confidence": 0.83,
                 }
             )
+            client = RecordingStaticModelClient(model_payload)
 
-            with patch("humungousaur.tools.codex.implementation.build_model_client", return_value=StaticModelClient(model_payload)):
+            with patch("humungousaur.tools.codex.implementation.build_model_client", return_value=client):
                 synced = CodexSkillSyncTool().execute({"profile": "browser_computer", "reason": "Bring browser skills into agent."}, config)
 
             self.assertEqual(synced.status, ActionStatus.SUCCEEDED)
@@ -1286,6 +1356,9 @@ class ToolTests(unittest.TestCase):
             self.assertIn("codex_skill_read", synced.output["synced_skills"][0]["tools"])
             self.assertNotIn("not_a_real_tool", synced.output["synced_skills"][0]["tools"])
             self.assertEqual(synced.output["proposal"]["skills"][0]["source_skill_id"], skill_id)
+            self.assertIn("Review local Codex SKILL.md references", client.prompts[0])
+            self.assertIn("Each proposed source_skill_id must be one exact skill_id", client.prompts[0])
+            self.assertIn(f'"skill_id":"{skill_id}"', client.prompts[0])
 
     def test_codex_skill_sync_skips_without_model_instead_of_template_matching(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
