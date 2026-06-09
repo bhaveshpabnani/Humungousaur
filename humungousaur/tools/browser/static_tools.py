@@ -13,7 +13,7 @@ from humungousaur.schemas import ActionStatus, RiskLevel, ToolResult
 from humungousaur.tools.base import Tool, object_input_schema
 from humungousaur.tools.file_tools import summarize_text
 
-from .common import WEB_TEXT_LIMIT_CHARS, _fetch_page, _open_url, _ssl_context, _submit_form, _validate_url
+from .common import WEB_TEXT_LIMIT_CHARS, _fetch_page, _open_url, _submit_form, _validate_url
 from .static_store import BrowserSessionStore
 from .static_utils import (
     _browser_observation,
@@ -296,8 +296,7 @@ def _search_duckduckgo_lite(query: str, *, limit: int) -> list[dict[str, str]]:
         },
         method="GET",
     )
-    opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=_ssl_context()))
-    with opener.open(request, timeout=20) as response:
+    with _open_url(request, timeout=20) as response:
         body = response.read().decode("utf-8", errors="replace")
     parser = _DuckDuckGoLiteParser()
     parser.feed(body)

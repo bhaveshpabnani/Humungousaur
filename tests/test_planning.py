@@ -5,6 +5,7 @@ from humungousaur.planning.prompt_templates import load_prompt_template, load_pr
 from humungousaur.planning.providers import ExplicitFallbackPlanProvider, ModelPlanProvider
 from humungousaur.planning.structured import PlanValidationError, StructuredPlanParser
 from humungousaur.planner import Planner
+from humungousaur.tools.travel_tools import TravelBookingIntentPrepareTool
 
 
 class SequenceModelClient:
@@ -43,6 +44,13 @@ class StructuredPlanParserTests(unittest.TestCase):
 
         with self.assertRaises(PlanValidationError):
             parser.parse("click the button then delete files")
+
+    def test_accepts_valid_plan_with_trailing_model_chatter(self) -> None:
+        parser = StructuredPlanParser({"list_files"})
+
+        steps = parser.parse('{"steps":[{"tool_name":"list_files","tool_input":{"path":"."},"reason":"scan"}]}\nDone.')
+
+        self.assertEqual(steps[0].tool_name, "list_files")
 
     def test_accepts_single_tool_alias_shape(self) -> None:
         parser = StructuredPlanParser({"search_workspace"})
@@ -237,6 +245,78 @@ class ModelPlanProviderTests(unittest.TestCase):
         self.assertEqual(turn.steps[0].tool_name, "conversation_response_prepare")
         self.assertIn("availability", turn.steps[0].tool_input["text"])
 
+    def test_model_react_step_tolerates_trailing_text_in_selector_response(self) -> None:
+        client = SequenceModelClient(
+            [
+                '{"groups":["browser"],"reason":"Need current web evidence"}\nI selected the browser group.',
+                '{"turn":{"decision":"act","tool_name":"web_search","tool_input":{"query":"Nagpur Kharagpur sleeper availability","limit":5},"reason":"Search for current evidence."}}',
+            ]
+        )
+        provider = ModelPlanProvider(
+            client,
+            {
+                "web_search",
+                "conversation_response_prepare",
+                "travel_plan_create",
+                "memory_write",
+                "system_status",
+            },
+            tool_catalog={
+                "web_search": {
+                    "description": "Search the public web.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {"query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 10}},
+                        "required": ["query"],
+                    },
+                    "capability_group": "browser",
+                },
+                "conversation_response_prepare": {
+                    "description": "Prepare a direct final answer.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {"text": {"type": "string"}, "reason": {"type": "string"}},
+                        "required": ["text", "reason"],
+                    },
+                    "capability_group": "conversation",
+                },
+                "travel_plan_create": {
+                    "description": "Create a travel planning artifact.",
+                    "risk_level": "medium",
+                    "requires_approval": False,
+                    "input_schema": {"type": "object", "properties": {"title": {"type": "string"}}, "required": ["title"]},
+                    "capability_group": "travel",
+                },
+                "memory_write": {
+                    "description": "Write a memory.",
+                    "risk_level": "medium",
+                    "requires_approval": False,
+                    "input_schema": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]},
+                    "capability_group": "memory",
+                },
+                "system_status": {
+                    "description": "Inspect system status.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {"type": "object", "properties": {}},
+                    "capability_group": "system",
+                },
+            },
+            fallback=ExplicitFallbackPlanProvider(),
+            max_prompt_tools=4,
+        )
+
+        turn = provider.react_step("Find train availability")
+
+        self.assertEqual(client.call_count, 2)
+        self.assertEqual(turn.steps[0].tool_name, "web_search")
+
     def test_model_react_repairs_false_no_web_access_final(self) -> None:
         client = SequenceModelClient(
             [
@@ -280,6 +360,108 @@ class ModelPlanProviderTests(unittest.TestCase):
         turn = provider.react_step("What trains have sleeper availability?")
 
         self.assertEqual(client.call_count, 3)
+        self.assertIn("evidence boundary", client.prompts[1])
+        self.assertEqual(turn.steps[0].tool_name, "web_search")
+
+    def test_model_react_repairs_no_evidence_travel_availability_final(self) -> None:
+        client = SequenceModelClient(
+            [
+                '{"turn":{"decision":"final","final_response":"There is no data available for train services from Nagpur to Kharagpur on July 2nd. I recommend checking the latest Railway reservation portal or official sources for updated information.","reason":"After reviewing available resources, there were no trains with sleeper class operating between Nagpur and Kharagpur on the specified date."}}',
+                '{"accept":false,"reason":"The answer makes a route/date train availability claim without observations, and web search can still gather evidence.","suggested_next_action":"Search for current Nagpur to Kharagpur sleeper availability on July 2."}',
+                '{"turn":{"decision":"act","tool_name":"web_search","tool_input":{"query":"Nagpur to Kharagpur trains sleeper class availability July 2","limit":5},"reason":"Gather current route/date sleeper availability evidence before answering."}}',
+            ]
+        )
+        provider = ModelPlanProvider(
+            client,
+            {"web_search", "conversation_response_prepare"},
+            tool_catalog={
+                "web_search": {
+                    "description": "Search the public web.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {"query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 10}},
+                        "required": ["query"],
+                    },
+                    "capability_group": "browser",
+                },
+                "conversation_response_prepare": {
+                    "description": "Prepare a direct final answer.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {"text": {"type": "string"}, "reason": {"type": "string"}},
+                        "required": ["text", "reason"],
+                    },
+                    "capability_group": "conversation",
+                },
+            },
+            fallback=ExplicitFallbackPlanProvider(),
+        )
+
+        turn = provider.react_step("What are the trains with available sleeper class from nagpur to kharagpur on july 2nd")
+
+        self.assertEqual(client.call_count, 3)
+        self.assertIn("availability, inventory, schedule, price, and status claims", client.prompts[1])
+        self.assertIn("no current_run.observations", client.prompts[1])
+        self.assertIn("external/current availability", client.prompts[2])
+        self.assertEqual(turn.steps[0].tool_name, "web_search")
+
+    def test_model_react_repairs_placeholder_booking_intent_for_availability_question(self) -> None:
+        client = SequenceModelClient(
+            [
+                '{"turn":{"decision":"act","tool_name":"travel_booking_intent_prepare","tool_input":{"mode":"rail","options":[{"origin":"Nagpur","destination":"Kharagpur","date":"2026-07-02"}],"reason":"Inspect train schedules for available sleeper class."},"reason":"Use travel tool."}}',
+                '{"turn":{"decision":"act","tool_name":"web_search","tool_input":{"query":"Nagpur to Kharagpur sleeper class availability July 2","limit":5},"reason":"Gather route/date availability evidence instead of preparing a booking intent."}}',
+            ]
+        )
+        provider = ModelPlanProvider(
+            client,
+            {"web_search", "travel_booking_intent_prepare", "conversation_response_prepare"},
+            tool_catalog={
+                "web_search": {
+                    "description": "Search the public web.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {"query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 10}},
+                        "required": ["query"],
+                    },
+                    "capability_group": "browser",
+                },
+                "travel_booking_intent_prepare": {
+                    "description": TravelBookingIntentPrepareTool().description,
+                    "risk_level": "high",
+                    "requires_approval": True,
+                    "input_schema": TravelBookingIntentPrepareTool().input_schema,
+                    "capability_group": "travel",
+                },
+                "conversation_response_prepare": {
+                    "description": "Prepare a direct final answer.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {"text": {"type": "string"}, "reason": {"type": "string"}},
+                        "required": ["text", "reason"],
+                    },
+                    "capability_group": "conversation",
+                },
+            },
+            fallback=ExplicitFallbackPlanProvider(),
+        )
+
+        turn = provider.react_step("What are the trains with available sleeper class from nagpur to kharagpur on july 2nd")
+
+        self.assertEqual(client.call_count, 2)
+        self.assertIn("tool_input.options[0].label is required", client.prompts[1])
+        self.assertIn("intent/preparation artifact tool", client.prompts[1])
         self.assertEqual(turn.steps[0].tool_name, "web_search")
 
     def test_model_react_repairs_repeated_action_with_different_method(self) -> None:
@@ -340,9 +522,100 @@ class ModelPlanProviderTests(unittest.TestCase):
             context={"current_run": {"tool_counts": {"web_search": 2}, "action_history": [{"tool_name": "web_search"}, {"tool_name": "web_search"}]}},
         )
 
-        self.assertEqual(client.call_count, 4)
+        self.assertEqual(client.call_count, 3)
         self.assertIn("Review a proposed repeated ReAct action", client.prompts[1])
         self.assertEqual(turn.steps[0].tool_name, "browser_live_open")
+
+    def test_model_react_repairs_repeated_selector_loop_after_controls_known(self) -> None:
+        client = SequenceModelClient(
+            [
+                '{"turn":{"decision":"act","tool_name":"browser_live_query_selector","tool_input":{"live_session_id":"live-123","selector":"input, select, button","max_elements":80},"reason":"Inspect controls again."}}',
+                '{"accept":false,"reason":"Controls such as trainNo, dt, sourceStation, destinationStation, class, and quota are already known; another selector query is not progress.","suggested_next_action":"Use the known controls or open an alternate route-specific source."}',
+                '{"turn":{"decision":"act","tool_name":"browser_live_type","tool_input":{"live_session_id":"live-123","element_id":"live:14","text":"NGP","clear_first":true,"reason":"Fill the observed source station control."},"reason":"Use the known source station control instead of querying selectors again."}}',
+            ]
+        )
+        provider = ModelPlanProvider(
+            client,
+            {"browser_live_query_selector", "browser_live_type", "conversation_response_prepare"},
+            tool_catalog={
+                "browser_live_query_selector": {
+                    "description": "Query live browser selectors.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {
+                            "live_session_id": {"type": "string"},
+                            "selector": {"type": "string"},
+                            "max_elements": {"type": "integer", "minimum": 1, "maximum": 100},
+                        },
+                        "required": ["live_session_id", "selector"],
+                    },
+                    "capability_group": "browser",
+                },
+                "browser_live_type": {
+                    "description": "Type into a live browser element.",
+                    "risk_level": "high",
+                    "requires_approval": True,
+                    "input_schema": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {
+                            "live_session_id": {"type": "string"},
+                            "element_id": {"type": "string"},
+                            "text": {"type": "string"},
+                            "clear_first": {"type": "boolean"},
+                            "reason": {"type": "string"},
+                        },
+                        "required": ["live_session_id", "element_id", "text", "reason"],
+                    },
+                    "capability_group": "browser",
+                },
+                "conversation_response_prepare": {
+                    "description": "Prepare a direct final answer.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {"text": {"type": "string"}, "reason": {"type": "string"}},
+                        "required": ["text", "reason"],
+                    },
+                    "capability_group": "conversation",
+                },
+            },
+            fallback=ExplicitFallbackPlanProvider(),
+        )
+
+        turn = provider.react_step(
+            "Fill the train availability form",
+            context={
+                "current_run": {
+                    "tool_counts": {"browser_live_query_selector": 2},
+                    "action_history": [{"tool_name": "browser_live_query_selector"}, {"tool_name": "browser_live_query_selector"}],
+                    "observations": [
+                        {
+                            "tool_name": "browser_live_query_selector",
+                            "highlights": [
+                                "live_session_id: live-123",
+                                "id: trainNo",
+                                "id: dt",
+                                "id: sourceStation",
+                                "id: destinationStation",
+                                "id: class",
+                                "id: quota",
+                            ],
+                        }
+                    ],
+                }
+            },
+        )
+
+        self.assertEqual(client.call_count, 3)
+        self.assertIn("controls, selectors, element ids", client.prompts[1])
+        self.assertIn("concrete interaction", client.prompts[2])
+        self.assertEqual(turn.steps[0].tool_name, "browser_live_type")
 
     def test_model_react_final_review_rejects_visible_evidence_mismatch(self) -> None:
         client = SequenceModelClient(
@@ -585,7 +858,8 @@ class ModelPlanProviderTests(unittest.TestCase):
             [
                 '{"turn":{"decision":"act","tool_name":"browser_fill_form","tool_input":{"session_id":"static-123","form_index":0,"values":{"date":"2026-07-02"}},"reason":"Set requested date."}}',
                 '{"accept":false,"reason":"Runtime observations show no parsed forms, so browser_fill_form cannot target form_index 0.","suggested_next_action":"Open or inspect a different specific source URL instead of filling this static page."}',
-                '{"turn":{"decision":"act","tool_name":"browser_open","tool_input":{"url":"https://example.com/source"},"reason":"Inspect a different specific source."}}',
+                '{"turn":{"decision":"act","tool_name":"browser_open","tool_input":{"url":"https://example.com/current"},"reason":"Re-open the observed page for extraction instead of filling a missing form."}}',
+                '{"accept":true,"reason":"This uses an observed page URL after the form action failed.","suggested_next_action":""}',
             ]
         )
         provider = ModelPlanProvider(
@@ -637,7 +911,7 @@ class ModelPlanProviderTests(unittest.TestCase):
             context={"current_run": {"observations": [{"tool_name": "browser_observe", "highlights": ["forms: 0", "url: https://example.com/current"]}]}},
         )
 
-        self.assertEqual(client.call_count, 3)
+        self.assertEqual(client.call_count, 4)
         self.assertIn("Review a proposed static-browser form-fill action", client.prompts[1])
         self.assertIn("no forms", client.prompts[1])
         self.assertEqual(turn.steps[0].tool_name, "browser_open")
@@ -689,6 +963,136 @@ class ModelPlanProviderTests(unittest.TestCase):
 
         self.assertEqual(client.call_count, 3)
         self.assertIn("Reject final answers that ask the user whether to proceed", client.prompts[1])
+        self.assertEqual(turn.steps[0].tool_name, "browser_open")
+
+    def test_model_react_repairs_unverified_travel_availability_deferral(self) -> None:
+        client = SequenceModelClient(
+            [
+                '{"turn":{"decision":"final","final_response":"I don’t have the actual July 2 sleeper-class availability yet. So far I’ve only confirmed that Indian Railways’ live Seat Availability page is the right source and that it supports Sleeper Class queries, but I have not verified live results for Nagpur to Kharagpur on 2 July 2026. If you want, I can continue by checking the live availability page for that date and route.","reason":"Enough evidence exists to report that live availability has not yet been verified, and the next agent layer can decide whether to continue tool use."}}',
+                '{"accept":false,"reason":"The original request asks for the answer, and observations only show a blank enquiry form/class list. Browser/search tools can still gather route/date evidence.","suggested_next_action":"Open a concrete route listing source or continue with live browser controls to get train numbers and availability."}',
+                '{"turn":{"decision":"act","tool_name":"browser_open","tool_input":{"url":"https://www.railyatri.in/nagpur-to-kharagpur-jn-trains"},"reason":"Continue evidence gathering from a route-specific source instead of asking the user to continue."}}',
+            ]
+        )
+        provider = ModelPlanProvider(
+            client,
+            {"browser_open", "conversation_response_prepare"},
+            tool_catalog={
+                "browser_open": {
+                    "description": "Open and inspect a public browser page.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {"url": {"type": "string"}},
+                        "required": ["url"],
+                    },
+                    "capability_group": "browser",
+                },
+                "conversation_response_prepare": {
+                    "description": "Prepare a direct final answer.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {"text": {"type": "string"}, "reason": {"type": "string"}},
+                        "required": ["text", "reason"],
+                    },
+                    "capability_group": "conversation",
+                },
+            },
+            fallback=ExplicitFallbackPlanProvider(),
+        )
+
+        turn = provider.react_step(
+            "What are the trains with available sleeper class from nagpur to kharagpur on july 2nd",
+            context={
+                "current_run": {
+                    "observations": [
+                        {
+                            "tool_name": "browser_observe",
+                            "highlights": [
+                                "text: Enter Class SLEEPER CLASS",
+                                "text: You Queried For : Train Number Train Name Date Source Station Destination Station",
+                            ],
+                        }
+                    ]
+                }
+            },
+        )
+
+        self.assertEqual(client.call_count, 3)
+        self.assertIn("if you want I can continue", client.prompts[1])
+        self.assertIn("concrete source, domain lookup tool, live browser controls", client.prompts[1])
+        self.assertIn("next agent layer", client.prompts[2])
+        self.assertEqual(turn.steps[0].tool_name, "browser_open")
+
+    def test_model_react_repairs_form_only_travel_final_when_alternate_sources_remain(self) -> None:
+        client = SequenceModelClient(
+            [
+                '{"turn":{"decision":"final","final_response":"I’m not able to verify the actual trains with sleeper-class availability yet. I found the official Indian Railways seat-availability page, but the current evidence only shows the blank enquiry form and available class options; it does not show results for Nagpur to Kharagpur on 2 July. So I can’t responsibly list trains with confirmed sleeper availability from the data gathered so far.","reason":"The remaining tools available here are not sufficient to complete the captcha-gated official enquiry without unsafe guessing."}}',
+                '{"accept":false,"reason":"The worker observed only one form-only official source while prior search observations include unopened route-specific RailYatri and ixigo URLs.","suggested_next_action":"Open a route-specific alternate source URL from the prior search results."}',
+                '{"turn":{"decision":"act","tool_name":"browser_open","tool_input":{"url":"https://www.railyatri.in/nagpur-to-kharagpur-jn-trains"},"reason":"Try an unopened route-specific source before finalizing with uncertainty."}}',
+                '{"accept":true,"reason":"The repaired URL is one of the concrete route-specific URLs already present in observations.","suggested_next_action":""}',
+            ]
+        )
+        provider = ModelPlanProvider(
+            client,
+            {"browser_open", "conversation_response_prepare"},
+            tool_catalog={
+                "browser_open": {
+                    "description": "Open and inspect a public browser page.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {"url": {"type": "string"}},
+                        "required": ["url"],
+                    },
+                    "capability_group": "browser",
+                },
+                "conversation_response_prepare": {
+                    "description": "Prepare a direct final answer.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {"text": {"type": "string"}, "reason": {"type": "string"}},
+                        "required": ["text", "reason"],
+                    },
+                    "capability_group": "conversation",
+                },
+            },
+            fallback=ExplicitFallbackPlanProvider(),
+        )
+
+        turn = provider.react_step(
+            "What are the trains with available sleeper class from nagpur to kharagpur on july 2nd",
+            context={
+                "current_run": {
+                    "observations": [
+                        {
+                            "tool_name": "web_search",
+                            "highlights": [
+                                "url: https://www.railyatri.in/nagpur-to-kharagpur-jn-trains",
+                                "url: https://www.ixigo.com/by-train-rail/nagpur-to-kharagpur-by-train",
+                            ],
+                        },
+                        {
+                            "tool_name": "browser_observe",
+                            "highlights": ["text: Enter Class SLEEPER CLASS", "text: You Queried For :"],
+                        },
+                    ]
+                }
+            },
+        )
+
+        self.assertEqual(client.call_count, 4)
+        self.assertIn("concrete alternate source URLs", client.prompts[1])
+        self.assertIn("alternate concrete source URLs remain", client.prompts[2])
         self.assertEqual(turn.steps[0].tool_name, "browser_open")
 
     def test_model_react_repairs_unobserved_navigation_source_after_results(self) -> None:
@@ -745,15 +1149,16 @@ class ModelPlanProviderTests(unittest.TestCase):
             },
         )
 
-        self.assertEqual(client.call_count, 2)
+        self.assertEqual(client.call_count, 3)
         self.assertIn("grounded-source review", client.prompts[1])
-        self.assertNotIn("Review a proposed browser/search navigation", "\n".join(client.prompts))
+        self.assertIn("Review a proposed browser/search navigation", client.prompts[2])
         self.assertEqual(turn.steps[0].tool_input["url"], "https://example.com/source")
 
     def test_model_react_repairs_navigation_churn_after_source_tab_opened(self) -> None:
         client = SequenceModelClient(
             [
                 '{"turn":{"decision":"act","tool_name":"browser_live_search","tool_input":{"live_session_id":"live-123","query":"same task more sources"},"reason":"Search again."}}',
+                '{"accept":false,"reason":"The active source tab should be inspected before more searching.","suggested_next_action":"Observe the active source tab."}',
                 '{"turn":{"decision":"act","tool_name":"browser_live_observe","tool_input":{"live_session_id":"live-123","include_text":true,"max_elements":50},"reason":"Inspect the active source tab before more navigation."}}',
             ]
         )
@@ -823,8 +1228,8 @@ class ModelPlanProviderTests(unittest.TestCase):
             },
         )
 
-        self.assertEqual(client.call_count, 2)
-        self.assertIn("grounded-source review", client.prompts[1])
+        self.assertEqual(client.call_count, 3)
+        self.assertIn("Review a proposed browser/search navigation", client.prompts[1])
         self.assertEqual(turn.steps[0].tool_name, "browser_live_observe")
 
     def test_model_react_repairs_search_engine_live_open_after_web_results(self) -> None:
@@ -881,9 +1286,9 @@ class ModelPlanProviderTests(unittest.TestCase):
             },
         )
 
-        self.assertEqual(client.call_count, 2)
+        self.assertEqual(client.call_count, 3)
         self.assertIn("grounded-source review", client.prompts[1])
-        self.assertNotIn("Review a proposed browser/search navigation", "\n".join(client.prompts))
+        self.assertIn("Review a proposed browser/search navigation", client.prompts[2])
         self.assertEqual(turn.steps[0].tool_name, "browser_live_open")
         self.assertEqual(turn.steps[0].tool_input["url"], "https://example.com/source")
 
@@ -1077,6 +1482,115 @@ class ModelPlanProviderTests(unittest.TestCase):
         self.assertIn("system_status", client.prompts[2])
         self.assertNotIn("browser_open", client.prompts[2])
         self.assertEqual(plan.steps[0].tool_name, "system_status")
+
+    def test_active_workspace_skill_declared_tools_are_candidate_tools(self) -> None:
+        client = SequenceModelClient(
+            [
+                '{"groups":["browser"],"reason":"Browser evidence is relevant."}',
+                '{"steps":[{"tool_name":"rail_route_availability_lookup","tool_input":{"journey_date":"2026-07-02","origin":"Nagpur","destination":"Kharagpur","class_code":"SL","reason":"Use the active rail skill lookup tool."},"reason":"Use skill-declared rail availability lookup."}]}',
+            ]
+        )
+        allowed = {"web_search", "browser_open", "rail_route_availability_lookup", "conversation_response_prepare", "system_status"}
+        provider = ModelPlanProvider(
+            client,
+            allowed,
+            tool_catalog={
+                "web_search": {
+                    "description": "Search public web.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
+                    "capability_group": "browser",
+                },
+                "browser_open": {
+                    "description": "Open page.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {"type": "object", "properties": {"url": {"type": "string"}}, "required": ["url"]},
+                    "capability_group": "browser",
+                },
+                "rail_route_availability_lookup": {
+                    "description": "Look up rail route/date/class availability.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {
+                            "journey_date": {"type": "string"},
+                            "origin": {"type": "string"},
+                            "destination": {"type": "string"},
+                            "class_code": {"type": "string"},
+                            "reason": {"type": "string"},
+                        },
+                        "required": ["journey_date", "reason"],
+                    },
+                    "capability_group": "travel",
+                },
+                "conversation_response_prepare": {
+                    "description": "Prepare final answer.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {"type": "object", "properties": {"text": {"type": "string"}, "reason": {"type": "string"}}, "required": ["text", "reason"]},
+                    "capability_group": "conversation",
+                },
+                "system_status": {
+                    "description": "System status.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {"type": "object", "properties": {}},
+                    "capability_group": "system",
+                },
+            },
+            fallback=ExplicitFallbackPlanProvider(),
+            max_prompt_tools=4,
+        )
+
+        plan = provider.plan(
+            "Find rail availability.",
+            context={"active_workspace_skills": [{"content": "- `rail_route_availability_lookup`\n- `web_search`"}]},
+        )
+
+        self.assertEqual(plan.steps[0].tool_name, "rail_route_availability_lookup")
+        self.assertIn("rail_route_availability_lookup", client.prompts[1])
+
+    def test_model_provider_includes_active_skill_tool_map_candidates(self) -> None:
+        client = SequenceModelClient(
+            [
+                '{"tool_names":["conversation_response_prepare"],"reason":"Fallback conversation only."}',
+                '{"steps":[{"tool_name":"rail_route_availability_lookup","tool_input":{"origin":"NGP","destination":"KGP","journey_date":"2026-07-02","class_code":"SL"},"reason":"Use active rail skill tool."}]}',
+            ]
+        )
+        provider = ModelPlanProvider(
+            model_client=client,
+            allowed_tools={"conversation_response_prepare", "rail_route_availability_lookup"},
+            tool_catalog={
+                "conversation_response_prepare": {
+                    "description": "Prepare response.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {"type": "object", "properties": {}},
+                    "capability_group": "conversation",
+                },
+                "rail_route_availability_lookup": {
+                    "description": "Lookup rail availability.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {"type": "object", "properties": {}},
+                    "capability_group": "travel",
+                },
+            },
+            fallback=ExplicitFallbackPlanProvider(),
+            max_prompt_tools=2,
+        )
+
+        plan = provider.plan(
+            "Find rail availability.",
+            context={"active_workspace_skills": [{"content_mode": "summary", "tool_map": ["rail_route_availability_lookup"]}]},
+        )
+
+        self.assertEqual(plan.steps[0].tool_name, "rail_route_availability_lookup")
+        self.assertIn("rail_route_availability_lookup", client.prompts[1])
 
     def test_explicit_provider_can_list_plugin_manifests(self) -> None:
         plan = ExplicitFallbackPlanProvider({"plugin_manifests"}).plan('plugin_manifests {"include_errors":true}')

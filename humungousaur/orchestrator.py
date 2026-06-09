@@ -4,6 +4,7 @@ from collections import Counter
 from dataclasses import asdict
 from datetime import datetime
 import json
+from pathlib import Path
 from typing import Callable
 
 from humungousaur.cognition import CognitiveRecorder
@@ -16,6 +17,7 @@ from humungousaur.planning.model_clients import ModelClient, ModelClientError, r
 from humungousaur.planning.model_factory import build_model_client
 from humungousaur.planning.prompt_templates import load_prompt_template, render_prompt_template
 from humungousaur.planning.providers import ExplicitFallbackPlanProvider, ModelPlanProvider, PlanProvider
+from humungousaur.planning.structured import load_json_object
 from humungousaur.planner import Planner
 from humungousaur.safety.approvals import ApprovalStore
 from humungousaur.safety.audit import AuditLog
@@ -87,7 +89,7 @@ class AgentOrchestrator:
         self.audit.log_run_event(run_id, "run_started", "Run started.", {"request": request})
         if self._cancel_requested(run_id, is_cancel_requested):
             return self._finish_cancelled(run_id, request, results)
-        planning_context = {} if self.config.planner_provider == "explicit" else self._planning_context()
+        planning_context = {} if self.config.planner_provider == "explicit" else self._planning_context(request)
         self.audit.log_run_event(
             run_id,
             "planning_context_collected",
@@ -276,25 +278,6 @@ class AgentOrchestrator:
                 break
             new_steps = self._dedupe_model_steps(steps, seen_step_keys)
             if not new_steps:
-                replacement_steps = self._replacement_steps_for_duplicate_model_steps(steps, seen_step_keys)
-                if replacement_steps:
-                    self.audit.log_run_event(
-                        run_id,
-                        "model_loop_duplicate_repaired",
-                        "Replaced a duplicate model-planned navigation input with an observation step.",
-                        {"turn_index": turn_index, "steps": [step.tool_name for step in replacement_steps]},
-                    )
-                    self._execute_steps(
-                        run_id,
-                        request,
-                        replacement_steps,
-                        results,
-                        approve_high_risk=approve_high_risk,
-                        is_cancel_requested=is_cancel_requested,
-                    )
-                    if self._model_loop_should_stop(replacement_steps, results) or self._cancel_requested(run_id, is_cancel_requested):
-                        break
-                    continue
                 repeated_result = ToolResult(
                     "model_planning_loop",
                     ActionStatus.SKIPPED,
@@ -449,29 +432,6 @@ class AgentOrchestrator:
             unique.append(step)
         return unique
 
-    def _replacement_steps_for_duplicate_model_steps(self, steps: list[PlannedStep], seen_step_keys: set[str]) -> list[PlannedStep]:
-        replacements: list[PlannedStep] = []
-        for step in steps:
-            key = json.dumps({"tool_name": step.tool_name, "tool_input": step.tool_input}, sort_keys=True, default=str)
-            if key not in seen_step_keys:
-                continue
-            if step.tool_name not in {"browser_live_new_tab", "browser_live_open", "browser_live_search"}:
-                continue
-            live_session_id = str(step.tool_input.get("live_session_id") or "").strip()
-            if not live_session_id:
-                continue
-            replacement = PlannedStep(
-                "browser_live_observe",
-                {"live_session_id": live_session_id, "include_text": True, "max_elements": 100},
-                "Observe the existing live browser page instead of repeating the same navigation input.",
-            )
-            replacement_key = json.dumps({"tool_name": replacement.tool_name, "tool_input": replacement.tool_input}, sort_keys=True, default=str)
-            if replacement_key in seen_step_keys:
-                continue
-            seen_step_keys.add(replacement_key)
-            replacements.append(replacement)
-        return replacements
-
     def _model_loop_should_stop(self, steps: list[PlannedStep], results: list[ToolResult]) -> bool:
         if any(result.status == ActionStatus.NEEDS_APPROVAL for result in results):
             return True
@@ -479,7 +439,8 @@ class AgentOrchestrator:
             return True
         return False
 
-    def _planning_context(self) -> dict[str, object]:
+    def _planning_context(self, request: str) -> dict[str, object]:
+        workspace_skills = self._workspace_skill_context()
         return {
             "workspace": str(self.config.workspace),
             "data_dir": str(self.config.data_dir),
@@ -491,7 +452,8 @@ class AgentOrchestrator:
             "user_profile": compact_user_profile(build_user_profile(self.memory, limit=100), per_section=3),
             "cognition": self._cognitive_context(),
             "browser_sessions": self._browser_context(),
-            "available_workspace_skills": self._workspace_skill_context(),
+            "available_workspace_skills": workspace_skills,
+            "active_workspace_skills": self._selected_workspace_skill_context(request, workspace_skills),
             "capability_plugins": self._plugin_capability_context(),
             "gateway_channels": self._channel_capability_context(),
             "safety": {
@@ -537,7 +499,7 @@ class AgentOrchestrator:
 
     def _workspace_skill_context(self) -> list[dict[str, object]]:
         try:
-            skills = discover_workspace_skills(self.config)[:16]
+            skills = discover_workspace_skills(self.config)[:200]
         except Exception:
             return []
         return [
@@ -546,9 +508,160 @@ class AgentOrchestrator:
                 "name": skill.name,
                 "description": skill.description[:240],
                 "relative_path": skill.relative_path,
+                "domain": _skill_domain(skill.relative_path),
             }
             for skill in skills
         ]
+
+    def _selected_workspace_skill_context(self, request: str, skills: list[dict[str, object]]) -> list[dict[str, object]]:
+        if not request.strip() or not skills:
+            return []
+        selected_ids = self._select_relevant_workspace_skill_ids(request, skills)
+        if not selected_ids:
+            return []
+        try:
+            workspace_skills = discover_workspace_skills(self.config)
+        except Exception:
+            return []
+        by_id = {skill.skill_id: skill for skill in workspace_skills}
+        root_ids = self._hierarchical_root_skill_ids(selected_ids, by_id)
+        skill_ids = self._expand_workspace_skill_ids(root_ids, by_id)
+        skill_ids = self._ensure_selected_workspace_skills(skill_ids, selected_ids, by_id)
+        active: list[dict[str, object]] = []
+        remaining_chars = 60_000
+        for skill_id, depth, parent_skill_id in skill_ids:
+            skill = by_id.get(skill_id)
+            if skill is None:
+                continue
+            try:
+                content = skill.path.read_text(encoding="utf-8")
+            except Exception:
+                continue
+            tool_map = _skill_reference_entries(content)
+            child_refs = _skill_child_reference_payload(tool_map, by_id)
+            content_mode = "full" if depth == 0 or skill_id in selected_ids else "summary"
+            bounded = ""
+            if content_mode == "full":
+                bounded = content[: min(len(content), remaining_chars, 14_000)]
+            summary = _skill_instruction_summary(content, skill.description)
+            if not bounded and not summary:
+                continue
+            payload: dict[str, object] = {
+                "skill_id": skill.skill_id,
+                "name": skill.name,
+                "description": skill.description[:300],
+                "relative_path": skill.relative_path,
+                "domain": _skill_domain(skill.relative_path),
+                "depth": depth,
+                "parent_skill_id": parent_skill_id,
+                "selected_directly": skill_id in selected_ids,
+                "content_mode": content_mode,
+                "summary": summary,
+                "tool_map": tool_map[:40],
+                "child_skill_refs": child_refs[:20],
+            }
+            if bounded:
+                payload["content"] = bounded
+                remaining_chars -= len(bounded)
+            active.append(payload)
+            if remaining_chars <= 0:
+                break
+        return active
+
+    def _select_relevant_workspace_skill_ids(self, request: str, skills: list[dict[str, object]]) -> list[str]:
+        skill_ids = [str(skill.get("skill_id") or "") for skill in skills if str(skill.get("skill_id") or "")]
+        if not skill_ids:
+            return []
+        schema = {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["skill_ids", "reason"],
+            "properties": {
+                "skill_ids": {
+                    "type": "array",
+                    "maxItems": min(5, len(skill_ids)),
+                    "items": {"type": "string", "enum": skill_ids},
+                },
+                "reason": {"type": "string"},
+            },
+        }
+        try:
+            raw = self._build_model_client().complete_json(
+                render_prompt_template(
+                    "select_relevant_workspace_skills",
+                    skill_catalog=json.dumps(skills, sort_keys=True, default=str, separators=(",", ":")),
+                    user_request=request,
+                ),
+                schema,
+            )
+            payload = load_json_object(raw, label="Relevant workspace skill selector")
+        except (ModelClientError, ValueError, json.JSONDecodeError):
+            return []
+        selected = payload.get("skill_ids")
+        if not isinstance(selected, list):
+            return []
+        allowed = set(skill_ids)
+        return [str(skill_id) for skill_id in selected if str(skill_id) in allowed]
+
+    def _hierarchical_root_skill_ids(self, selected_ids: list[str], by_id: dict[str, object]) -> list[str]:
+        roots: list[str] = []
+        for skill_id in selected_ids:
+            ancestors = _workspace_skill_ancestor_ids(skill_id, by_id)
+            if ancestors:
+                for ancestor_id in ancestors:
+                    if ancestor_id not in roots:
+                        roots.append(ancestor_id)
+                continue
+            if skill_id not in roots:
+                roots.append(skill_id)
+        return roots
+
+    def _ensure_selected_workspace_skills(
+        self,
+        expanded: list[tuple[str, int, str]],
+        selected_ids: list[str],
+        by_id: dict[str, object],
+    ) -> list[tuple[str, int, str]]:
+        present = {skill_id for skill_id, _, _ in expanded}
+        output = list(expanded)
+        for skill_id in selected_ids:
+            if skill_id in present or skill_id not in by_id:
+                continue
+            ancestors = _workspace_skill_ancestor_ids(skill_id, by_id)
+            parent_skill_id = ancestors[-1] if ancestors else ""
+            output.append((skill_id, len(ancestors), parent_skill_id))
+            present.add(skill_id)
+        return output
+
+    def _expand_workspace_skill_ids(self, root_skill_ids: list[str], by_id: dict[str, object]) -> list[tuple[str, int, str]]:
+        by_name: dict[str, str] = {}
+        for skill_id, skill in by_id.items():
+            name = str(getattr(skill, "name", "") or "").strip().lower()
+            if name:
+                by_name[name] = skill_id
+        expanded: list[tuple[str, int, str]] = []
+        queued: list[tuple[str, int, str]] = [(skill_id, 0, "") for skill_id in root_skill_ids]
+        seen: set[str] = set()
+        max_depth = 3
+        max_skills = 12
+        while queued and len(expanded) < max_skills:
+            skill_id, depth, parent_skill_id = queued.pop(0)
+            if skill_id in seen or skill_id not in by_id:
+                continue
+            seen.add(skill_id)
+            expanded.append((skill_id, depth, parent_skill_id))
+            if depth >= max_depth:
+                continue
+            skill = by_id[skill_id]
+            try:
+                content = getattr(skill, "path").read_text(encoding="utf-8")
+            except Exception:
+                continue
+            for entry in _skill_reference_entries(content):
+                child_id = entry if entry in by_id else by_name.get(entry.strip().lower())
+                if child_id and child_id not in seen:
+                    queued.append((child_id, depth + 1, skill_id))
+        return expanded
 
     def _plugin_capability_context(self) -> list[dict[str, object]]:
         try:
@@ -959,3 +1072,134 @@ class AgentOrchestrator:
         if result.status == ActionStatus.SUCCEEDED:
             return str(result.output.get("path"))
         return None
+
+
+def _skill_reference_entries(content: str) -> list[str]:
+    entries: list[str] = []
+    in_section = False
+    wanted = {"tool map", "sub-skills", "subskills", "skill map"}
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            in_section = stripped.lstrip("#").strip().lower() in wanted
+            continue
+        if in_section and stripped.startswith("#"):
+            break
+        if not in_section or not stripped.startswith("-"):
+            continue
+        entry = _first_backtick_value(stripped)
+        if entry:
+            entries.append(entry)
+    return entries
+
+
+def _skill_child_reference_payload(entries: list[str], by_id: dict[str, object]) -> list[dict[str, str]]:
+    by_name: dict[str, object] = {}
+    for skill in by_id.values():
+        name = str(getattr(skill, "name", "") or "").strip().lower()
+        if name:
+            by_name[name] = skill
+    refs: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for entry in entries:
+        skill = by_id.get(entry) or by_name.get(entry.strip().lower())
+        if skill is None:
+            continue
+        skill_id = str(getattr(skill, "skill_id", "") or "")
+        if not skill_id or skill_id in seen:
+            continue
+        seen.add(skill_id)
+        refs.append(
+            {
+                "entry": entry,
+                "skill_id": skill_id,
+                "name": str(getattr(skill, "name", "") or ""),
+                "relative_path": str(getattr(skill, "relative_path", "") or ""),
+                "description": str(getattr(skill, "description", "") or "")[:240],
+            }
+        )
+    return refs
+
+
+def _skill_instruction_summary(content: str, fallback: str) -> str:
+    parts = []
+    purpose = _markdown_section_excerpt(content, {"purpose"}, limit=700)
+    when_to_use = _markdown_section_excerpt(content, {"when to use", "when to use this skill"}, limit=700)
+    if purpose:
+        parts.append(f"Purpose: {purpose}")
+    if when_to_use:
+        parts.append(f"When to use: {when_to_use}")
+    if not parts:
+        body = _strip_frontmatter(content)
+        parts.append((fallback or body).strip()[:900])
+    return "\n".join(part for part in parts if part).strip()[:1_600]
+
+
+def _markdown_section_excerpt(content: str, headings: set[str], *, limit: int) -> str:
+    capture = False
+    lines: list[str] = []
+    for line in _strip_frontmatter(content).splitlines():
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            heading = stripped.lstrip("#").strip().lower()
+            if capture:
+                break
+            capture = heading in headings
+            continue
+        if capture:
+            if stripped.startswith("#"):
+                break
+            if stripped:
+                lines.append(stripped)
+    return " ".join(lines)[:limit].strip()
+
+
+def _strip_frontmatter(content: str) -> str:
+    text = content.lstrip("\ufeff")
+    if not text.startswith("---"):
+        return text
+    end = text.find("\n---", 3)
+    if end < 0:
+        return text
+    after = text.find("\n", end + 4)
+    return text[after + 1 :] if after >= 0 else ""
+
+
+def _skill_domain(relative_path: str) -> str:
+    parts = Path(str(relative_path)).parts
+    if len(parts) >= 3 and parts[0] == "skills":
+        return parts[1]
+    if len(parts) >= 4 and parts[0] == ".umang" and parts[1] == "skills":
+        return parts[2]
+    return ""
+
+
+def _workspace_skill_ancestor_ids(skill_id: str, by_id: dict[str, object]) -> list[str]:
+    skill = by_id.get(skill_id)
+    if skill is None:
+        return []
+    relative_path = str(getattr(skill, "relative_path", "") or "")
+    if not relative_path:
+        return []
+    by_relative = {str(getattr(candidate, "relative_path", "") or ""): candidate_id for candidate_id, candidate in by_id.items()}
+    path = Path(relative_path)
+    ancestors: list[str] = []
+    parents = list(path.parents)
+    for parent in reversed(parents):
+        if str(parent) in {"", "."}:
+            continue
+        candidate_relative = (parent / "SKILL.md").as_posix()
+        candidate_id = by_relative.get(candidate_relative)
+        if candidate_id and candidate_id != skill_id:
+            ancestors.append(candidate_id)
+    return ancestors
+
+
+def _first_backtick_value(text: str) -> str:
+    start = text.find("`")
+    if start < 0:
+        return ""
+    end = text.find("`", start + 1)
+    if end < 0:
+        return ""
+    return text[start + 1 : end].strip()

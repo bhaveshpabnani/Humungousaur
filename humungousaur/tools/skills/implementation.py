@@ -365,6 +365,7 @@ class WorkspaceSkillRef:
 
     def summary(self) -> dict[str, Any]:
         script_count = len(discover_scripts_for_skill(self))
+        hierarchy_kind = _workspace_skill_hierarchy_kind(self.relative_path)
         return {
             "skill_id": self.skill_id,
             "name": self.name,
@@ -372,6 +373,10 @@ class WorkspaceSkillRef:
             "path": str(self.path),
             "relative_path": self.relative_path,
             "source": "workspace",
+            "domain": _workspace_skill_domain(self.relative_path),
+            "hierarchy_kind": hierarchy_kind,
+            "parent_skill_id": _workspace_skill_parent_id(self.relative_path),
+            "child_skill_count": _direct_child_skill_count(self.path) if hierarchy_kind != "leaf" else 0,
             "script_count": script_count,
         }
 
@@ -450,6 +455,42 @@ def discover_workspace_skills(config: AgentConfig) -> list[WorkspaceSkillRef]:
             if len(skills) >= SKILL_FILE_LIMIT:
                 return skills
     return skills
+
+
+def _workspace_skill_domain(relative_path: str) -> str:
+    parts = Path(str(relative_path)).parts
+    if len(parts) >= 3 and parts[0] == "skills":
+        return parts[1]
+    if len(parts) >= 4 and parts[0] == ".umang" and parts[1] == "skills":
+        return parts[2]
+    return ""
+
+
+def _workspace_skill_hierarchy_kind(relative_path: str) -> str:
+    parts = Path(str(relative_path)).parts
+    if len(parts) == 3 and parts[0] == "skills" and parts[-1] == "SKILL.md":
+        return "domain_parent"
+    if len(parts) == 4 and parts[0] == ".umang" and parts[1] == "skills" and parts[-1] == "SKILL.md":
+        return "domain_parent"
+    return "leaf"
+
+
+def _workspace_skill_parent_id(relative_path: str) -> str:
+    parts = Path(str(relative_path)).parts
+    if len(parts) <= 3:
+        return ""
+    if parts[0] == "skills" and parts[-1] == "SKILL.md":
+        return f"workspace:{Path(*parts[:-2], 'SKILL.md').as_posix()}"
+    if len(parts) > 4 and parts[0] == ".umang" and parts[1] == "skills" and parts[-1] == "SKILL.md":
+        return f"workspace:{Path(*parts[:-2], 'SKILL.md').as_posix()}"
+    return ""
+
+
+def _direct_child_skill_count(path: Path) -> int:
+    folder = path.parent
+    if not folder.exists() or not folder.is_dir():
+        return 0
+    return sum(1 for child in folder.iterdir() if child.is_dir() and (child / "SKILL.md").is_file())
 
 
 def workspace_skill_by_id(config: AgentConfig, skill_id: str) -> WorkspaceSkillRef | None:

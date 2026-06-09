@@ -244,6 +244,101 @@ class ModelOrchestratorTests(unittest.TestCase):
             self.assertEqual(result.final_response, "18029 LTT Shalimar Exp has SL availability AVL 50.")
             self.assertEqual([item.tool_name for item in result.results[:2]], ["read_file", "conversation_response_prepare"])
 
+    def test_planning_context_activates_model_selected_workspace_skills(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            rail_dir = workspace / "skills" / "railway-ticket-booking"
+            generic_dir = workspace / "skills" / "generic-notes"
+            rail_dir.mkdir(parents=True)
+            generic_dir.mkdir(parents=True)
+            for index in range(90):
+                filler_dir = workspace / "skills" / f"generic-{index:03d}"
+                filler_dir.mkdir(parents=True)
+                filler_dir.joinpath("SKILL.md").write_text(
+                    f"---\nname: generic-{index:03d}\ndescription: Generic filler workflow {index}.\n---\n# Generic\n",
+                    encoding="utf-8",
+                )
+            rail_dir.joinpath("SKILL.md").write_text(
+                "---\nname: railway-ticket-booking\ndescription: Railway availability workflow.\n---\n# Railway\nUse rail evidence tools.\n\n## Tool Map\n\n- `browser-evidence-workflow`\n",
+                encoding="utf-8",
+            )
+            browser_dir = workspace / "skills" / "browser-evidence-workflow"
+            browser_dir.mkdir(parents=True)
+            browser_dir.joinpath("SKILL.md").write_text(
+                "---\nname: browser-evidence-workflow\ndescription: Browser evidence workflow.\n---\n# Browser Evidence\nUse page evidence.\n",
+                encoding="utf-8",
+            )
+            generic_dir.joinpath("SKILL.md").write_text(
+                "---\nname: generic-notes\ndescription: Generic note workflow.\n---\n# Notes\nWrite notes.\n",
+                encoding="utf-8",
+            )
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", planner_provider="model")
+            client = _SequenceModelClient(
+                ['{"skill_ids":["workspace:skills/railway-ticket-booking/SKILL.md"],"reason":"Railway availability needs the rail skill."}']
+            )
+            with patch("humungousaur.orchestrator.build_model_client", return_value=client):
+                orchestrator = AgentOrchestrator(config)
+                context = orchestrator._planning_context("Find sleeper availability by train.")
+
+        self.assertEqual(len(context["active_workspace_skills"]), 2)
+        self.assertEqual(context["active_workspace_skills"][0]["name"], "railway-ticket-booking")
+        self.assertEqual(context["active_workspace_skills"][1]["name"], "browser-evidence-workflow")
+        self.assertEqual(context["active_workspace_skills"][0]["content_mode"], "full")
+        self.assertEqual(context["active_workspace_skills"][1]["content_mode"], "summary")
+        self.assertEqual(context["active_workspace_skills"][1]["depth"], 1)
+        self.assertEqual(
+            context["active_workspace_skills"][1]["parent_skill_id"],
+            "workspace:skills/railway-ticket-booking/SKILL.md",
+        )
+        self.assertIn("Use rail evidence tools", context["active_workspace_skills"][0]["content"])
+        self.assertNotIn("content", context["active_workspace_skills"][1])
+        self.assertIn("Browser evidence workflow", context["active_workspace_skills"][1]["description"])
+        self.assertEqual(
+            context["active_workspace_skills"][0]["child_skill_refs"][0]["skill_id"],
+            "workspace:skills/browser-evidence-workflow/SKILL.md",
+        )
+        self.assertIn("Select the smallest useful set", client.prompts[0])
+
+    def test_planning_context_reads_parent_skill_before_selected_child(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            domain_dir = workspace / "skills" / "commerce-travel"
+            rail_dir = domain_dir / "railway-ticket-booking"
+            browser_dir = workspace / "skills" / "browser-web" / "browser-evidence-workflow"
+            rail_dir.mkdir(parents=True)
+            browser_dir.mkdir(parents=True)
+            domain_dir.joinpath("SKILL.md").write_text(
+                "---\nname: commerce-travel\ndescription: Commerce and travel parent workflow.\n---\n# Commerce Travel\n\n## Purpose\nParent travel instructions.\n\n## Tool Map\n\n- `railway-ticket-booking`\n",
+                encoding="utf-8",
+            )
+            rail_dir.joinpath("SKILL.md").write_text(
+                "---\nname: railway-ticket-booking\ndescription: Railway availability workflow.\n---\n# Railway\n\n## Purpose\nUse rail evidence tools.\n\n## Tool Map\n\n- `browser-evidence-workflow`\n",
+                encoding="utf-8",
+            )
+            browser_dir.joinpath("SKILL.md").write_text(
+                "---\nname: browser-evidence-workflow\ndescription: Browser evidence workflow.\n---\n# Browser Evidence\n\n## Purpose\nUse page evidence.\n\n## Tool Map\n\n- `web_search`\n",
+                encoding="utf-8",
+            )
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", planner_provider="model")
+            client = _SequenceModelClient(
+                [
+                    '{"skill_ids":["workspace:skills/commerce-travel/railway-ticket-booking/SKILL.md"],"reason":"Railway availability needs the rail child skill."}'
+                ]
+            )
+            with patch("humungousaur.orchestrator.build_model_client", return_value=client):
+                orchestrator = AgentOrchestrator(config)
+                context = orchestrator._planning_context("Find sleeper availability by train.")
+
+        active = context["active_workspace_skills"]
+        self.assertEqual([item["name"] for item in active], ["commerce-travel", "railway-ticket-booking", "browser-evidence-workflow"])
+        self.assertEqual(active[0]["content_mode"], "full")
+        self.assertEqual(active[0]["selected_directly"], False)
+        self.assertEqual(active[1]["content_mode"], "full")
+        self.assertEqual(active[1]["selected_directly"], True)
+        self.assertEqual(active[1]["parent_skill_id"], "workspace:skills/commerce-travel/SKILL.md")
+        self.assertEqual(active[2]["content_mode"], "summary")
+        self.assertNotIn("content", active[2])
+
     def test_model_loop_rejects_duplicate_step_and_continues(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)
@@ -274,28 +369,6 @@ class ModelOrchestratorTests(unittest.TestCase):
             self.assertEqual([item.tool_name for item in non_note_results], ["read_file", "model_planning_loop", "conversation_response_prepare"])
             self.assertEqual(result.results[1].status, ActionStatus.SKIPPED)
             self.assertIn("duplicate tool call", result.results[1].summary)
-
-    def test_duplicate_live_navigation_replacement_observes_existing_session(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            workspace = Path(tmp_dir)
-            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", planner_provider="model")
-            with patch("humungousaur.orchestrator.build_model_client", return_value=_SequenceModelClient([])):
-                orchestrator = AgentOrchestrator(config)
-            step = PlannedStep(
-                "browser_live_new_tab",
-                {"live_session_id": "live-123", "url": "https://example.com/source"},
-                "Open source.",
-            )
-            seen = {
-                '{"tool_input": {"live_session_id": "live-123", "url": "https://example.com/source"}, "tool_name": "browser_live_new_tab"}'
-            }
-
-            replacements = orchestrator._replacement_steps_for_duplicate_model_steps([step], seen)
-
-            self.assertEqual(len(replacements), 1)
-            self.assertEqual(replacements[0].tool_name, "browser_live_observe")
-            self.assertEqual(replacements[0].tool_input["live_session_id"], "live-123")
-            self.assertTrue(replacements[0].tool_input["include_text"])
 
     def test_model_loop_exhaustion_is_marked_failed_without_final_answer(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

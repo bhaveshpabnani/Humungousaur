@@ -10,6 +10,20 @@ class PlanValidationError(ValueError):
     pass
 
 
+def load_json_object(payload: str, *, label: str = "JSON") -> dict[str, Any]:
+    try:
+        document = json.loads(payload)
+    except json.JSONDecodeError as exc:
+        stripped = payload.strip()
+        try:
+            document, _end = json.JSONDecoder().raw_decode(stripped)
+        except json.JSONDecodeError:
+            raise PlanValidationError(f"{label} must be valid JSON: {exc}") from exc
+    if not isinstance(document, dict):
+        raise PlanValidationError(f"{label} must be a JSON object.")
+    return document
+
+
 class StructuredPlanParser:
     """Parse model-produced plans into validated tool steps.
 
@@ -46,13 +60,7 @@ class StructuredPlanParser:
         }
 
     def parse(self, payload: str) -> list[PlannedStep]:
-        try:
-            document = json.loads(payload)
-        except json.JSONDecodeError as exc:
-            raise PlanValidationError(f"Plan must be valid JSON: {exc}") from exc
-
-        if not isinstance(document, dict):
-            raise PlanValidationError("Plan must be a JSON object.")
+        document = load_json_object(payload, label="Plan")
         steps = document.get("steps")
         if steps is None:
             steps = self._single_step_alias(document)

@@ -9,17 +9,8 @@ from urllib.parse import urlparse
 
 from humungousaur.planning.model_clients import ModelClient, ModelClientError
 from humungousaur.planning.prompt_templates import render_prompt_template
-from humungousaur.planning.structured import PlanValidationError, StructuredPlanParser, step_tool_name
+from humungousaur.planning.structured import PlanValidationError, StructuredPlanParser, load_json_object, step_tool_name
 from humungousaur.schemas import PlannedStep, PlanResult
-
-
-_FOUNDATIONAL_PLANNING_TOOLS = (
-    "system_status",
-    "tool_search",
-    "tool_describe",
-    "capability_surface",
-    "conversation_response_prepare",
-)
 
 
 class PlanProvider(ABC):
@@ -319,9 +310,7 @@ class ModelPlanProvider(PlanProvider):
         request: str,
         context: dict[str, Any] | None = None,
     ) -> list[PlannedStep]:
-        document = json.loads(raw_step)
-        if not isinstance(document, dict):
-            raise PlanValidationError("ReAct turn must be a JSON object.")
+        document = load_json_object(raw_step, label="ReAct turn")
         turn = document.get("turn")
         if not isinstance(turn, dict):
             raise PlanValidationError("ReAct turn must include a `turn` object.")
@@ -398,12 +387,7 @@ class ModelPlanProvider(PlanProvider):
             proposed_action=json.dumps(turn, ensure_ascii=False, sort_keys=True, separators=(",", ":"))[:4000],
         )
         raw = self.model_client.complete_json(prompt, schema)
-        try:
-            review = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise PlanValidationError(f"Repeated-action review must return valid JSON: {exc}") from exc
-        if not isinstance(review, dict):
-            raise PlanValidationError("Repeated-action review must return a JSON object.")
+        review = load_json_object(raw, label="Repeated-action review")
         if not bool(review.get("accept")):
             review_reason = str(review.get("reason") or "The proposed repeated action does not change method.").strip()
             next_action = str(review.get("suggested_next_action") or "").strip()
@@ -418,10 +402,11 @@ class ModelPlanProvider(PlanProvider):
         parser: StructuredPlanParser,
         turn: dict[str, Any],
     ) -> None:
-        tool_name = str(turn.get("tool_name") or "")
-        if tool_name != "browser_live_open":
-            return
         if not _context_has_live_browser_session(context):
+            return
+        tool_input = turn.get("tool_input")
+        tool_input = tool_input if isinstance(tool_input, dict) else {}
+        if "url" not in tool_input or "live_session_id" in tool_input:
             return
         schema = {
             "type": "object",
@@ -441,12 +426,7 @@ class ModelPlanProvider(PlanProvider):
             proposed_action=json.dumps(turn, ensure_ascii=False, sort_keys=True, separators=(",", ":"))[:4000],
         )
         raw = self.model_client.complete_json(prompt, schema)
-        try:
-            review = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise PlanValidationError(f"Live-browser continuity review must return valid JSON: {exc}") from exc
-        if not isinstance(review, dict):
-            raise PlanValidationError("Live-browser continuity review must return a JSON object.")
+        review = load_json_object(raw, label="Live-browser continuity review")
         if not bool(review.get("accept")):
             review_reason = str(review.get("reason") or "The existing live browser session should be reused.").strip()
             next_action = str(review.get("suggested_next_action") or "").strip()
@@ -461,36 +441,18 @@ class ModelPlanProvider(PlanProvider):
         parser: StructuredPlanParser,
         turn: dict[str, Any],
     ) -> None:
-        tool_name = str(turn.get("tool_name") or "")
-        navigational_tools = {
-            "browser_live_search",
-            "browser_live_new_tab",
-            "browser_live_open",
-            "web_search",
-            "research_web_pages",
-            "research_webpages",
-        }
-        if tool_name not in navigational_tools:
-            return
-        if not _context_has_live_browser_session(context) and not _context_has_tool_observation(
-            context,
-            {"web_search", "research_web_pages", "research_webpages"},
-        ):
+        if not _context_has_live_browser_session(context) and not _context_observed_urls(context):
             return
         observed_urls = _context_observed_urls(context)
         tool_input = turn.get("tool_input")
         tool_input = tool_input if isinstance(tool_input, dict) else {}
+        if "url" not in tool_input and "query" not in tool_input:
+            return
         proposed_url = str(tool_input.get("url") or "").strip()
-        if observed_urls and tool_name in {"browser_live_search", "web_search"}:
-            raise PlanValidationError(
-                "Live navigation action rejected by grounded-source review: prior observations already contain concrete source URLs; inspect one of those URLs before searching again."
-            )
         if observed_urls and proposed_url and not _url_is_from_observations(proposed_url, observed_urls):
             raise PlanValidationError(
                 "Live navigation action rejected by grounded-source review: the proposed URL was not found in prior search/research observations. Suggested next action: open or inspect one of the concrete URLs already present in runtime context."
             )
-        if observed_urls and proposed_url and _url_is_from_observations(proposed_url, observed_urls):
-            return
         schema = {
             "type": "object",
             "additionalProperties": False,
@@ -509,12 +471,7 @@ class ModelPlanProvider(PlanProvider):
             proposed_action=json.dumps(turn, ensure_ascii=False, sort_keys=True, separators=(",", ":"))[:5000],
         )
         raw = self.model_client.complete_json(prompt, schema)
-        try:
-            review = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise PlanValidationError(f"Live navigation review must return valid JSON: {exc}") from exc
-        if not isinstance(review, dict):
-            raise PlanValidationError("Live navigation review must return a JSON object.")
+        review = load_json_object(raw, label="Live navigation review")
         if not bool(review.get("accept")):
             review_reason = str(review.get("reason") or "The proposed navigation action abandons usable page state.").strip()
             next_action = str(review.get("suggested_next_action") or "").strip()
@@ -530,12 +487,9 @@ class ModelPlanProvider(PlanProvider):
         turn: dict[str, Any],
     ) -> None:
         tool_name = str(turn.get("tool_name") or "")
-        if tool_name != "browser_fill_form":
+        if not _catalog_tool_is_static_form_like(self.tool_catalog, tool_name):
             return
-        if not _context_has_tool_observation(
-            context,
-            {"browser_open", "browser_observe", "browser_extract", "browser_fill_form"},
-        ):
+        if not _context_has_static_browser_observation(context):
             return
         schema = {
             "type": "object",
@@ -555,12 +509,7 @@ class ModelPlanProvider(PlanProvider):
             proposed_action=json.dumps(turn, ensure_ascii=False, sort_keys=True, separators=(",", ":"))[:5000],
         )
         raw = self.model_client.complete_json(prompt, schema)
-        try:
-            review = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise PlanValidationError(f"Static browser form review must return valid JSON: {exc}") from exc
-        if not isinstance(review, dict):
-            raise PlanValidationError("Static browser form review must return a JSON object.")
+        review = load_json_object(raw, label="Static browser form review")
         if not bool(review.get("accept")):
             review_reason = str(review.get("reason") or "The proposed static form action is not supported by observed page forms.").strip()
             next_action = str(review.get("suggested_next_action") or "").strip()
@@ -576,7 +525,7 @@ class ModelPlanProvider(PlanProvider):
         turn: dict[str, Any],
     ) -> None:
         tool_name = str(turn.get("tool_name") or "")
-        if tool_name != "browser_live_evaluate_js":
+        if not _catalog_tool_is_live_js_like(self.tool_catalog, tool_name):
             return
         schema = {
             "type": "object",
@@ -596,12 +545,7 @@ class ModelPlanProvider(PlanProvider):
             proposed_action=json.dumps(turn, ensure_ascii=False, sort_keys=True, separators=(",", ":"))[:6000],
         )
         raw = self.model_client.complete_json(prompt, schema)
-        try:
-            review = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise PlanValidationError(f"Live-browser JavaScript review must return valid JSON: {exc}") from exc
-        if not isinstance(review, dict):
-            raise PlanValidationError("Live-browser JavaScript review must return a JSON object.")
+        review = load_json_object(raw, label="Live-browser JavaScript review")
         if not bool(review.get("accept")):
             review_reason = str(review.get("reason") or "The JavaScript action is not adequately verified.").strip()
             next_action = str(review.get("suggested_next_action") or "").strip()
@@ -639,12 +583,7 @@ class ModelPlanProvider(PlanProvider):
             final_response=final_response[:4000],
         )
         raw = self.model_client.complete_json(prompt, schema)
-        try:
-            review = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise PlanValidationError(f"Final ReAct review must return valid JSON: {exc}") from exc
-        if not isinstance(review, dict):
-            raise PlanValidationError("Final ReAct review must return a JSON object.")
+        review = load_json_object(raw, label="Final ReAct review")
         if not bool(review.get("accept")):
             review_reason = str(review.get("reason") or "The proposed final answer needs another tool observation.").strip()
             next_action = str(review.get("suggested_next_action") or "").strip()
@@ -680,7 +619,17 @@ class ModelPlanProvider(PlanProvider):
             for tool_name in self.allowed_tools
             if str(self.tool_catalog.get(tool_name, {}).get("capability_group", "core")) in groups
         }
-        candidates.update(name for name in _FOUNDATIONAL_PLANNING_TOOLS if name in self.allowed_tools)
+        candidates.update(_direct_response_tools(self.tool_catalog, self.allowed_tools))
+        candidates.update(_skill_support_tools(self.tool_catalog, self.allowed_tools))
+        candidates.update(_active_skill_declared_tools(context, self.allowed_tools))
+        direct_response_tools = _direct_response_tools(self.tool_catalog, self.allowed_tools)
+        if candidates and candidates <= (direct_response_tools | _skill_support_tools(self.tool_catalog, self.allowed_tools)):
+            supporting_groups = self._select_supporting_capability_groups(request, context, excluded_groups=groups)
+            candidates.update(
+                tool_name
+                for tool_name in self.allowed_tools
+                if str(self.tool_catalog.get(tool_name, {}).get("capability_group", "core")) in supporting_groups
+            )
         if not candidates:
             raise PlanValidationError("The model did not select any capability groups with executable tools.")
         if len(candidates) > self.max_prompt_tools:
@@ -726,6 +675,49 @@ class ModelPlanProvider(PlanProvider):
             )
             return _parse_selection(repaired, field_name="groups", allowed=set(group_catalog), label="Capability group selector")
 
+    def _select_supporting_capability_groups(self, request: str, context: dict[str, Any], *, excluded_groups: set[str]) -> set[str]:
+        group_catalog = {
+            name: details
+            for name, details in self._group_catalog_for_prompt().items()
+            if name not in excluded_groups
+        }
+        group_names = sorted(group_catalog)
+        if not group_names:
+            return set()
+        schema = {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["groups", "reason"],
+            "properties": {
+                "groups": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": min(self.max_candidate_groups, len(group_names)),
+                    "items": {"type": "string", "enum": group_names},
+                },
+                "reason": {"type": "string", "minLength": 1},
+            },
+        }
+        prompt = render_prompt_template(
+            "select_supporting_capability_groups",
+            group_catalog=json.dumps(group_catalog, sort_keys=True, separators=(",", ":")),
+            runtime_summary=json.dumps(_selector_context_for_prompt(context), sort_keys=True, default=str, separators=(",", ":")),
+            user_request=request,
+        )
+        raw = self.model_client.complete_json(prompt, schema)
+        try:
+            return _parse_selection(raw, field_name="groups", allowed=set(group_catalog), label="Supporting capability group selector")
+        except PlanValidationError as exc:
+            repaired = self._repair_selection(
+                raw_selection=raw,
+                error=str(exc),
+                schema=schema,
+                field_name="groups",
+                allowed_values=group_names,
+                label="supporting capability groups",
+            )
+            return _parse_selection(repaired, field_name="groups", allowed=set(group_catalog), label="Supporting capability group selector")
+
     def _select_exact_tools(self, request: str, context: dict[str, Any], candidates: set[str]) -> set[str]:
         candidate_names = sorted(name for name in candidates if name in self.allowed_tools)
         schema = {
@@ -761,7 +753,9 @@ class ModelPlanProvider(PlanProvider):
                 label="tools",
             )
             tools = _parse_selection(repaired, field_name="tools", allowed=candidates, label="Tool selector")
-        tools.update(name for name in _FOUNDATIONAL_PLANNING_TOOLS if name in self.allowed_tools)
+        tools.update(_direct_response_tools(self.tool_catalog, self.allowed_tools))
+        tools.update(_skill_support_tools(self.tool_catalog, self.allowed_tools))
+        tools.update(_active_skill_declared_tools(context, self.allowed_tools))
         if not tools:
             raise PlanValidationError("Tool selector returned no known tools.")
         return tools
@@ -799,10 +793,7 @@ class ModelPlanProvider(PlanProvider):
         return self.model_client.complete_json(prompt, plan_schema)
 
     def _repair_tool_input_plan(self, request: str, parser: StructuredPlanParser, *, raw_plan: str, error: str) -> str:
-        try:
-            document = json.loads(raw_plan)
-        except json.JSONDecodeError as exc:
-            raise PlanValidationError(f"Could not repair tool input because the plan was not JSON: {exc}") from exc
+        document = load_json_object(raw_plan, label="Tool-input repair plan")
         steps = document.get("steps") if isinstance(document, dict) else None
         if not isinstance(steps, list) or not steps or not isinstance(steps[0], dict):
             raise PlanValidationError("Could not repair tool input because the plan did not include an object step.")
@@ -832,12 +823,7 @@ class ModelPlanProvider(PlanProvider):
             raw_plan=raw_plan[:4000],
         )
         raw_repair = self.model_client.complete_json(prompt, schema)
-        try:
-            repaired = json.loads(raw_repair)
-        except json.JSONDecodeError as exc:
-            raise PlanValidationError(f"Tool input repair must return valid JSON: {exc}") from exc
-        if not isinstance(repaired, dict):
-            raise PlanValidationError("Tool input repair must return a JSON object.")
+        repaired = load_json_object(raw_repair, label="Tool input repair")
         tool_input = repaired.get("tool_input")
         reason = str(repaired.get("reason") or steps[0].get("reason") or "Model-repaired tool input.").strip()
         if not isinstance(tool_input, dict):
@@ -972,12 +958,7 @@ def _property_signature(details: dict[str, Any]) -> str:
 
 
 def _parse_selection(raw: str, *, field_name: str, allowed: set[str], label: str) -> set[str]:
-    try:
-        document = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise PlanValidationError(f"{label} must return valid JSON: {exc}") from exc
-    if not isinstance(document, dict):
-        raise PlanValidationError(f"{label} must return a JSON object.")
+    document = load_json_object(raw, label=label)
     selected = document.get(field_name)
     if not isinstance(selected, list):
         raise PlanValidationError(f"{label} must include `{field_name}` as an array.")
@@ -985,6 +966,77 @@ def _parse_selection(raw: str, *, field_name: str, allowed: set[str], label: str
     if not values:
         raise PlanValidationError(f"{label} returned no known {field_name}.")
     return values
+
+
+def _direct_response_tools(tool_catalog: dict[str, dict[str, Any]], allowed_tools: set[str]) -> set[str]:
+    return {
+        tool_name
+        for tool_name in allowed_tools
+        if str(tool_catalog.get(tool_name, {}).get("capability_group", "")).lower() == "conversation"
+    }
+
+
+def _skill_support_tools(tool_catalog: dict[str, dict[str, Any]], allowed_tools: set[str]) -> set[str]:
+    support_names = {"agent_skill_catalog", "agent_skill_read"}
+    return {
+        tool_name
+        for tool_name in allowed_tools
+        if tool_name in support_names and str(tool_catalog.get(tool_name, {}).get("capability_group", "")).lower() == "skills"
+    }
+
+
+def _active_skill_declared_tools(context: dict[str, Any], allowed_tools: set[str]) -> set[str]:
+    active = context.get("active_workspace_skills")
+    if not isinstance(active, list):
+        return set()
+    declared: set[str] = set()
+    for item in active:
+        if not isinstance(item, dict):
+            continue
+        tool_map = item.get("tool_map")
+        if isinstance(tool_map, list):
+            for entry in tool_map:
+                tool_name = str(entry)
+                if tool_name in allowed_tools:
+                    declared.add(tool_name)
+        content = str(item.get("content") or "")
+        for match in re.finditer(r"`([A-Za-z_][A-Za-z0-9_]*)`", content):
+            tool_name = match.group(1)
+            if tool_name in allowed_tools:
+                declared.add(tool_name)
+    return declared
+
+
+def _catalog_tool_is_static_form_like(tool_catalog: dict[str, dict[str, Any]], tool_name: str) -> bool:
+    details = tool_catalog.get(tool_name, {})
+    schema = details.get("input_schema") if isinstance(details, dict) else {}
+    properties = _schema_properties(schema)
+    return "form_index" in properties and bool({"fields", "values"} & properties)
+
+
+def _catalog_tool_is_live_js_like(tool_catalog: dict[str, dict[str, Any]], tool_name: str) -> bool:
+    details = tool_catalog.get(tool_name, {})
+    schema = details.get("input_schema") if isinstance(details, dict) else {}
+    required = _schema_required(schema)
+    return {"live_session_id", "code", "reason"}.issubset(required)
+
+
+def _schema_properties(schema: Any) -> set[str]:
+    if not isinstance(schema, dict):
+        return set()
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        return set()
+    return {str(key) for key in properties}
+
+
+def _schema_required(schema: Any) -> set[str]:
+    if not isinstance(schema, dict):
+        return set()
+    required = schema.get("required")
+    if not isinstance(required, list):
+        return set()
+    return {str(item) for item in required}
 
 
 def _context_has_live_browser_session(value: Any) -> bool:
@@ -999,14 +1051,21 @@ def _context_has_live_browser_session(value: Any) -> bool:
     return False
 
 
-def _context_has_tool_observation(value: Any, tool_names: set[str]) -> bool:
+def _context_has_static_browser_observation(value: Any) -> bool:
     if isinstance(value, dict):
-        tool_name = value.get("tool_name")
-        if isinstance(tool_name, str) and tool_name in tool_names:
+        tool_name = str(value.get("tool_name") or "").lower()
+        if tool_name.startswith("browser_") and not tool_name.startswith("browser_live_"):
             return True
-        return any(_context_has_tool_observation(item, tool_names) for item in value.values())
+        source = str(value.get("source") or "").lower()
+        if source.startswith("browser_") or source == "browser_session":
+            return True
+        forms = value.get("forms")
+        links = value.get("links")
+        if isinstance(forms, list) or isinstance(links, list):
+            return True
+        return any(_context_has_static_browser_observation(item) for item in value.values())
     if isinstance(value, list):
-        return any(_context_has_tool_observation(item, tool_names) for item in value)
+        return any(_context_has_static_browser_observation(item) for item in value)
     return False
 
 
@@ -1116,7 +1175,11 @@ def _context_for_prompt(context: dict[str, Any]) -> dict[str, Any]:
         compact["browser_sessions"] = compact["browser_sessions"][:3]
     if isinstance(compact.get("available_workspace_skills"), list):
         compact["available_workspace_skills"] = [
-            _compact_context_item(item) for item in compact["available_workspace_skills"][:8]
+            _compact_context_item(item) for item in compact["available_workspace_skills"][:40]
+        ]
+    if isinstance(compact.get("active_workspace_skills"), list):
+        compact["active_workspace_skills"] = [
+            _compact_skill_context_item(item) for item in compact["active_workspace_skills"][:5]
         ]
     if isinstance(compact.get("capability_plugins"), list):
         compact["capability_plugins"] = [
@@ -1145,6 +1208,8 @@ def _selector_context_for_prompt(context: dict[str, Any]) -> dict[str, Any]:
         "browser_sessions": compact.get("browser_sessions", []),
         "screen_captures": compact.get("screen_captures", {}),
         "activity_policy": compact.get("activity_policy", {}),
+        "available_workspace_skills": compact.get("available_workspace_skills", []),
+        "active_workspace_skills": compact.get("active_workspace_skills", []),
         "cognition": {
             key: value
             for key, value in (compact.get("cognition", {}) if isinstance(compact.get("cognition"), dict) else {}).items()
@@ -1180,3 +1245,47 @@ def _compact_context_item(item: Any) -> Any:
     if isinstance(item, str):
         return item[:240]
     return item
+
+
+def _compact_skill_context_item(item: Any) -> Any:
+    if not isinstance(item, dict):
+        return item
+    compact: dict[str, Any] = {}
+    for key in (
+        "skill_id",
+        "name",
+        "description",
+        "relative_path",
+        "domain",
+        "depth",
+        "parent_skill_id",
+        "selected_directly",
+        "content_mode",
+    ):
+        if key in item:
+            compact[key] = item[key]
+    summary = str(item.get("summary") or "")
+    if summary:
+        compact["summary"] = summary[:1_600]
+    if isinstance(item.get("tool_map"), list):
+        compact["tool_map"] = [str(entry)[:120] for entry in item["tool_map"][:40]]
+    if isinstance(item.get("child_skill_refs"), list):
+        compact["child_skill_refs"] = [
+            _compact_child_skill_ref(ref) for ref in item["child_skill_refs"][:20] if isinstance(ref, dict)
+        ]
+    content = str(item.get("content") or "")
+    if content:
+        compact["content"] = content[:14_000]
+    return compact
+
+
+def _compact_child_skill_ref(ref: dict[str, Any]) -> dict[str, Any]:
+    compact: dict[str, Any] = {}
+    for key in ("entry", "skill_id", "name", "relative_path", "description"):
+        if key in ref:
+            value = ref[key]
+            if isinstance(value, str):
+                compact[key] = value[:240]
+            else:
+                compact[key] = value
+    return compact

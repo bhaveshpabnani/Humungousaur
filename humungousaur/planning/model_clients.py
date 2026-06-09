@@ -4,7 +4,9 @@ import json
 import http.client
 import os
 import re
+import socket
 import ssl
+import subprocess
 import time
 import urllib.error
 from urllib.parse import urlparse
@@ -70,8 +72,58 @@ def _open_model_url(request: urllib.request.Request, *, timeout: float):
     parsed = urlparse(request.full_url)
     if parsed.scheme == "https":
         opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=_model_ssl_context()))
-        return opener.open(request, timeout=timeout)
+        try:
+            return opener.open(request, timeout=timeout)
+        except urllib.error.URLError as exc:
+            if not _is_dns_resolution_error(exc):
+                raise
+            resolved_ip = _resolve_with_public_dns(parsed.hostname or "")
+            if not resolved_ip:
+                raise
+            return _open_with_resolved_host(opener, request, timeout=timeout, hostname=parsed.hostname or "", resolved_ip=resolved_ip)
     return urllib.request.urlopen(request, timeout=timeout)
+
+
+def _is_dns_resolution_error(exc: urllib.error.URLError) -> bool:
+    reason = getattr(exc, "reason", None)
+    if isinstance(reason, socket.gaierror):
+        return True
+    return "nodename nor servname provided" in str(exc).lower()
+
+
+def _resolve_with_public_dns(hostname: str) -> str:
+    if not hostname:
+        return ""
+    try:
+        completed = subprocess.run(
+            ["dig", "+short", hostname, "@1.1.1.1"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    for line in completed.stdout.splitlines():
+        candidate = line.strip()
+        if re.fullmatch(r"\d{1,3}(?:\.\d{1,3}){3}", candidate):
+            return candidate
+    return ""
+
+
+def _open_with_resolved_host(opener: urllib.request.OpenerDirector, request: urllib.request.Request, *, timeout: float, hostname: str, resolved_ip: str):
+    original_getaddrinfo = socket.getaddrinfo
+
+    def patched_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+        if str(host).lower() == hostname.lower():
+            return original_getaddrinfo(resolved_ip, port, family, type, proto, flags)
+        return original_getaddrinfo(host, port, family, type, proto, flags)
+
+    socket.getaddrinfo = patched_getaddrinfo
+    try:
+        return opener.open(request, timeout=timeout)
+    finally:
+        socket.getaddrinfo = original_getaddrinfo
 
 
 def _model_client_json_instructions() -> str:
@@ -245,6 +297,7 @@ class OpenAICompatibleChatClient(ModelClient):
         return None
 
     def _post_chat(self, prompt: str, response_format: dict[str, Any], api_key: str) -> dict[str, Any]:
+        token_limit = max(128, min(int(self.max_tokens or 400), 1200))
         payload = {
             "model": self.model,
             "messages": [
@@ -256,8 +309,8 @@ class OpenAICompatibleChatClient(ModelClient):
             ],
             "response_format": response_format,
             "stream": False,
-            "max_tokens": max(128, min(int(self.max_tokens or 400), 1200)),
         }
+        payload["max_completion_tokens" if _chat_model_uses_completion_tokens(self.model) else "max_tokens"] = token_limit
         request = urllib.request.Request(
             f"{self.base_url.rstrip('/')}/chat/completions",
             data=json.dumps(payload).encode("utf-8"),
@@ -320,3 +373,8 @@ class OpenAICompatibleChatClient(ModelClient):
             chunks = [item.get("text", "") for item in content if isinstance(item, dict)]
             return "\n".join(chunk for chunk in chunks if chunk).strip()
         return ""
+
+
+def _chat_model_uses_completion_tokens(model: str) -> bool:
+    normalized = str(model or "").strip().lower()
+    return normalized.startswith(("gpt-5", "o1", "o3", "o4"))

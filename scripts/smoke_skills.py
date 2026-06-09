@@ -26,6 +26,8 @@ from humungousaur.tools.skill_tools import (
     AgentSkillScriptCatalogTool,
     AgentSkillScriptReadTool,
     AgentSkillScriptRunTool,
+    discover_workspace_skill_scripts,
+    discover_workspace_skills,
 )
 from humungousaur.tools.os_control.implementation import save_ui_observation
 
@@ -799,8 +801,47 @@ def _smoke_travel(record, tools: dict[str, Any], config: AgentConfig) -> None:
         config,
     )
     inspected = tools["travel_plan_inspect"].execute({"path": plan.output.get("path", "")}, config) if _ok(plan) else plan
+    booking = tools["travel_booking_intent_prepare"].execute(
+        {
+            "filename": "skill-smoke-rail-booking-intent.md",
+            "mode": "rail",
+            "title": "Skill Smoke Rail Booking Intent",
+            "origin": "Nagpur (NGP)",
+            "destination": "Kharagpur Jn (KGP)",
+            "departure_date": "2026-07-02",
+            "travelers": "1 adult",
+            "selected_option_id": "train-18029",
+            "options": [
+                {
+                    "option_id": "train-18029",
+                    "label": "18029 Mumbai LTT - Shalimar Express",
+                    "provider": "synthetic RailYatri fixture",
+                    "number": "18029",
+                    "departure": "13:20",
+                    "arrival": "09:05",
+                    "class_or_cabin": "SL",
+                    "quota_or_fare_family": "General",
+                    "fare": "520",
+                    "availability_status": "62 Available",
+                    "source_ref": "scripts/smoke_skills.py synthetic fixture",
+                }
+            ],
+            "checks": [
+                {"name": "Source-visible date verified", "status": "verified", "evidence": "Synthetic smoke fixture date."},
+                {"name": "Passenger details not transmitted", "status": "verified", "evidence": "Local artifact only."},
+                {"name": "Payment not submitted", "status": "verified", "evidence": "Local artifact only."},
+            ],
+            "source_refs": ["scripts/smoke_skills.py synthetic fixture"],
+            "uncertainties": ["No live rail provider was queried in smoke."],
+            "reason": "Verify native travel ticket booking intent support without booking or payment.",
+        },
+        config,
+    )
+    booking_inspected = tools["travel_booking_intent_inspect"].execute({"path": booking.output.get("path", "")}, config) if _ok(booking) else booking
     record("travel", "travel_plan_create", _ok(plan) and plan.output.get("approval_status") == "planning_only_not_booked", _tool_payload(plan))
     record("travel", "travel_plan_inspect", _ok(inspected) and inspected.output.get("route_option_count") == 1, _tool_payload(inspected))
+    record("travel", "travel_booking_intent_prepare", _ok(booking) and booking.output.get("booking_status") == "prepared_not_booked", _tool_payload(booking))
+    record("travel", "travel_booking_intent_inspect", _ok(booking_inspected) and booking_inspected.output.get("option_count") == 1, _tool_payload(booking_inspected))
 
 
 def _smoke_commerce(record, tools: dict[str, Any], config: AgentConfig) -> None:
@@ -1247,10 +1288,36 @@ def _script_smoke_input(name: str, config: AgentConfig) -> dict[str, Any]:
     if name == "redact-text":
         return {"text": "OPENAI_API_KEY=sk-test-secret and token ghp_testsecret", "replacement": "[REDACTED]"}
     if name == "inspect-skill-pack":
-        return {"skill_dir": "skills/system-health-check"}
+        return {"skill_dir": _workspace_skill_dir_by_name(config, "system-health-check")}
     if name == "check-readiness":
         return {"env_names": ["OPENAI_API_KEY", "GROQ_API_KEY"]}
     return {}
+
+
+def _workspace_skill_id_by_name(config: AgentConfig, name: str) -> str:
+    skill = _workspace_skill_by_name(config, name)
+    return skill.skill_id if skill is not None else f"workspace:skills/{name}/SKILL.md"
+
+
+def _workspace_skill_dir_by_name(config: AgentConfig, name: str) -> str:
+    skill = _workspace_skill_by_name(config, name)
+    if skill is None:
+        return f"skills/{name}"
+    return Path(skill.relative_path).parent.as_posix()
+
+
+def _workspace_skill_by_name(config: AgentConfig, name: str):
+    wanted = name.strip().casefold()
+    return next((skill for skill in discover_workspace_skills(config) if skill.name.casefold() == wanted), None)
+
+
+def _workspace_script_id_by_suffix(config: AgentConfig, suffix: str) -> str:
+    wanted = suffix.strip().removeprefix("skills/").casefold()
+    for script in discover_workspace_skill_scripts(config):
+        relative = script.relative_path.casefold()
+        if relative.endswith(wanted) or relative.endswith(f"skills/{wanted}"):
+            return script.script_id
+    return f"workspace:skills/{suffix}"
 
 
 def _smoke_channels(record, tools: dict[str, Any], config: AgentConfig) -> None:
@@ -1586,11 +1653,11 @@ def _smoke_foundational_native_tools(record, tools: dict[str, Any], config: Agen
         ("foundational", "python_interpreter_runs", {"limit": 10}, config),
         ("foundational", "plugin_catalog", {"include_contracts": True}, config),
         ("foundational", "channel_catalog", {}, config),
-        ("foundational", "agent_skill_read", {"skill_id": "workspace:skills/system-health-check/SKILL.md"}, config),
+        ("foundational", "agent_skill_read", {"skill_id": _workspace_skill_id_by_name(config, "system-health-check")}, config),
         (
             "foundational",
             "agent_skill_script_read",
-            {"script_id": "workspace:skills/codebase-inspection/scripts/inspect_repo.py"},
+            {"script_id": _workspace_script_id_by_suffix(config, "codebase-inspection/scripts/inspect_repo.py")},
             config,
         ),
         ("foundational", "memory_search", {"query": "Skill smoke", "limit": 5}, config),
@@ -1914,8 +1981,11 @@ def _smoke_web_form_task(record, tools: dict[str, Any], config: AgentConfig, dry
         ("web_forms", "browser_live_query_selector", {"live_session_id": "live-skill-smoke", "selector": "form"}, dry_config),
         ("web_forms", "browser_live_select_option", {"live_session_id": "live-skill-smoke", "element_id": "live:select", "values": ["option"], "reason": "Skill smoke dry-run."}, dry_config),
         ("web_forms", "browser_live_press_key", {"live_session_id": "live-skill-smoke", "shortcut": "Enter", "reason": "Skill smoke dry-run."}, dry_config),
+        ("web_forms", "browser_live_click_coordinates", {"live_session_id": "live-skill-smoke", "x": 10, "y": 10, "reason": "Skill smoke dry-run."}, dry_config),
+        ("web_forms", "browser_live_evaluate_js", {"live_session_id": "live-skill-smoke", "code": "() => document.title", "reason": "Skill smoke dry-run."}, dry_config),
         ("web_forms", "browser_live_screenshot", {"live_session_id": "live-skill-smoke", "reason": "Skill smoke dry-run."}, dry_config),
         ("web_forms", "browser_live_save_pdf", {"live_session_id": "live-skill-smoke", "filename": "skill-smoke-live.pdf", "reason": "Skill smoke dry-run."}, dry_config),
+        ("web_forms", "browser_live_close_tab", {"live_session_id": "live-skill-smoke", "index": 0, "reason": "Skill smoke dry-run."}, dry_config),
         ("web_forms", "browser_live_close", {"live_session_id": "live-skill-smoke", "reason": "Skill smoke dry-run."}, dry_config),
     ]
     record("web_forms", "browser_open", _ok(opened), _tool_payload(opened))

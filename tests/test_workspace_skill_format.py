@@ -11,6 +11,19 @@ from humungousaur.tools.skill_tools import AgentSkillCatalogTool
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SKILL_NAME_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+EXPECTED_SKILL_DOMAINS = {
+    "agent-core",
+    "browser-web",
+    "commerce-travel",
+    "communications",
+    "creative-design",
+    "delegation-agents",
+    "desktop-control",
+    "integrations",
+    "office-productivity",
+    "software-engineering",
+    "voice-media",
+}
 
 
 class WorkspaceSkillFormatTests(unittest.TestCase):
@@ -35,6 +48,18 @@ class WorkspaceSkillFormatTests(unittest.TestCase):
                 if compatibility:
                     self.assertLessEqual(len(compatibility), 500)
 
+    def test_workspace_skills_are_grouped_by_domain_folder(self) -> None:
+        skills_root = REPO_ROOT / "skills"
+        top_level_skill_files = sorted(skills_root.glob("*/SKILL.md"))
+        domains = {path.name for path in skills_root.iterdir() if path.is_dir()}
+
+        self.assertEqual(domains, EXPECTED_SKILL_DOMAINS)
+        self.assertEqual({path.parent.name for path in top_level_skill_files}, EXPECTED_SKILL_DOMAINS)
+        for domain in EXPECTED_SKILL_DOMAINS:
+            with self.subTest(domain=domain):
+                self.assertTrue((skills_root / domain / "SKILL.md").is_file())
+                self.assertTrue(list((skills_root / domain).glob("*/SKILL.md")))
+
     def test_skill_catalog_can_list_more_than_one_hundred_workspace_skills(self) -> None:
         config = AgentConfig(workspace=REPO_ROOT, data_dir=REPO_ROOT / "artifacts").normalized()
         schema = AgentSkillCatalogTool().input_schema
@@ -45,6 +70,11 @@ class WorkspaceSkillFormatTests(unittest.TestCase):
 
         self.assertEqual(result.output["source"], "workspace")
         self.assertGreaterEqual(len(result.output["workspace_skills"]), 17)
+        parent = next(skill for skill in result.output["workspace_skills"] if skill["name"] == "commerce-travel")
+        child = next(skill for skill in result.output["workspace_skills"] if skill["name"] == "railway-ticket-booking")
+        self.assertEqual(parent["hierarchy_kind"], "domain_parent")
+        self.assertGreaterEqual(parent["child_skill_count"], 1)
+        self.assertEqual(child["parent_skill_id"], "workspace:skills/commerce-travel/SKILL.md")
 
     def test_workspace_skill_tool_maps_resolve_to_native_tools_or_skills(self) -> None:
         config = AgentConfig(workspace=REPO_ROOT, data_dir=REPO_ROOT / "artifacts").normalized()

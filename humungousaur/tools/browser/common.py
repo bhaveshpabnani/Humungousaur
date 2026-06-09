@@ -5,6 +5,7 @@ import ipaddress
 import re
 import socket
 import ssl
+import subprocess
 import urllib.error
 import urllib.request
 from html.parser import HTMLParser
@@ -43,7 +44,16 @@ class _ValidatedRedirectHandler(urllib.request.HTTPRedirectHandler):
 def _open_url(request: urllib.request.Request, *, timeout: float, allow_redirects: bool = False):
     redirect_handler = _ValidatedRedirectHandler if allow_redirects else _NoRedirectHandler
     opener = urllib.request.build_opener(redirect_handler, urllib.request.HTTPSHandler(context=_ssl_context()))
-    return opener.open(request, timeout=timeout)
+    try:
+        return opener.open(request, timeout=timeout)
+    except urllib.error.URLError as exc:
+        if not _is_dns_resolution_error(exc):
+            raise
+        host = urlparse(request.full_url).hostname or ""
+        resolved_ip = _resolve_with_public_dns(host)
+        if not resolved_ip:
+            raise
+        return _open_with_resolved_host(opener, request, timeout=timeout, hostname=host, resolved_ip=resolved_ip)
 
 
 def _ssl_context() -> ssl.SSLContext:
@@ -163,7 +173,13 @@ def _validate_url(url: str) -> str | None:
     try:
         addresses = socket.getaddrinfo(parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80), type=socket.SOCK_STREAM)
     except OSError as exc:
-        return f"Hostname could not be resolved: {exc}"
+        resolved_ip = _resolve_with_public_dns(parsed.hostname or "")
+        if not resolved_ip:
+            return f"Hostname could not be resolved: {exc}"
+        try:
+            addresses = socket.getaddrinfo(resolved_ip, parsed.port or (443 if parsed.scheme == "https" else 80), type=socket.SOCK_STREAM)
+        except OSError:
+            return f"Hostname could not be resolved: {exc}"
     finally:
         socket.setdefaulttimeout(previous_timeout)
     for item in addresses:
@@ -177,6 +193,42 @@ def _validate_url(url: str) -> str | None:
         if not ip.is_global:
             return "Private, local, multicast, or reserved network addresses are blocked."
     return None
+
+
+def _is_dns_resolution_error(exc: urllib.error.URLError) -> bool:
+    reason = getattr(exc, "reason", None)
+    if isinstance(reason, socket.gaierror):
+        return True
+    return "nodename nor servname provided" in str(exc).lower()
+
+
+def _resolve_with_public_dns(hostname: str) -> str:
+    if not hostname:
+        return ""
+    try:
+        completed = subprocess.run(["dig", "+short", hostname, "@1.1.1.1"], capture_output=True, text=True, timeout=3, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    for line in completed.stdout.splitlines():
+        candidate = line.strip()
+        if re.fullmatch(r"\d{1,3}(?:\.\d{1,3}){3}", candidate):
+            return candidate
+    return ""
+
+
+def _open_with_resolved_host(opener: urllib.request.OpenerDirector, request: urllib.request.Request, *, timeout: float, hostname: str, resolved_ip: str):
+    original_getaddrinfo = socket.getaddrinfo
+
+    def patched_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+        if str(host).lower() == hostname.lower():
+            return original_getaddrinfo(resolved_ip, port, family, type, proto, flags)
+        return original_getaddrinfo(host, port, family, type, proto, flags)
+
+    socket.getaddrinfo = patched_getaddrinfo
+    try:
+        return opener.open(request, timeout=timeout)
+    finally:
+        socket.getaddrinfo = original_getaddrinfo
 
 
 def _fetch_page(url: str, max_bytes: int) -> dict[str, Any]:
