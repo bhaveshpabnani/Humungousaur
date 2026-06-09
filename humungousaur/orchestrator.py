@@ -439,7 +439,7 @@ class AgentOrchestrator:
             return True
         return False
 
-    def _planning_context(self, request: str) -> dict[str, object]:
+    def _planning_context(self, request: str = "") -> dict[str, object]:
         workspace_skills = self._workspace_skill_context()
         return {
             "workspace": str(self.config.workspace),
