@@ -7,7 +7,7 @@ description: Assess the assistant's readiness, capability fit, safety risks, too
 
 ## Purpose
 
-Create an explicit readiness check before the assistant commits to complex action. This skill combines OpenClaw agent audit and self-assessment ideas with Humungousaur capability, tool, policy, and cognition surfaces.
+Create an explicit readiness check before the assistant commits to complex action. This skill combines external reference agent audit and self-assessment ideas with Humungousaur capability, tool, policy, and cognition surfaces.
 
 ## When To Use
 
@@ -57,7 +57,7 @@ Use for high-impact tasks, broad architecture changes, long autonomous runs, ext
 ## Native Implementation Boundaries
 
 - Use Humungousaur capability, tool, cognition, plugin, channel, and system-status tools only.
-- OpenClaw or other references may shape the checklist, but readiness decisions must be model-led and evidence-backed through native records.
+- external reference or other references may shape the checklist, but readiness decisions must be model-led and evidence-backed through native records.
 - A readiness claim is valid only for the current workspace/configuration snapshot; rerun assessment after tool, credential, branch, or environment changes.
 
 ## Verification
@@ -75,5 +75,5 @@ Use for high-impact tasks, broad architecture changes, long autonomous runs, ext
 ## References
 
 - Shortlist item: `agent-self-assessment`.
-- Upstream inspiration: OpenClaw `agent-self-assessment`, `agent-audit`.
+- Upstream inspiration: external reference `agent-self-assessment`, `agent-audit`.
 - Humungousaur docs: `docs/GLOBAL_AGENT_INSTRUCTIONS.md`.

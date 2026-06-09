@@ -160,16 +160,60 @@ final class AppViewModel: ObservableObject {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         messages.append(ChatMessage(role: .user, text: displayText ?? trimmed))
+        let assistantMessage = ChatMessage(
+            role: .assistant,
+            text: "",
+            activities: [
+                StreamActivityItem(
+                    kind: "thinking",
+                    title: "Thinking",
+                    detail: ""
+                )
+            ],
+            isStreaming: true
+        )
+        let assistantID = assistantMessage.id
+        messages.append(assistantMessage)
         isSending = true
         defer { isSending = false }
         do {
-            let response = try await api.sendStimulus(trimmed, source: source, responseMode: responseMode, settings: settingsWithChannelSecrets(), secrets: secrets)
-            messages.append(ChatMessage(role: .assistant, text: response.displayText))
+            let stream = try api.streamStimulus(
+                trimmed,
+                source: source,
+                responseMode: responseMode,
+                settings: settingsWithChannelSecrets(),
+                secrets: secrets
+            )
+            for try await event in stream {
+                applyStreamEvent(event, to: assistantID)
+            }
+            updateMessage(assistantID) { message in
+                message.isStreaming = false
+                if message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    message.text = "The agent returned a structured response."
+                }
+                if !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    message.activities = []
+                }
+            }
             await refreshRuns()
             await refreshApprovals()
             await refreshAutonomy()
         } catch {
-            messages.append(ChatMessage(role: .error, text: error.localizedDescription))
+            if isLegacyStreamError(error) {
+                await sendLegacyStimulus(
+                    trimmed,
+                    source: source,
+                    responseMode: responseMode,
+                    assistantID: assistantID
+                )
+                return
+            }
+            updateMessage(assistantID) { message in
+                message.role = .error
+                message.text = error.localizedDescription
+                message.isStreaming = false
+            }
         }
     }
 
@@ -496,6 +540,102 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    private func applyStreamEvent(_ event: AgentStreamEvent, to messageID: UUID) {
+        if event.event == "final_response" {
+            let response = event.data["response"]?.stringValue ?? event.data["result"]?["response"]?.stringValue ?? ""
+            updateMessage(messageID) { message in
+                if !response.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    message.text = response
+                }
+                message.isStreaming = false
+                message.activities = []
+            }
+            return
+        }
+        if event.event == "stream_error" {
+            let error = event.data["error"]?.stringValue ?? "The stream failed."
+            updateMessage(messageID) { message in
+                message.role = .error
+                message.text = error
+                message.isStreaming = false
+                message.activities.append(StreamActivityItem(kind: "error", title: "Error", detail: error, status: "failed"))
+            }
+            return
+        }
+        if event.event == "stream_finished" {
+            updateMessage(messageID) { message in
+                message.isStreaming = false
+                if !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    message.activities = []
+                }
+            }
+            return
+        }
+        if event.event == "run_event",
+           event.data["event_type"]?.stringValue == "run_finished",
+           let response = event.data["payload"]?["final_response"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !response.isEmpty {
+            updateMessage(messageID) { message in
+                message.text = response
+                message.isStreaming = false
+                message.activities = []
+            }
+            return
+        }
+        let items = streamActivities(from: event)
+        guard !items.isEmpty else { return }
+        updateMessage(messageID) { message in
+            message.activities.append(contentsOf: items)
+        }
+    }
+
+    private func updateMessage(_ id: UUID, _ update: (inout ChatMessage) -> Void) {
+        guard let index = messages.firstIndex(where: { $0.id == id }) else { return }
+        update(&messages[index])
+    }
+
+    private func sendLegacyStimulus(_ text: String, source: String, responseMode: String, assistantID: UUID) async {
+        updateMessage(assistantID) { message in
+            message.activities.append(
+                StreamActivityItem(
+                    kind: "thinking",
+                    title: "Agent",
+                    detail: "The running daemon is using the older response API. Restart it to enable live streaming.",
+                    status: "legacy"
+                )
+            )
+        }
+        do {
+            let response = try await api.sendStimulus(
+                text,
+                source: source,
+                responseMode: responseMode,
+                settings: settingsWithChannelSecrets(),
+                secrets: secrets
+            )
+            updateMessage(assistantID) { message in
+                message.text = response.displayText
+                message.isStreaming = false
+                message.activities = []
+            }
+            await refreshRuns()
+            await refreshApprovals()
+            await refreshAutonomy()
+        } catch {
+            updateMessage(assistantID) { message in
+                message.role = .error
+                message.text = error.localizedDescription
+                message.isStreaming = false
+            }
+        }
+    }
+
+    private func isLegacyStreamError(_ error: Error) -> Bool {
+        let message = error.localizedDescription
+        return message.contains("stimuli/stream failed with HTTP 404")
+            || message.contains("Unknown endpoint")
+    }
+
     private func upsertChannelSetup(_ setup: ChannelSetup) {
         if let index = settings.channels.firstIndex(where: { $0.channelId == setup.channelId }) {
             settings.channels[index] = setup
@@ -561,6 +701,65 @@ final class AppViewModel: ObservableObject {
 }
 
 private extension AppViewModel {
+    func streamActivities(from event: AgentStreamEvent) -> [StreamActivityItem] {
+        if event.event == "stream_started" {
+            return []
+        }
+        guard event.event == "run_event" else { return [] }
+        let eventType = event.data["event_type"]?.stringValue ?? ""
+        let message = event.data["message"]?.stringValue ?? eventType.humanizedIdentifier
+        let payload = event.data["payload"]
+        switch eventType {
+        case "run_started", "planning_context_collected":
+            return []
+        case "plan_created":
+            var items = [
+                StreamActivityItem(kind: "thinking", title: "Plan", detail: formatPlannedSteps(payload), status: "planned")
+            ]
+            let skills = payload?["active_workspace_skills"]?.arrayValue ?? []
+            if !skills.isEmpty {
+                let detail = skills
+                    .compactMap { $0["name"]?.stringValue ?? $0["relative_path"]?.stringValue }
+                    .filter { !$0.isEmpty }
+                    .joined(separator: ", ")
+                items.append(StreamActivityItem(kind: "skill", title: "Skills", detail: detail, status: "selected"))
+            }
+            return items
+        case "action_started":
+            let tool = payload?["tool_name"]?.stringValue ?? "tool"
+            let reason = payload?["reason"]?.stringValue ?? message
+            return [StreamActivityItem(kind: "tool", title: tool.humanizedIdentifier, detail: reason, status: "started")]
+        case "action_finished":
+            let tool = payload?["tool_name"]?.stringValue ?? "tool"
+            let status = payload?["status"]?.stringValue ?? ""
+            let summary = payload?["summary"]?.stringValue ?? message
+            return [StreamActivityItem(kind: "tool", title: tool.humanizedIdentifier, detail: summary, status: status)]
+        case "run_waiting_for_approval":
+            return [StreamActivityItem(kind: "approval", title: "Approval", detail: message, status: "waiting")]
+        case "run_finished":
+            let status = payload?["status"]?.stringValue ?? "finished"
+            return [StreamActivityItem(kind: "response", title: "Run", detail: message, status: status)]
+        case "run_cancelled":
+            let status = payload?["status"]?.stringValue ?? eventType.replacingOccurrences(of: "run_", with: "")
+            return [StreamActivityItem(kind: "response", title: "Run", detail: message, status: status)]
+        default:
+            return []
+        }
+    }
+
+    func formatPlannedSteps(_ payload: JSONValue?) -> String {
+        let planned = payload?["planned_steps"]?.arrayValue ?? []
+        if planned.isEmpty {
+            let steps = payload?["steps"]?.arrayValue?.compactMap(\.stringValue) ?? []
+            return steps.isEmpty ? "No tool steps planned." : steps.map(\.humanizedIdentifier).joined(separator: ", ")
+        }
+        return planned.enumerated().map { index, step in
+            let tool = step["tool_name"]?.stringValue ?? "tool"
+            let reason = step["reason"]?.stringValue ?? ""
+            return reason.isEmpty ? "\(index + 1). \(tool.humanizedIdentifier)" : "\(index + 1). \(tool.humanizedIdentifier): \(reason)"
+        }.joined(separator: "\n")
+    }
+
     func formatRequirementSummary(_ requirements: JSONValue) -> String {
         let setup = requirements["setup"]
         let delivery = requirements["delivery"]

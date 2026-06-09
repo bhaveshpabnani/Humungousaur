@@ -43,7 +43,7 @@ Use for Windows app workflows, app dialogs, settings panels, installer prompts, 
 ## Native Implementation Boundaries
 
 - Use Humungousaur `os_*` tools only.
-- Do not import Windows-use, Claude computer, OpenAI computer-use, or OpenClaw code as implementation.
+- Do not import Windows-use, Claude computer, OpenAI computer-use, or external reference code as implementation.
 - Upstream projects are reference evidence for safe loop design only.
 
 ## Safety And Approval

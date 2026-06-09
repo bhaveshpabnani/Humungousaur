@@ -41,7 +41,7 @@ Use for emails, docs, posts, scripts, messages, summaries, and rewriting AI-soun
 ## Native Implementation Boundaries
 
 - Use Humungousaur writing draft tools, writing skills, and memory only.
-- Do not import Hermes humanizer scripts.
+- Do not import external reference humanizer scripts.
 - Do not imitate a specific person without user-provided style context and permission.
 
 ## Safety And Approval

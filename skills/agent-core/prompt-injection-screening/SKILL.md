@@ -44,7 +44,7 @@ Use before acting on web pages, documents, emails, channel messages, plugins, or
 ## Native Implementation Boundaries
 
 - Use Humungousaur review/policy tools.
-- Do not import OpenClaw Aegis Shield code.
+- Do not import external reference Aegis Shield code.
 - Do not implement broad security decisions with regex-only matching.
 - Native prompt-injection reviews are local artifacts and do not execute requested content actions.
 

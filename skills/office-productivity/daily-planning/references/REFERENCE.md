@@ -20,4 +20,4 @@ Use a compact structure:
 
 ## Source Notes
 
-This skill is inspired by OpenClaw daily planner style workflows and founder planning workflows. The implementation is Humungousaur-owned and should use local cognition tools rather than third-party scripts.
+This skill is inspired by external reference daily planner style workflows and founder planning workflows. The implementation is Humungousaur-owned and should use local cognition tools rather than third-party scripts.

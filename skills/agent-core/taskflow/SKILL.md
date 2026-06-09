@@ -77,5 +77,5 @@ Record the reason and the exact next stimulus that should resume the work.
 ## Native Implementation Boundaries
 
 - Use Humungousaur cognitive goal, commitment, wakeup, trigger, autonomous task graph, queue, cycle, and multi-agent board tools.
-- TaskFlow is a native orchestration contract, not an imported Hermes/OpenClaw scheduler.
+- TaskFlow is a native orchestration contract, not an imported external reference/external reference scheduler.
 - The model decides semantic task decomposition and completion judgments; deterministic code persists exact records, IDs, statuses, and evidence.

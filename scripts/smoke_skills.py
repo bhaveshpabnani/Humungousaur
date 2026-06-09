@@ -1828,9 +1828,22 @@ def _smoke_skill_task_surfaces(record, tools: dict[str, Any], config: AgentConfi
         ("taskflow", "multi_agent_board", {"limit": 10}),
         ("taskflow", "autonomous_queue_status", {"limit": 10}),
         ("external_cli_companions", "external_integrations_status", {"probe_screenpipe": False}),
+        (
+            "browser_use",
+            "browser_use_agent_run",
+            {
+                "task": "Dry-run Browser Use smoke only; do not navigate or mutate browser state.",
+                "max_steps": 1,
+                "timeout_seconds": 10,
+                "headless": True,
+                "use_vision": False,
+                "allowed_domains": ["example.com"],
+                "reason": "Skill smoke boundary evidence for approval-gated Browser Use delegation.",
+            },
+        ),
     ]
     for section, tool_name, payload in scenarios:
-        execution_config = dry_config if tool_name in {"codex_cli_plan", "codex_cli_run"} else config
+        execution_config = dry_config if tool_name in {"codex_cli_plan", "codex_cli_run", "browser_use_agent_run"} else config
         result = tools[tool_name].execute(payload, execution_config)
         record(section, tool_name, result.status in {ActionStatus.SUCCEEDED, ActionStatus.SKIPPED}, _tool_payload(result))
 
@@ -1969,6 +1982,8 @@ def _smoke_web_form_task(record, tools: dict[str, Any], config: AgentConfig, dry
         ("web_forms", "browser_live_observe", {"live_session_id": "live-skill-smoke", "include_text": False, "max_elements": 10}, dry_config),
         ("web_forms", "browser_live_tabs", {"live_session_id": "live-skill-smoke"}, dry_config),
         ("web_forms", "browser_live_search", {"live_session_id": "live-skill-smoke", "query": "Humungousaur skill smoke", "engine": "duckduckgo"}, dry_config),
+        ("web_forms", "browser_live_navigate", {"live_session_id": "live-skill-smoke", "url": "https://example.com", "new_tab": False}, dry_config),
+        ("web_forms", "browser_live_new_tab", {"live_session_id": "live-skill-smoke", "url": "https://example.com"}, dry_config),
         ("web_forms", "browser_live_click", {"live_session_id": "live-skill-smoke", "element_id": "live:0", "reason": "Skill smoke dry-run."}, dry_config),
         (
             "web_forms",
@@ -1979,11 +1994,48 @@ def _smoke_web_form_task(record, tools: dict[str, Any], config: AgentConfig, dry
         ("web_forms", "browser_live_scroll", {"live_session_id": "live-skill-smoke", "direction": "down", "amount": 1}, dry_config),
         ("web_forms", "browser_live_wait", {"live_session_id": "live-skill-smoke", "mode": "timeout", "timeout_ms": 100}, dry_config),
         ("web_forms", "browser_live_query_selector", {"live_session_id": "live-skill-smoke", "selector": "form"}, dry_config),
+        ("web_forms", "browser_live_html", {"live_session_id": "live-skill-smoke", "selector": "form", "max_chars": 500}, dry_config),
+        ("web_forms", "browser_live_page_search", {"live_session_id": "live-skill-smoke", "pattern": "Skill Smoke", "max_results": 3}, dry_config),
+        ("web_forms", "browser_live_find_elements", {"live_session_id": "live-skill-smoke", "selector": "input", "attributes": ["name", "type"], "max_results": 5}, dry_config),
+        (
+            "web_forms",
+            "browser_live_fill_form",
+            {
+                "live_session_id": "live-skill-smoke",
+                "fields": [{"element_id": "live:input", "text": "Skill smoke", "clear": True}],
+                "reason": "Skill smoke dry-run.",
+            },
+            dry_config,
+        ),
         ("web_forms", "browser_live_select_option", {"live_session_id": "live-skill-smoke", "element_id": "live:select", "values": ["option"], "reason": "Skill smoke dry-run."}, dry_config),
         ("web_forms", "browser_live_press_key", {"live_session_id": "live-skill-smoke", "shortcut": "Enter", "reason": "Skill smoke dry-run."}, dry_config),
         ("web_forms", "browser_live_click_coordinates", {"live_session_id": "live-skill-smoke", "x": 10, "y": 10, "reason": "Skill smoke dry-run."}, dry_config),
+        (
+            "web_forms",
+            "browser_live_drag",
+            {"live_session_id": "live-skill-smoke", "start_element_id": "live:0", "end_element_id": "live:1", "reason": "Skill smoke dry-run."},
+            dry_config,
+        ),
+        (
+            "web_forms",
+            "browser_live_drag_coordinates",
+            {"live_session_id": "live-skill-smoke", "start_x": 10, "start_y": 10, "end_x": 20, "end_y": 20, "reason": "Skill smoke dry-run."},
+            dry_config,
+        ),
         ("web_forms", "browser_live_evaluate_js", {"live_session_id": "live-skill-smoke", "code": "() => document.title", "reason": "Skill smoke dry-run."}, dry_config),
         ("web_forms", "browser_live_screenshot", {"live_session_id": "live-skill-smoke", "reason": "Skill smoke dry-run."}, dry_config),
+        (
+            "web_forms",
+            "browser_live_upload_file",
+            {
+                "live_session_id": "live-skill-smoke",
+                "element_id": "live:file",
+                "path": str(_browser_live_upload_fixture(config)),
+                "reason": "Skill smoke dry-run.",
+            },
+            dry_config,
+        ),
+        ("web_forms", "browser_live_download", {"live_session_id": "live-skill-smoke", "element_id": "live:download", "reason": "Skill smoke dry-run."}, dry_config),
         ("web_forms", "browser_live_save_pdf", {"live_session_id": "live-skill-smoke", "filename": "skill-smoke-live.pdf", "reason": "Skill smoke dry-run."}, dry_config),
         ("web_forms", "browser_live_close_tab", {"live_session_id": "live-skill-smoke", "index": 0, "reason": "Skill smoke dry-run."}, dry_config),
         ("web_forms", "browser_live_close", {"live_session_id": "live-skill-smoke", "reason": "Skill smoke dry-run."}, dry_config),
@@ -2000,6 +2052,14 @@ def _smoke_web_form_task(record, tools: dict[str, Any], config: AgentConfig, dry
     for section, tool_name, payload, execution_config in browser_live_scenarios:
         result = tools[tool_name].execute(payload, execution_config)
         record(section, tool_name, result.status in {ActionStatus.SUCCEEDED, ActionStatus.SKIPPED}, _tool_payload(result))
+
+
+def _browser_live_upload_fixture(config: AgentConfig) -> Path:
+    path = config.data_dir / "browser-live-upload-fixture.txt"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.exists():
+        path.write_text("Humungousaur browser live upload dry-run fixture.\n", encoding="utf-8")
+    return path
 
 
 def _dry_config(config: AgentConfig) -> AgentConfig:

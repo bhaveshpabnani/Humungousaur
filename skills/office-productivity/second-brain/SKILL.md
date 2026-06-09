@@ -40,7 +40,7 @@ Use for personal knowledge capture, retrieval, weekly review, memory hygiene, pr
 ## Native Implementation Boundaries
 
 - Use Humungousaur memory/activity/cognition tools.
-- Do not import OpenClaw second-brain plugins.
+- Do not import external reference second-brain plugins.
 - Do not store third-party plugin state as memory without consent.
 
 ## Safety And Approval

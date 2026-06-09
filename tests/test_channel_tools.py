@@ -14,11 +14,14 @@ from humungousaur.tools.channel_tools import (
     ChannelDoctorTool,
     ChannelIntegrationSmokeTool,
     ChannelManifestTool,
+    ChannelPairingPrepareTool,
     ChannelListenerStatusTool,
     ChannelMessagePrepareTool,
     ChannelOutboxTool,
+    ChannelRoutingPolicyPrepareTool,
     ChannelSetupSaveTool,
     ChannelSetupStatusTool,
+    ChannelTroubleshootingGuideTool,
     ChannelWebhookIngestTool,
 )
 from humungousaur.tools import default_tools
@@ -376,6 +379,92 @@ class ChannelToolTests(unittest.TestCase):
         self.assertEqual(outbox.output["messages"][0]["channel_id"], "slack")
         self.assertEqual(tool_result.status, ActionStatus.SUCCEEDED)
         self.assertEqual(tool_result.output["message_count"], 1)
+
+    def test_native_channel_catalog_includes_remaining_channel_contracts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
+
+            catalog = ChannelCatalogTool().execute({}, config)
+            clickclack = ChannelManifestTool().execute({"channel_id": "clickclack"}, config)
+            qa = ChannelManifestTool().execute({"channel_id": "qa_channel"}, config)
+
+        ids = {item["channel_id"] for item in catalog.output["channels"]}
+        expected = {
+            "line",
+            "irc",
+            "nextcloud_talk",
+            "nostr",
+            "synology_chat",
+            "tlon",
+            "twitch",
+            "zalo",
+            "zalo_personal",
+            "clickclack",
+            "qa_channel",
+            "googlechat",
+        }
+        self.assertTrue(expected.issubset(ids))
+        self.assertEqual(clickclack.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(clickclack.output["channel"]["setup_kind"], "clickclack_bridge")
+        self.assertTrue(clickclack.output["channel"]["policies"]["ambient_room_events_supported"])
+        self.assertEqual(qa.output["channel"]["setup_kind"], "local_test_harness")
+        self.assertEqual(qa.output["channel"]["plugin_status"], "implemented")
+
+    def test_native_channel_routing_pairing_and_troubleshooting_surfaces(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts").normalized()
+
+            policy = ChannelRoutingPolicyPrepareTool().execute(
+                {
+                    "channel_id": "clickclack",
+                    "access_groups": ["core"],
+                    "broadcast_groups": ["announcements"],
+                    "group_routes": [{"from": "room-a", "to": "room-b"}],
+                    "location_events_enabled": True,
+                    "ambient_room_events_enabled": True,
+                    "pairing_required": True,
+                    "troubleshooting_notes": ["Bridge must be local or trusted."],
+                    "reason": "native routing smoke.",
+                },
+                config,
+            )
+            pairing = ChannelPairingPrepareTool().execute(
+                {
+                    "channel_id": "qa_channel",
+                    "conversation_id": "fixture-room",
+                    "pairing_kind": "group",
+                    "identity_hint": "qa-fixture",
+                    "reason": "Prepare deterministic pairing.",
+                },
+                config,
+            )
+            guide = ChannelTroubleshootingGuideTool().execute({"channel_id": "clickclack"}, config)
+            prepared = ChannelMessagePrepareTool().execute(
+                {"channel_id": "qa_channel", "conversation_id": "fixture-room", "text": "hello", "reason": "QA outbox."},
+                config,
+            )
+            smoke = ChannelIntegrationSmokeTool().execute(
+                {"channel_ids": ["clickclack", "qa_channel"], "reason": "native channel smoke."},
+                config,
+            )
+            policy_path_exists = Path(policy.output["policy"]["path"]).exists()
+            pairing_path_exists = Path(pairing.output["pairing"]["path"]).exists()
+
+        self.assertEqual(policy.status, ActionStatus.SUCCEEDED)
+        self.assertTrue(policy_path_exists)
+        self.assertEqual(policy.output["policy"]["broadcast_groups"], ["announcements"])
+        self.assertTrue(policy.output["policy"]["location_events_enabled"])
+        self.assertEqual(pairing.status, ActionStatus.SUCCEEDED)
+        self.assertTrue(pairing_path_exists)
+        self.assertEqual(pairing.output["pairing"]["status"], "prepared_not_paired")
+        self.assertEqual(guide.status, ActionStatus.SUCCEEDED)
+        self.assertIn("CLICKCLACK_BRIDGE_TOKEN", guide.output["guide"]["required_secrets"])
+        self.assertEqual(prepared.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(prepared.output["message"]["channel_id"], "qa_channel")
+        self.assertEqual(smoke.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(smoke.output["channel_count"], 2)
+        self.assertTrue(any(item["channel_id"] == "qa_channel" for item in smoke.output["channels"]))
 
 
 if __name__ == "__main__":

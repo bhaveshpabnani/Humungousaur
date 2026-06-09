@@ -7,7 +7,7 @@ description: Operate wake-word activation from local audio through transcription
 
 ## Purpose
 
-Handle the complete wakeup path from stimulus to response without relying on upstream Hermes or OpenClaw runtime code. This skill uses Humungousaur-native voice, activation, cognition, and response tools.
+Handle the complete wakeup path from stimulus to response without relying on upstream external reference or external reference runtime code. This skill uses Humungousaur-native voice, activation, cognition, and response tools.
 
 ## When To Use
 
@@ -48,7 +48,7 @@ Use when the user asks to test voice wakeup, process activation JSON, transcribe
 ## Native Implementation Boundaries
 
 - Use Humungousaur-native activation, voice, cognition, runtime, and response tools for the wakeup path.
-- Do not import Hermes/OpenClaw wake-word code; use Humungousaur-native adapters or the local voice-wakeup module only through approved integration paths.
+- Do not import external reference/external reference wake-word code; use Humungousaur-native adapters or the local voice-wakeup module only through approved integration paths.
 - Treat wakeup JSON, recorded audio, and transcripts as stimuli with provenance; do not hardcode wake phrase behavior into the skill.
 
 ## Verification

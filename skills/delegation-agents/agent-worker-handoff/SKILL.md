@@ -7,7 +7,7 @@ description: Hand bounded work to another agent, CLI, or worker process and veri
 
 ## Purpose
 
-Prepare safe, bounded handoffs to worker agents while keeping Humungousaur responsible for verification and user-facing claims. This adapts Hermes `codex`, `claude-code`, and `opencode` delegation workflows.
+Prepare safe, bounded handoffs to worker agents while keeping Humungousaur responsible for verification and user-facing claims. This adapts external reference `codex`, `claude-code`, and `opencode` delegation workflows.
 
 ## When To Use
 
@@ -55,7 +55,7 @@ Use when a task is too large for a single foreground loop, benefits from indepen
 ## Native Implementation Boundaries
 
 - Use Humungousaur Codex CLI status/plan/run, multi-agent board, shell, file, and note tools.
-- Claude Code, OpenCode, Hermes, and other worker systems are external runtimes; this skill prepares and verifies handoffs rather than importing their code.
+- Claude Code, OpenCode, external reference, and other worker systems are external runtimes; this skill prepares and verifies handoffs rather than importing their code.
 - Humungousaur remains responsible for final validation, commit scope, and user-facing claims.
 
 ## Verification
@@ -73,5 +73,5 @@ Use when a task is too large for a single foreground loop, benefits from indepen
 ## References
 
 - Shortlist item: `agent-worker-handoff`.
-- Upstream inspiration: Hermes `codex`, `claude-code`, `opencode`.
+- Upstream inspiration: external reference `codex`, `claude-code`, `opencode`.
 - Existing skills: `codex-delegation`, `coding-agent`.

@@ -40,7 +40,7 @@ Use for Notion pages, databases, task boards, notes, knowledge bases, and migrat
 
 ## Native Implementation Boundaries
 
-- Do not import Hermes Notion scripts.
+- Do not import external reference Notion scripts.
 - Any Notion API integration must be Humungousaur-owned with schemas and tests.
 - Store tokens only in approved secret locations.
 - The current native adapter prepares and inspects operation artifacts; live Notion mutation must be added as a separate approval-gated tool.

@@ -39,7 +39,7 @@ Use before PR creation, before asking another agent/human to review, or when pre
 ## Native Implementation Boundaries
 
 - Use native Git/shell, file, diff, and Codex tools.
-- Do not import Hermes requesting-code-review scripts.
+- Do not import external reference requesting-code-review scripts.
 - Do not fabricate test results.
 
 ## Safety And Approval

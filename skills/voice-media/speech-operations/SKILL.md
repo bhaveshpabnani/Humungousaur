@@ -95,7 +95,7 @@ The cognitive decision provider decides whether to respond, observe, analyze, or
 
 ## Native Implementation Boundaries
 
-- Use Humungousaur voice tools and provider clients; do not import Hermes, OpenClaw, or other upstream speech implementations directly.
+- Use Humungousaur voice tools and provider clients; do not import external reference, external reference, or other upstream speech implementations directly.
 - Treat cloud provider use as configured runtime capability, not as a hardcoded default.
 - Report missing keys, voice IDs, local models, or unavailable playback as explicit setup findings.
 

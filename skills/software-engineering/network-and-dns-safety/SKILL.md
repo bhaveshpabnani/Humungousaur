@@ -42,7 +42,7 @@ Use for DNS/ad-block/privacy services, proxy settings, tunnels, firewall rules, 
 ## Native Implementation Boundaries
 
 - Use native shell/status tools when approved.
-- Do not import OpenClaw AdGuard/DNS plugins.
+- Do not import external reference AdGuard/DNS plugins.
 - Do not modify network settings through hidden scripts.
 - Native network tools are diagnostic only; they do not edit DNS, proxy, firewall, tunnel, or adapter settings.
 - TCP probing is limited to a single host and port, not scan ranges.

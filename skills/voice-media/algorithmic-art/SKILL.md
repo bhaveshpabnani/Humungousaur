@@ -39,7 +39,7 @@ Use for generative art, creative coding, visual experiments, procedural patterns
 
 ## Native Implementation Boundaries
 
-- Do not import Anthropic algorithmic-art or Hermes p5js code.
+- Do not import Anthropic algorithmic-art or external reference p5js code.
 - Any sketch code must be written in the project/workspace.
 - Avoid third-party libraries unless approved.
 - Storyboard SVGs from `media_storyboard_create` are native local artifacts, not imported upstream sketches.

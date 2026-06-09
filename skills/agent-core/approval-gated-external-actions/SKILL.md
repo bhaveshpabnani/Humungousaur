@@ -39,7 +39,7 @@ Use before sending messages, buying anything, installing packages, pushing code,
 ## Native Implementation Boundaries
 
 - Use Humungousaur approval queue, risk levels, and workflow tools.
-- Do not import OpenClaw AgentGate/AgentPay code.
+- Do not import external reference AgentGate/AgentPay code.
 - Any new high-risk tool must be native and approval-gated.
 
 ## Safety And Approval

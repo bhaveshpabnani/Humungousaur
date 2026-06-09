@@ -45,7 +45,7 @@ Use for project wikis, personal knowledge bases, research collections, docs inde
 ## Native Implementation Boundaries
 
 - Use Humungousaur file, memory, and web tools.
-- Do not import Hermes llm-wiki scripts.
+- Do not import external reference llm-wiki scripts.
 - Do not build hidden vector stores unless a native retrieval tool exists.
 
 ## Safety And Approval

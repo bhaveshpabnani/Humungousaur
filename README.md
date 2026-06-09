@@ -1,267 +1,136 @@
 # Humungousaur
 
-Humungousaur is the local-first agent core for Umang: a safe, extensible desktop assistant runtime that can receive natural-language tasks, call permissioned tools, record audit logs, and grow into voice, browser, OS, and memory workflows.
+<p align="center">
+  <img src="docs/assets/readme/humungousaur-logo-lockup-light.png" alt="Humungousaur: local-first cognition for a real desktop agent" width="820">
+</p>
 
-## Current Slice
+<p align="center">
+  <a href="https://github.com/bhaveshpabnani/Humungousaur/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/bhaveshpabnani/Humungousaur/ci.yml?branch=main&style=for-the-badge" alt="CI status"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-2ea44f?style=for-the-badge" alt="MIT License"></a>
+  <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-3.12+-3776ab?style=for-the-badge" alt="Python 3.12+"></a>
+  <a href="docs/RELEASE_RUNBOOK.md"><img src="https://img.shields.io/badge/Release-verified%20gates-111827?style=for-the-badge" alt="Verified release gates"></a>
+</p>
 
-This first slice focuses on trust and extensibility:
+**Local-first cognition for a real desktop agent.**
 
-- model-led structured planner with explicit command fallback
-- durable cognitive state for events, goals, persona, and reusable skills
-- file/workspace tools
-- Gateway-style channel catalog and prepared message outbox
-- file-backed `SKILL.md` catalog/import tools
-- Deepgram STT and ElevenLabs/system TTS provider tools
-- policy checks before every action
-- SQLite audit log
-- saved notes under `artifacts/notes`
-- CLI for text-command testing
+Humungousaur is the agent runtime for Umang: a personal assistant that can live on your machine, understand ongoing work, operate trusted tools, remember what matters, ask before risky actions, and keep a durable record of what it did.
 
-## Quick Start
+It is not a thin chat wrapper. The core idea is practical cognition: the assistant should notice context, plan from evidence, use the right capability, preserve memory, recover from uncertainty, and act through visible approval gates instead of hiding automation behind vague magic.
 
-Install the runtime with the capability extras you plan to use:
+If you want a hackable, inspectable assistant that can grow from local CLI runs into desktop, browser, voice, channel, memory, and autonomous workflows, start here.
+
+[Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Changelog](CHANGELOG.md) · [Roadmap](docs/ROADMAP.md) · [Release Runbook](docs/RELEASE_RUNBOOK.md) · [Agent Guidance](AGENTS.md)
+
+<p align="center">
+  <img src="docs/assets/readme/humungousaur-macos-app.png" alt="Humungousaur macOS app showing the local assistant dashboard" width="920">
+</p>
+
+<p align="center">
+  <sub>Native macOS shell connected to the local Humungousaur daemon.</sub>
+</p>
+
+<p align="center">
+  <sub>README visuals and motion variants are repo-owned under <code>docs/assets/readme/</code>.</sub>
+</p>
+
+## What It Can Do
+
+| Real-world capability | What that means in practice |
+| --- | --- |
+| Desktop cognition | Keep goals, tasks, focus, commitments, environment notes, memories, wakeups, triggers, reflections, and recovery state across sessions. |
+| Governed tools | Route work through explicit tool contracts with risk levels, JSON-schema inputs, policy checks, approvals, audit logs, and cancellation points. |
+| Native desktop shells | Run the same local backend from Windows and macOS apps for chat, runs, approvals, tools, channels, voice status, model settings, and autonomy controls. |
+| Browser and OS work | Open and observe browser sessions, interact with live page elements, inspect windows, prepare UI actions, capture screenshots, and keep mutation approval-gated. |
+| Voice and channels | Prepare speech-to-text, text-to-speech, voice responses, channel setup, inbound previews, outbound drafts, listener status, and approval-gated sends. |
+| File, document, and research work | Search/read workspace files, summarize PDFs, inspect documents, create local artifacts, prepare research/citation packets, and keep provenance visible. |
+| Skills as procedural memory | Load `skills/**/SKILL.md` packs so the agent can use reusable workflows without hardcoded keyword routing. |
+| Model choice | Use OpenAI, Groq, Ollama, Grok/xAI, local OpenAI-compatible endpoints, or other compatible providers through the configured planner path. |
+| Local dashboard and API | Serve a loopback REST API and dashboard for runs, timelines, approvals, permissions, memory, tools, browser sessions, and autonomy. |
+
+## Why It Is Different
+
+Humungousaur treats cognition as a product surface, not an internal implementation detail.
+
+- **Memory that has jobs:** explicit notes, profile facts, lessons, commitments, environment records, summaries, and curation are separate so the assistant can recall the right thing for the right reason.
+- **Attention before action:** passive signals, activity, channel events, voice transcripts, and direct user prompts enter a harness that can respond, observe, analyze, monitor, or ignore.
+- **Skills that compound:** reusable skills are inspectable Markdown contracts with tool maps, safety boundaries, failure modes, and verification notes.
+- **Approvals that mean something:** external sends, destructive operations, app launching, UI control, shell execution, screenshots, browser mutation, and code execution can pause for human approval with an audit trail.
+- **Desktop parity by design:** Windows and macOS clients talk to the same local runtime instead of splitting into separate products.
+- **Local-first trust:** secrets stay in env/runtime secret stores, generated artifacts stay local, and release hygiene scans publish candidates before public release.
+
+## Quick Install
+
+Humungousaur currently targets Python 3.12+.
 
 ```bash
-python -m pip install -e ".[browser,pdf,ocr,office,test]"
-```
-
-```powershell
+git clone https://github.com/bhaveshpabnani/Humungousaur.git
 cd Humungousaur
-python -m humungousaur run "summarize this project and tell me the next best task" --workspace ..
-python -m humungousaur run "summarize PDFs" --workspace .
-python -m humungousaur run "research https://example.com" --workspace .
-python -m humungousaur run "open browser https://example.com" --workspace .
-python -m humungousaur run "show my browser sessions" --workspace . --planner model
-python -m humungousaur run "observe browser session SESSION_ID" --workspace . --planner model
-python -m humungousaur run "extract pricing from browser session SESSION_ID" --workspace . --planner model
-python -m humungousaur run "click observed element link:0 in browser session SESSION_ID" --workspace . --planner model
-python -m humungousaur run "type Dev into browser element form:0:field:name in session SESSION_ID" --workspace . --planner model
-python -m humungousaur run "find browser text pricing in session SESSION_ID" --workspace . --planner model
-python -m humungousaur run "go back in browser session SESSION_ID" --workspace . --planner model
-python -m humungousaur run "fill form 0 in session SESSION_ID name=Dev message=Hello" --workspace .
-python -m humungousaur run "submit form 0 in session SESSION_ID" --workspace .
-python -m humungousaur run "forget browser session SESSION_ID because it is stale" --workspace . --planner model
-python -m humungousaur run "check live browser status" --workspace . --planner model
-python -m humungousaur run "open https://example.com in a live browser" --workspace . --planner model
-python -m humungousaur run "observe live browser session LIVE_SESSION_ID" --workspace . --planner model
-python -m humungousaur run "list live browser tabs for session LIVE_SESSION_ID" --workspace . --planner model
-python -m humungousaur run "open a new live browser tab in session LIVE_SESSION_ID at https://example.com" --workspace . --planner model
-python -m humungousaur run "switch live browser session LIVE_SESSION_ID to tab 1" --workspace . --planner model
-python -m humungousaur run "wait for selector button.submit in live browser session LIVE_SESSION_ID" --workspace . --planner model
-python -m humungousaur run "query selector select[name=status] in live browser session LIVE_SESSION_ID" --workspace . --planner model
-python -m humungousaur run "click live browser element live:0 in session LIVE_SESSION_ID because I chose it" --workspace . --planner model
-python -m humungousaur run "type hello into live browser element live:1 in session LIVE_SESSION_ID" --workspace . --planner model
-python -m humungousaur run "select approved in live browser dropdown live:2 for session LIVE_SESSION_ID" --workspace . --planner model
-python -m humungousaur run "press Enter in live browser session LIVE_SESSION_ID because I want to submit" --workspace . --planner model
-python -m humungousaur run "upload report.pdf to live browser file input live:4 in session LIVE_SESSION_ID" --workspace . --planner model
-python -m humungousaur run "download from live browser element live:5 in session LIVE_SESSION_ID because I need the export" --workspace . --planner model
-python -m humungousaur run "save live browser session LIVE_SESSION_ID as a PDF" --workspace . --planner model
-python -m humungousaur run "evaluate JavaScript in live browser session LIVE_SESSION_ID to read document.title" --workspace . --planner model
-python -m humungousaur run "save live browser screenshot for session LIVE_SESSION_ID" --workspace . --planner model
-python -m humungousaur run "close tab 1 in live browser session LIVE_SESSION_ID because it is stale" --workspace . --planner model
-python -m humungousaur run "close live browser session LIVE_SESSION_ID because it is no longer needed" --workspace . --planner model
-python -m humungousaur run "system status" --workspace .
-python -m humungousaur run "what is my active window" --workspace .
-python -m humungousaur run "list visible windows" --workspace . --planner model
-python -m humungousaur run "observe the foreground app UI" --workspace . --planner model
-python -m humungousaur run "click UI element uia:2 from observation OBSERVATION_ID" --workspace . --planner model
-python -m humungousaur run "type hello into UI element uia:3 from observation OBSERVATION_ID" --workspace . --planner model
-python -m humungousaur run "scroll down UI element uia:4 from observation OBSERVATION_ID" --workspace . --planner model
-python -m humungousaur run "send Ctrl+S because I approved saving the current app" --workspace . --planner model
-python -m humungousaur run "switch to window:1234 because I want that app focused" --workspace . --planner model
-python -m humungousaur run "resize window:1234 to 800 by 600 at 0,0" --workspace . --planner model
-python -m humungousaur run "where is my cursor" --workspace . --planner model
-python -m humungousaur run "click screen coordinates 250,300 because I approved that target" --workspace . --planner model
-python -m humungousaur run "invoke UIA element uia:5 from observation OBSERVATION_ID" --workspace . --planner model
-python -m humungousaur run "maximize window:1234 because I want the app full size" --workspace . --planner model
-python -m humungousaur run "inspect Windows virtual desktops" --workspace . --planner model
-python -m humungousaur run "move window:1234 to desktop 11111111-1111-1111-1111-111111111111" --workspace . --planner model
-python -m humungousaur run "list Windows apps matching notepad" --workspace . --planner model
-python -m humungousaur run "launch Windows app Notepad because I want to edit a note" --workspace . --planner model
-python -m humungousaur run "read clipboard because I want to summarize copied text" --workspace . --planner model
-python -m humungousaur run "write hello to clipboard because I approved preparing paste text" --workspace . --planner model
-python -m humungousaur run "open notepad" --workspace .
-python -m humungousaur run "capture screenshot for current-screen context" --workspace . --planner model
-python -m humungousaur screen-captures --workspace .
-python -m humungousaur run "delete screenshot capture screenshot-20260601-120000.png because it is no longer needed" --workspace . --planner model
-python -m humungousaur run "remember I prefer concise project updates" --workspace .
-python -m humungousaur run "memory about concise project updates" --workspace .
-python -m humungousaur run "check external integration status" --workspace . --planner model
-python -m humungousaur run "record activity from accessibility text: reviewed browser-use tools" --workspace . --planner model
-python -m humungousaur run "search activity for browser-use tools" --workspace . --planner model
-python -m humungousaur run "show my activity memory privacy policy" --workspace . --planner model
-python -m humungousaur run "exclude Mail from activity memory and keep activity for 7 days" --workspace . --planner model
-python -m humungousaur run "prune activity memory older than 7 days because of retention" --workspace . --planner model
-python -m humungousaur run "summarize this project" --workspace . --planner model --model gpt-5-mini
-python -m humungousaur run "summarize this project" --workspace . --planner model --model-provider openai-chat --model gpt-5-mini
-python -m humungousaur run "summarize this project" --workspace . --planner model --model-provider groq
-python -m humungousaur run "summarize this project" --workspace . --planner model --model-provider ollama --model llama3.1
-python -m humungousaur run "summarize this project" --workspace . --planner model --model-provider grok --model grok-4.3
-python -m humungousaur run "system_status {}" --workspace . --planner explicit
-python -m humungousaur run "run a local Python analysis that prints the number of markdown files" --workspace . --planner model
-python -m humungousaur run "run a local Python analysis with pandas allowed" --workspace . --planner model
-python -m humungousaur run "show recent Python interpreter runs" --workspace . --planner model
-python -m humungousaur run "show Python interpreter run RUN_ID" --workspace . --planner model
-python -m humungousaur run "read result.txt from Python interpreter run RUN_ID" --workspace . --planner model
-python -m humungousaur run "show Python interpreter sessions" --workspace . --planner model
-python -m humungousaur run "resume Python interpreter session SESSION_ID and replay prior cells" --workspace . --planner model
-python -m humungousaur run "run python --version" --workspace .
-python -m humungousaur approvals --workspace .
-python -m humungousaur approval-edit APPROVAL_TOKEN "{\"argv\":[\"python\",\"-V\"]}" --workspace .
-python -m humungousaur approve APPROVAL_TOKEN --workspace .
-python -m humungousaur reject APPROVAL_TOKEN --workspace .
-python -m humungousaur run "run python --version" --workspace . --approve-high-risk
-python -m humungousaur run-activation ..\voice-wakeup\artifacts\recordings\20260601_150000.json --workspace ..
-python -m humungousaur run-activation ..\voice-wakeup\artifacts\recordings\20260601_150000.json --workspace .. --harness --response-mode voice_prepare
-python -m humungousaur stimulus "summarize this project" --source voice_transcript --response-mode voice_prepare --tts-provider elevenlabs --allow-voice-lookup --workspace .
-python -m humungousaur stimulus "User looked at a dashboard" --source activity --response-mode silent --workspace .
-python -m humungousaur run "voice_provider_status {}" --workspace . --planner explicit
-python -m humungousaur run "voice_transcribe {\"audio_path\":\"path\\to\\recording.wav\",\"reason\":\"voice smoke\"}" --workspace . --planner explicit
-python -m humungousaur run "voice_speak {\"text\":\"hello\",\"provider\":\"elevenlabs\",\"allow_voice_lookup\":true,\"playback\":false,\"reason\":\"voice smoke\"}" --workspace . --planner explicit
-python -m humungousaur run "channel_catalog {}" --workspace . --planner explicit
-python -m humungousaur run "channel_message_prepare {\"channel_id\":\"slack\",\"conversation_id\":\"C123\",\"text\":\"Prepared reply\",\"reason\":\"smoke\"}" --workspace . --planner explicit
-python -m humungousaur run "agent_skill_catalog {\"source\":\"workspace\"}" --workspace . --planner explicit
-python .\scripts\smoke_agent.py --workspace . --live-groq --live-voice
-python .\scripts\smoke_real_world_tasks.py --workspace .
-python .\scripts\smoke_real_world_tasks.py --workspace . --live-browser
-python -m humungousaur run "say hello there" --workspace .
-python -m humungousaur audit --limit 5
-python -m humungousaur plans --limit 5
-python -m humungousaur memory --limit 5
-python -m humungousaur memory-search "project"
-python -m humungousaur memory-summary --period today
-python -m humungousaur memory-profile
-python -m humungousaur run "cognitive_state {}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_briefing_prepare {\"purpose\":\"current\",\"horizon_hours\":24}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_briefing_status {}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_memory_curate {\"purpose\":\"memory_hygiene\",\"max_archive\":5,\"max_summaries\":2}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_curation_status {}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_skill_evolve {\"purpose\":\"skill_review\",\"max_updates\":5,\"max_new_skills\":2}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_skill_evolution_status {}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_persona_evolve {\"purpose\":\"persona_review\"}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_persona_evolution_status {}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_self_review {\"purpose\":\"autonomy_check\"}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_self_review_status {}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_interaction_review {\"purpose\":\"relationship_review\"}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_interaction_review_status {}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_commitment_record {\"title\":\"Follow up with status after verification.\",\"source\":\"user\"}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_commitment_review {\"purpose\":\"follow_up_review\",\"max_new_commitments\":5,\"max_updates\":10}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_commitment_status {\"include_closed\":true}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_environment_record {\"kind\":\"workspace\",\"title\":\"Primary repo\",\"summary\":\"The current workspace is the Humungousaur assistant platform.\"}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_environment_review {\"purpose\":\"workspace_review\",\"max_new_records\":5,\"max_updates\":10}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_environment_status {\"include_archived\":true}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_priority_review {\"purpose\":\"daily_planning\"}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_priority_status {}" --workspace . --planner explicit
-python -m humungousaur run "codex_capability_status {\"codex_home\":\"C:\\Users\\bhave\\.codex\"}" --workspace . --planner explicit
-python -m humungousaur run "codex_cli_status {\"probe_help\":false}" --workspace . --planner explicit
-python -m humungousaur run "codex_cli_plan {\"objective\":\"Use Codex CLI to inspect the repo and propose the next implementation step\",\"preferred_sandbox\":\"read-only\"}" --workspace . --planner explicit
-python -m humungousaur run "codex_cli_run {\"task\":\"summarize this repository structure\",\"sandbox\":\"read-only\",\"dry_run\":true}" --workspace . --planner explicit
-python -m humungousaur run "codex_plugin_catalog {\"query\":\"browser\",\"codex_home\":\"C:\\Users\\bhave\\.codex\"}" --workspace . --planner explicit
-python -m humungousaur run "codex_skill_catalog {\"query\":\"playwright\",\"codex_home\":\"C:\\Users\\bhave\\.codex\"}" --workspace . --planner explicit
-python -m humungousaur run "codex_skill_sync {\"profile\":\"core_assistant\",\"codex_home\":\"C:\\Users\\bhave\\.codex\",\"reason\":\"sync useful local Codex skills into the agent\"}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_focus_update {\"mode\":\"monitoring\",\"summary\":\"Tracking open follow-ups.\",\"pinned_context\":[\"follow-ups\"]}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_knowledge_record {\"kind\":\"procedure\",\"text\":\"Use blockers-first updates for project status.\",\"source\":\"user\"}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_learning_status {}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_specialist_record {\"name\":\"File reviewer\",\"purpose\":\"Read files and return verified evidence.\",\"contract\":\"Use read-only tools and do not infer file contents without reading.\",\"tools\":[\"read_file\"],\"success_criteria\":[\"Requested file evidence is returned.\"]}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_reflection_status {}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_consolidation_status {}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_recovery_status {}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_wakeup_schedule {\"delay_seconds\":300,\"text\":\"check the queued follow-up\",\"response_mode\":\"silent\",\"reason\":\"keep future work visible\"}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_wakeup_status {\"status\":\"scheduled\"}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_wakeup_cancel {\"wakeup_id\":\"WAKEUP_ID\",\"reason\":\"no longer needed\"}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_trigger_record {\"name\":\"Meeting ended follow-up\",\"match_source\":\"meeting\",\"match_stimulus_type\":\"ended\",\"conditions\":{\"metadata_equals\":{\"workspace\":\"default\"}},\"text\":\"summarize the meeting transcript and extract follow-ups\",\"response_mode\":\"silent\",\"reason\":\"structured meeting close hook\"}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_trigger_evaluate {\"source\":\"meeting\",\"stimulus_type\":\"ended\",\"metadata\":{\"workspace\":\"default\"},\"payload\":{\"meeting_id\":\"m-1\"},\"stimulus_id\":\"stim-1\"}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_trigger_status {\"status\":\"active\"}" --workspace . --planner explicit
-python -m humungousaur run "cognitive_trigger_cancel {\"trigger_id\":\"TRIGGER_ID\",\"reason\":\"no longer needed\"}" --workspace . --planner explicit
-python -m humungousaur run "create a durable goal for tomorrow's project review" --workspace . --planner model
-python -m humungousaur run "autonomous_queue_status {}" --workspace . --planner explicit
-python -m humungousaur run "autonomous_cycle_run {\"max_cycles\":1}" --workspace . --planner explicit --approve-high-risk
-python -m humungousaur autonomous-status --workspace .
-python -m humungousaur autonomous-loop --workspace . --max-cycles 10 --stop-after-idle-cycles 2
-python -m humungousaur autonomous-loop --workspace . --planner model --max-cycles 10 --stop-after-idle-cycles 2 --allow-initiative
-python -m humungousaur benchmark --iterations 3
-python -m humungousaur index --rebuild --json
-python -m humungousaur serve --workspace . --port 8765
-python -m unittest discover -v
+python3 -m pip install -e ".[browser,pdf,ocr,office,test]"
 ```
 
-## Product Direction
+Optional browser support:
 
-Engineering guidance lives in `docs/ENGINEERING_PRINCIPLES.md` and the strict global intelligence rule lives in `docs/GLOBAL_AGENT_INSTRUCTIONS.md`: broad assistant behavior should be model-led and schema-driven through OpenAI, Groq, Ollama, Grok, or another configured OpenAI-compatible client. Do not implement cognition, routing, delegation, response strategy, memory decisions, experience consolidation, skill evolution decisions, persona evolution decisions, metacognitive self-review, interaction review, commitment extraction, commitment resolution, environment modeling, constraint/resource/risk/opportunity detection, priority ranking, initiative decisions, focus selection, relationship-state decisions, user-state hypotheses, conversation-state decisions, persona update decisions, future wakeup/timing decisions, adaptive recovery decisions, completion judgment, proactive assistance, or task decomposition with pattern matching, regex intent maps, keyword lists, static routing tables, hardcoded constant routing, command templates, brittle handcrafted cases, or deterministic natural-language inference. Deterministic safeguards are reserved for explicit fallback commands, safety checks, schema validation, audit persistence, and evidence-boundary enforcement.
+```bash
+playwright install chromium
+```
 
-The long-term human-like assistant architecture lives in `docs/COGNITIVE_AGENT_ARCHITECTURE.md`. Codex skill integration lives in `docs/CODEX_SKILL_INTEGRATION.md`. The first cognitive runtime layers are implemented as durable event, goal/task, focus, persona, persona evolution, self-review, interaction review, commitment, environment, priority review, knowledge, learning, consolidation, curation, skill evolution, recovery, briefing, wakeup, trigger, skill, specialist, and reflection stores; planner-visible cognitive state tools; Codex skill/plugin catalog, read, import, capability-status, CLI-status, CLI-plan, CLI-run, and sync tools; model-led attention, reflection, consolidation, curation, skill evolution, persona evolution, self-review, interaction review, commitment review, environment review, priority review, recovery, and briefing decisions with explicit fallback; and a bounded autonomous runtime loop with queued events, due wakeups, structured external triggers, task graphs, explicit delegation, pause/interrupt boundaries, completion gates, evidence-backed learning, adaptive repair tasks, current-work briefings, model-led memory hygiene, model-led reusable-skill review, model-led persona/user-model review, model-led metacognitive risk and uncertainty review, model-led relationship/conversation-state review, model-led commitment tracking, model-led environment/world-context modeling, model-led priority and opt-in idle initiative queueing, model-led experience consolidation, idle stopping, and cycle summaries.
+Copy the example environment file only when you need model, voice, channel, or release settings:
 
-The voice wake-word module should call this runtime after transcription:
+```bash
+cp .env.example .env
+```
+
+Do not commit `.env` or real secrets.
+
+## First Run
+
+Run a safe explicit tool call:
+
+```bash
+python3 -m humungousaur run "system_status {}" --workspace . --planner explicit
+```
+
+Ask the model-led planner to inspect the project:
+
+```bash
+python3 -m humungousaur run "summarize this project and tell me the next best task" --workspace . --planner model
+```
+
+Start the local API and dashboard:
+
+```bash
+python3 -m humungousaur serve --workspace . --port 8765
+```
+
+Then open:
 
 ```text
-wake word -> transcribe -> interaction harness -> orchestrator -> tools -> audit log -> text/voice response
+http://127.0.0.1:8765/
 ```
-
-Current voice bridge:
-
-```powershell
-cd ..\voice-wakeup
-python -m voice_wakeup dispatch-activation .\artifacts\recordings\20260601_150000.json --agent-api-url http://127.0.0.1:8765
-```
-
-Interaction harness behavior:
-
-- The harness consumes the model-led cognitive attention decision as its source of truth for `respond`, `analyze`, `observe`, `monitor`, or `ignore`.
-- Direct user text and voice transcripts are explicit stimuli and normally produce a response.
-- Channel messages enter as structured `channel_message` stimuli; the harness can observe, analyze, respond, and prepare an outbound channel reply envelope without claiming delivery.
-- Passive activity, accessibility, OCR, browser, channel, and audio snippets are recorded as context; a configured model can escalate them from structured evidence, current goals, and metadata, while model-unavailable fallback remains conservative.
-- Response modes are `text`, `voice_prepare`, `voice_speak`, and `silent`.
-- `voice_transcribe` supports provider-backed STT for activation audio. `voice_response_prepare` writes local spoken-response artifacts and can synthesize ElevenLabs audio. `voice_speak` can use Windows SAPI or ElevenLabs synthesis plus optional local playback.
-- `channel_catalog`, `channel_manifest`, `channel_setup_*`, `channel_doctor`, `channel_message_prepare`, `channel_message_send`, and `channel_outbox` implement the Humungousaur Gateway surface for WhatsApp, Slack, Telegram, Discord, Teams, Signal, SMS, WebChat, voice calls, and related chat channels. Prepared messages stay local; real external sends require a Humungousaur adapter, credentials, and approval.
-- `agent_skill_catalog`, `agent_skill_read`, and `agent_skill_import` discover workspace `skills/**/SKILL.md` packs and promote exact skill IDs into durable cognitive skill memory.
-
-The rule is simple: every future capability becomes a tool with a risk level, policy check, execution result, and audit event.
-Tools also expose JSON-schema-style `input_schema` metadata, so model planning can select and populate tool calls from explicit contracts instead of fragile payload guessing. The executor validates those inputs before approval or execution.
-Tools are grouped by capability (`activity`, `files`, `browser`, `channels`, `code`, `codex`, `cognition`, `integrations`, `memory`, `os`, `plugins`, `screen`, `shell`, `skills`, `system`, `voice`) so the permissions surface can stay understandable as the product grows.
-Before planning, the orchestrator gathers a compact local context bundle: workspace paths, system health, active-window metadata, recent memory, recent browser sessions, and safety flags. This context is treated as untrusted data and its collection is recorded in the run timeline.
 
 ## Native Desktop Apps
 
-Humungousaur has native desktop shells for both Windows and macOS. Both apps talk to the same local REST API and keep the agent runtime as the source of truth for tools, channels, approvals, runs, voice status, model/provider settings, and autonomy controls.
+The native clients are optional shells around the same local runtime.
 
-- Windows app: `apps/windows/Humungousaur.App`
-- macOS app: `apps/macos`
+| Platform | Source | Local run |
+| --- | --- | --- |
+| macOS | `apps/macos` | `swift run --package-path apps/macos HumungousaurMac` |
+| Windows | `apps/windows/Humungousaur.App` | Build with the .NET 8 SDK on Windows or the release workflow. |
 
-The macOS app includes the shared channel gateway surface: channel setup requirements, setup save/sync, doctor, non-sending smoke checks, inbound preview, prepared outbound messages, approval-gated send requests, listener status, listener polling, prepared reply outbox, runtime start/stop, approvals, recent runs, tools, voice settings, and bounded autonomy cycles.
+Recommended desktop loop:
 
 ```bash
-python -m humungousaur serve --workspace . --port 8765
-cd apps/macos
-swift run HumungousaurMac
+python3 -m humungousaur serve --workspace . --port 8765
+swift run --package-path apps/macos HumungousaurMac
 ```
 
-Release readiness is tracked in `docs/RELEASE_CHECKLIST.md`; the ordered publication path is in `docs/RELEASE_RUNBOOK.md`.
+The macOS and Windows apps share backend routes for chat, tools, channels, channel setup, channel doctors, prepared outbound messages, approvals, recent runs, runtime start/stop, voice settings, model/provider settings, and bounded autonomy cycles.
 
-External reference projects are integrated through explicit adapters, not copied wholesale:
+## Model Setup
 
-- `external_integrations_status` checks local development availability for Browser Use, Screenpipe, Windows-Use, and Open Interpreter.
-- `activity_ingest`, `activity_search`, `activity_policy`, `activity_policy_update`, and `activity_prune` implement a native Screenpipe-inspired activity-memory schema with local retention and privacy exclusions inside Umang.
-- `channel_catalog` uses the Humungousaur Gateway channel model; `channel_message_prepare` writes an audited outbox item and `channel_message_send` only sends through owned adapters when credentials and approval are present.
-- `agent_skill_catalog` reads local `SKILL.md` packs in `skills/` or `.umang/skills`; `agent_skill_import` writes exact selected skills into cognitive memory.
-- `plugin_manifests` and `plugin_manifest` discover local JSON plugin manifests from `.umang/plugins` and the local data directory; manifest-declared tools are visible to planning and permissions but blocked until a trusted runtime exists.
-- Reference repos can be cloned under `external_repos/` for code inspection; that folder is ignored by git.
+Model planning is the preferred path for natural-language work. Offline fallback accepts explicit tool commands or JSON plans only.
 
-## Model Configuration
-
-Model planning is the preferred intelligent orchestration path; the offline fallback accepts only explicit tool commands or JSON plans. The workspace `.env` is authoritative for that workspace and can override stale process environment values. Keep real keys out of git.
-Start from `.env.example`; it documents model providers, voice providers, channel adapters, local tool paths, and release-signing variables without real secret values.
-
-Supported planner transports:
-
-- `auto`: prefer OpenAI when `OPENAI_API_KEY` is present, then Groq when `GROQ_API_KEY` is present, otherwise Ollama.
-- `openai-responses`: OpenAI Responses API with structured JSON output.
-- `openai-chat`: OpenAI Chat Completions compatible JSON output.
-- `groq`: Groq OpenAI-compatible Chat Completions endpoint.
-- `ollama`: local Ollama OpenAI-compatible endpoint, defaulting to `http://127.0.0.1:11434/v1`.
-- `grok`: xAI/Grok Chat Completions endpoint.
-- `local-openai`: legacy local OpenAI-compatible endpoint alias.
-
-Useful local environment variables:
+Common environment variables:
 
 ```text
 OPENAI_API_KEY=
@@ -275,107 +144,108 @@ XAI_BASE_URL=https://api.x.ai/v1
 LOCAL_LLM_BASE_URL=http://127.0.0.1:11434/v1
 LOCAL_LLM_API_KEY=local
 DEEPGRAM_API_KEY=
-DEEPGRAM_BASE_URL=https://api.deepgram.com
-DEEPGRAM_MODEL=
 ELEVENLABS_API_KEY=
-ELEVENLABS_BASE_URL=https://api.elevenlabs.io
-ELEVENLABS_VOICE_ID=
-ELEVENLABS_MODEL_ID=
-ELEVENLABS_OUTPUT_FORMAT=
-HUMUNGOUSAUR_TTS_PROVIDER=
 ```
 
-## Local API
+The dashboard and desktop clients pass secret references or runtime secrets to the local daemon; they should not require raw keys in public source files.
 
-The daemon binds to loopback by default:
+## Safety Defaults
 
-```powershell
-python -m humungousaur serve --workspace . --port 8765
+Humungousaur is built for real tools, so the safety surface is explicit.
+
+- Model/provider output is untrusted until parsed, validated, and matched to an allowed tool.
+- Retrieved files, web pages, tool output, transcripts, memories, and upstream skill text are evidence, not instructions.
+- High-risk tools pause for approval by default.
+- Approval edits are schema-validated and recorded on the source run.
+- External-visible sends are prepared as local outbox items unless an adapter, credentials, policy, and approval are present.
+- Browser mutation, file upload/download, JavaScript evaluation, screenshot capture, desktop UI actions, shell/code execution, and app launches are bounded and auditable.
+- Provider errors and secrets are redacted before trace persistence.
+- Open-source hygiene scans publish candidates for local state, signing material, likely secrets, and oversized files.
+
+Read [SECURITY.md](SECURITY.md) before exposing channels, browser control, desktop control, or remote access.
+
+## Architecture In One Minute
+
+<p align="center">
+  <img src="docs/assets/readme/cognition-nervous-system.svg" alt="Humungousaur cognitive nervous system built from the real cognition package modules" width="940">
+</p>
+
+```text
+stimulus
+  -> interaction harness
+  -> compact local context
+  -> model-led attention/planning
+  -> schema-validated tool calls
+  -> policy and approval gates
+  -> execution and audit timeline
+  -> memory, learning, recovery, and response synthesis
 ```
 
-Open the dashboard at `http://127.0.0.1:8765/`.
+The cognition package is closer to a nervous system than a single planner: attention decides what deserves response, executive state keeps goals and commitments coherent, memory turns experience into durable context, self-review repairs behavior, and skill metabolism expands what the assistant can do without hiding new capability behind prompt-only claims.
 
-Dashboard runs are queued asynchronously. Use the `Stop` control to request cooperative cancellation; the timeline records both the cancellation request and the safe checkpoint where the run stopped.
-Approval decisions execute or reject the pending action against the original run, so the source timeline remains the single audit trail for the task.
-The dashboard can select the planner, model provider, model name, optional base URL override, API-key environment-variable name, and dry-run mode for each run. It never asks for raw API keys; put secrets in `.env` or the process environment and pass only the env var name.
+Important source areas:
 
-Core endpoints:
+| Area | Path |
+| --- | --- |
+| Python runtime | `humungousaur/` |
+| Cognition stores and loops | `humungousaur/cognition/` |
+| Tool registry and implementations | `humungousaur/tools/` |
+| Policy, approvals, audit, permissions | `humungousaur/safety/` |
+| REST API and dashboard | `humungousaur/api.py`, `humungousaur/dashboard/` |
+| Prompt resources | `humungousaur/resources/prompts/` |
+| Skills | `skills/` |
+| Desktop apps | `apps/` |
+| Release automation | `script/` |
 
-- `GET /health`
-- `GET /system/status`
-- `GET /screen/captures`
-- `GET /permissions`
-- `GET /benchmarks?iterations=3&q=project`
-- `GET /autonomous/status`
-- `GET /index/status`
-- `GET /browser/sessions`
-- `GET /browser/sessions/{session_id}`
-- `POST /index/rebuild`
-- `POST /permissions/read-roots/add`
-- `POST /permissions/read-roots/remove`
-- `POST /runs`
-- `POST /runs/async`
-- `POST /autonomous/cycles`
-- `POST /triggers/evaluate`
-- `GET /runs`
-- `GET /runs/{run_id}`
-- `GET /runs/{run_id}/timeline`
-- `POST /runs/{run_id}/cancel`
-- `GET /plans`
-- `GET /plugins`
-- `GET /memory`
-- `GET /memory/search?q=...`
-- `GET /memory/summary?period=today&q=...`
-- `GET /memory/profile`
-- `GET /approvals`
-- `POST /approvals/{token}/approve`
-- `POST /approvals/{token}/reject`
+The hard rule: broad assistant behavior stays model-led and schema-driven. Deterministic code validates, constrains, audits, persists, packages, and executes explicit tools; it does not become a hidden keyword router for natural language.
 
-## Safety Posture
+## Docs By Goal
 
-- Model or provider output is untrusted until parsed and tool-allowlisted.
-- Planner context is compact, local, and treated as untrusted data; collection is audited before tool execution.
-- Tool input contracts are explicit, visible to the model planner and permissions dashboard, and enforced before policy approval or execution.
-- High-risk tools pause with an approval request by default.
-- Pending approvals can be edited before approval; replacement tool input is schema-validated and audited on the source run.
-- Approved commands are still constrained by command allowlists, shell command profiles, and workspace boundaries.
-- Local plugin manifests are metadata-only by default: declared tools appear in the registry as blocked placeholders until an explicit trusted plugin runtime is added.
-- Permissions are visible through the dashboard and `GET /permissions`.
-- Capability groups summarize tool count, approval gates, directly allowed tools, and highest risk.
-- Extra read roots are stored locally in `permissions.json` under the data directory.
-- Explicit memory notes are stored locally in SQLite and can be searched by the agent as a tool.
-- Memory summaries can recap today, yesterday, the last week, or recent local events without sending memory data anywhere.
-- Explicit preferences, facts, workflows, and task notes are projected into a local user profile and included in model planning context.
-- File listing and workspace search scan every allowed read root by default.
-- PDF listing, reading, and summarization stay inside allowed read roots and respect file-size limits.
-- Web research is read-only, HTTP(S)-only, timeout-bounded, size-bounded, blocks credentials/private networks, and treats page content as untrusted data.
-- Browser sessions persist page state, images, and local history, and can navigate numbered links or observed link elements while preserving the same URL safety checks.
-- Browser observation, extraction, observed-element clicking, field typing, and text finding follow Browser Use-style indexed page state while remaining native Umang tools.
-- Browser session listing returns local metadata only, so model plans can inspect available sessions without receiving page text.
-- Browser form filling saves a local draft first; form submission is high-risk and pauses for explicit approval.
-- Browser session forgetting is approval-gated and deletes only local browser-session metadata and drafts.
-- Live browser control is an optional native Playwright-backed layer: `browser_live_status` reports availability, `browser_live_open` starts an in-process page, and `browser_live_observe` returns live DOM element ids without relying on brittle natural-language selectors.
-- Live browser search, wait, tab listing/switching, new-tab opening, text scrolling, dropdown option listing, and CSS selector queries are explicit bounded tools rather than unconstrained browser automation.
-- Live browser click, coordinate click, typing, dropdown selection, key press, file upload, download, PDF export, JavaScript evaluation, tab close, screenshots, and session close actions are approval-gated where they mutate page or browser state.
-- Live browser uploads can only use files from allowed read roots and respect file-size limits; downloads, PDFs, and screenshots are saved locally under the data directory and do not inline file bytes.
-- Activity ingestion is approval-gated because screen/audio/app context can expose sensitive local history.
-- Activity policy settings are stored locally and can disable sources, exclude apps/window terms/text terms/domains, set retention days, and prune old activity events after approval.
-- Activity privacy exclusions are enforced before ingestion and when activity appears through activity search, general memory search, planning context, and memory summaries.
-- OS observation can inspect the foreground window title without reading screen content.
-- Visible-window listing reads top-level window metadata only; foreground UI Automation observation is approval-gated because element names and values can expose sensitive screen content.
-- OS UI actions use short-lived observed element/window ids, are approval-gated, and send only explicit click/type/scroll/shortcut/window actions through the audited tool executor.
-- Desktop app launching is allowlisted and high-risk, so it pauses for explicit approval before opening apps.
-- Screenshot capture is a high-risk `screen` capability: it pauses for approval, saves PNGs locally under the data directory, and does not inline image bytes in responses.
-- Screenshot capture metadata is listed separately; the API and dashboard expose filenames, dimensions, timestamps, reasons, and active-window titles without serving image bytes.
-- Screenshot deletion is also high-risk and approval-gated; it accepts only registry filenames and deletes the PNG plus JSON sidecar inside the local screenshot directory.
-- `python_interpreter` provides an Open Interpreter-inspired local analysis primitive: it is high-risk, approval-gated, timeout-bounded, runs in a child Python process, blocks subprocesses, blocks network by default, reads only allowed read roots, writes only allowed write roots, and defaults to stdlib-only imports.
-- Interpreter imports support explicit policies: `stdlib`, `allowlist` with approved package names, or `all` for deliberately trusted runs.
-- Interpreter filesystem writes use explicit sandbox profiles: `read_only` writes only run artifacts, `data_write` writes configured data roots, `workspace_write` can edit the workspace, and `trusted_dev` can write configured allowed roots.
-- Interpreter sessions group related Python runs under local session manifests. A later approved run can set `replay_session=true` to replay prior successful cells before the current cell for lightweight variable continuity.
-- Python interpreter runs write local manifests with status, stdout/stderr tails, policy paths, and artifact metadata. `python_interpreter_runs`, `python_interpreter_run`, and `python_interpreter_artifact` expose bounded metadata and manifest-listed text artifacts without broad filesystem reads.
-- System status checks expose local runtime and disk pressure before indexing, audit logs, or benchmarks fail.
-- Read-root permission edits automatically rebuild the local file index; file changes mark the index stale and search falls back to live scanning until the next rebuild.
-- Local benchmarks cover permissions, explicit fallback planning, planning context, schema validation, file/search tools, memory search/summary/profile tools, OS observation, screenshot dry-run and metadata listing, web/browser guards, indexing, and a dry-run agent task.
-- Retrieved file/web/page content must be treated as data, not instructions.
-- Model planning uses structured JSON and falls back only to explicit tool commands or JSON plans if validation fails.
-- Provider errors are redacted before they are written to plan traces.
+| Goal | Start here |
+| --- | --- |
+| Understand agent behavior | [Cognitive architecture](docs/COGNITIVE_AGENT_ARCHITECTURE.md) |
+| Understand the no-keyword-routing rule | [Global agent instructions](docs/GLOBAL_AGENT_INSTRUCTIONS.md) |
+| Add or review a skill | [Skill authoring standard](docs/AGENT_SKILL_AUTHORING_STANDARD.md) |
+| Build or package a release | [Release checklist](docs/RELEASE_CHECKLIST.md) and [release runbook](docs/RELEASE_RUNBOOK.md) |
+| See planned work | [Roadmap](docs/ROADMAP.md) |
+| Work as a coding agent in this repo | [AGENTS.md](AGENTS.md) |
+
+## Contributor Quick Start
+
+```bash
+python3 -m pip install -e ".[browser,pdf,ocr,office,test]"
+python3 -m unittest discover -v
+python3 script/verify_open_source_hygiene.py
+python3 scripts/smoke_real_world_tasks.py --workspace .
+```
+
+Before opening a PR, include the real behavior proof: exact commands, OS, model/provider path if relevant, observed result, and what you did not test.
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for contribution priorities, tool-vs-skill guidance, tests, and PR expectations.
+
+## Release Readiness
+
+The public release path is intentionally stricter than a source build.
+
+```bash
+python3 -m py_compile script/verify_open_source_hygiene.py script/verify_publication_state.py script/verify_release_readiness.py script/generate_release_report.py
+python3 -m unittest discover -v
+python3 script/verify_desktop_parity.py
+python3 script/verify_desktop_runtime_smoke.py
+python3 script/verify_open_source_hygiene.py
+python3 scripts/smoke_real_world_tasks.py --workspace .
+python3 script/verify_release_readiness.py --require-website --release-tag v0.1.0
+python3 script/generate_release_report.py --require-website --check-github-release
+```
+
+Strict public release completion also requires signed/notarized macOS assets, signed Windows assets, checksums, a published GitHub release, and website download verification. See [docs/RELEASE_RUNBOOK.md](docs/RELEASE_RUNBOOK.md).
+
+## Status
+
+Humungousaur is early alpha. The local runtime, tool contracts, skills, safety gates, desktop shells, release checks, and smoke coverage are moving toward public readiness, but live provider/channel/desktop release validation still depends on credentials, platform-specific packaging, and tagged release publication.
+
+Use it, inspect it, improve it, but do not treat it as a silent background operator until you have reviewed the approval and channel setup for your environment.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

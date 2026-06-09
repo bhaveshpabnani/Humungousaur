@@ -7,7 +7,7 @@ from humungousaur.config import AgentConfig
 from humungousaur.schemas import ActionStatus, RiskLevel, ToolResult
 from humungousaur.tools.base import Tool, object_input_schema
 
-from .common import LIVE_BROWSER_UNAVAILABLE, LIVE_JS_MAX_CHARS, LIVE_JS_RESULT_MAX_CHARS, _validate_url
+from .common import LIVE_BROWSER_UNAVAILABLE, LIVE_JS_MAX_CHARS, LIVE_JS_RESULT_MAX_CHARS, WEB_TEXT_LIMIT_CHARS, _validate_url
 from .live_manager import LIVE_BROWSER_MANAGER
 from .live_utils import (
     _live_browser_downloads_dir,
@@ -201,6 +201,54 @@ class BrowserLiveClickTool(Tool):
         return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Clicked {element_id} in live browser session {live_session_id}.", output)
 
 
+class BrowserLiveDragTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="browser_live_drag",
+            description="Drag one observed live browser element onto another after explicit approval.",
+            risk_level=RiskLevel.HIGH,
+            requires_approval=True,
+            input_schema=object_input_schema(
+                {
+                    "live_session_id": {"type": "string"},
+                    "start_element_id": {"type": "string", "description": "Observed live element id to drag."},
+                    "end_element_id": {"type": "string", "description": "Observed live element id to drop onto."},
+                    "reason": {"type": "string", "description": "Why this drag action is needed."},
+                },
+                required=["live_session_id", "start_element_id", "end_element_id", "reason"],
+            ),
+            capability_group="browser",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        live_session_id = str(tool_input.get("live_session_id", "")).strip()
+        start_element_id = str(tool_input.get("start_element_id", "")).strip()
+        end_element_id = str(tool_input.get("end_element_id", "")).strip()
+        reason = str(tool_input.get("reason", "")).strip()
+        if not live_session_id or not start_element_id or not end_element_id or not reason:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "live_session_id, start_element_id, end_element_id, and reason are required.")
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would drag a live browser element after approval.",
+                {
+                    "live_session_id": live_session_id,
+                    "start_element_id": start_element_id,
+                    "end_element_id": end_element_id,
+                    "reason": reason,
+                    "drag_not_performed": True,
+                },
+            )
+        try:
+            output = LIVE_BROWSER_MANAGER.drag(live_session_id, start_element_id=start_element_id, end_element_id=end_element_id)
+        except Exception as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Live browser drag failed.", error=str(exc))
+        output["dragged_element"]["reason"] = reason
+        return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Dragged {start_element_id} to {end_element_id} in live browser session {live_session_id}.", output)
+
+
 class BrowserLiveTypeTool(Tool):
     def __init__(self) -> None:
         super().__init__(
@@ -266,6 +314,105 @@ class BrowserLiveTypeTool(Tool):
             "reason": reason,
         }
         return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Typed into {element_id} in live browser session {live_session_id}.", output)
+
+
+class BrowserLiveFillFormTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="browser_live_fill_form",
+            description="Fill multiple observed live browser fields in one approved action, then re-observe the page.",
+            risk_level=RiskLevel.HIGH,
+            requires_approval=True,
+            input_schema=object_input_schema(
+                {
+                    "live_session_id": {"type": "string"},
+                    "fields": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": 20,
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "properties": {
+                                "element_id": {"type": "string", "description": "Observed live field id."},
+                                "text": {"type": "string", "description": "Text to enter."},
+                                "clear": {"type": "boolean", "description": "Replace existing value when true."},
+                            },
+                            "required": ["element_id", "text"],
+                        },
+                    },
+                    "reason": {"type": "string", "description": "Why these fields should be filled."},
+                },
+                required=["live_session_id", "fields", "reason"],
+            ),
+            capability_group="browser",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        live_session_id = str(tool_input.get("live_session_id", "")).strip()
+        reason = str(tool_input.get("reason", "")).strip()
+        raw_fields = tool_input.get("fields")
+        if not isinstance(raw_fields, list) or not raw_fields:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "At least one field is required.")
+        fields = [field for field in raw_fields[:20] if isinstance(field, dict)]
+        if len(fields) != len(raw_fields[:20]) or not reason:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "fields must be objects and reason is required.")
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would fill live browser fields after approval.",
+                {
+                    "live_session_id": live_session_id,
+                    "field_count": len(fields),
+                    "text_lengths": [len(str(field.get("text", ""))) for field in fields],
+                    "reason": reason,
+                    "fields_not_filled": True,
+                },
+            )
+        try:
+            output = LIVE_BROWSER_MANAGER.fill_fields(live_session_id, fields=fields)
+        except Exception as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Live browser form fill failed.", error=str(exc))
+        output["filled_form"] = {"field_count": len(fields), "reason": reason}
+        return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Filled {len(fields)} live browser field(s).", output)
+
+
+class BrowserLiveResizeTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="browser_live_resize",
+            description="Resize the viewport for a Playwright-backed live browser session.",
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema(
+                {
+                    "live_session_id": {"type": "string"},
+                    "width": {"type": "integer", "minimum": 320, "maximum": 3840},
+                    "height": {"type": "integer", "minimum": 240, "maximum": 2160},
+                },
+                required=["live_session_id", "width", "height"],
+            ),
+            capability_group="browser",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        live_session_id = str(tool_input.get("live_session_id", "")).strip()
+        width = max(320, min(int(tool_input.get("width", 1280)), 3840))
+        height = max(240, min(int(tool_input.get("height", 720)), 2160))
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would resize the live browser viewport.",
+                {"live_session_id": live_session_id, "viewport": {"width": width, "height": height}, "resize_not_performed": True},
+            )
+        try:
+            output = LIVE_BROWSER_MANAGER.resize(live_session_id, width=width, height=height)
+        except Exception as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Live browser resize failed.", error=str(exc))
+        return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Resized live browser session {live_session_id}.", output)
 
 
 class BrowserLiveScrollTool(Tool):
@@ -440,6 +587,126 @@ class BrowserLiveSearchTool(Tool):
         return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Searched {engine} in live browser session {live_session_id}.", output)
 
 
+class BrowserLiveNavigateTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="browser_live_navigate",
+            description="Navigate an existing Playwright-backed live browser session to an HTTP(S) URL, optionally in a new tab.",
+            risk_level=RiskLevel.MEDIUM,
+            input_schema=object_input_schema(
+                {
+                    "live_session_id": {"type": "string"},
+                    "url": {"type": "string", "description": "HTTP(S) URL without embedded credentials."},
+                    "new_tab": {"type": "boolean", "description": "Open URL in a new tab when true."},
+                },
+                required=["live_session_id", "url"],
+            ),
+            capability_group="browser",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        live_session_id = str(tool_input.get("live_session_id", "")).strip()
+        url = str(tool_input.get("url", "")).strip()
+        validation_error = _validate_url(url)
+        if validation_error:
+            return ToolResult(self.name, ActionStatus.BLOCKED, self.risk_level, validation_error, error=validation_error)
+        new_tab = bool(tool_input.get("new_tab", False))
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would navigate the live browser session.",
+                {"live_session_id": live_session_id, "url": url, "new_tab": new_tab, "navigation_not_performed": True},
+            )
+        try:
+            output = LIVE_BROWSER_MANAGER.navigate(live_session_id, url=url, new_tab=new_tab)
+        except Exception as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Live browser navigation failed.", error=str(exc))
+        return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Navigated live browser session {live_session_id}.", output)
+
+
+class BrowserLiveBackTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="browser_live_back",
+            description="Navigate the active tab in a live browser session back in history.",
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema({"live_session_id": {"type": "string"}}, required=["live_session_id"]),
+            capability_group="browser",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        live_session_id = str(tool_input.get("live_session_id", "")).strip()
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would navigate live browser history back.",
+                {"live_session_id": live_session_id, "history_not_changed": True, "direction": "back"},
+            )
+        try:
+            output = LIVE_BROWSER_MANAGER.back(live_session_id)
+        except Exception as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Live browser back navigation failed.", error=str(exc))
+        return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Navigated live browser session {live_session_id} back.", output)
+
+
+class BrowserLiveForwardTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="browser_live_forward",
+            description="Navigate the active tab in a live browser session forward in history.",
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema({"live_session_id": {"type": "string"}}, required=["live_session_id"]),
+            capability_group="browser",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        live_session_id = str(tool_input.get("live_session_id", "")).strip()
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would navigate live browser history forward.",
+                {"live_session_id": live_session_id, "history_not_changed": True, "direction": "forward"},
+            )
+        try:
+            output = LIVE_BROWSER_MANAGER.forward(live_session_id)
+        except Exception as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Live browser forward navigation failed.", error=str(exc))
+        return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Navigated live browser session {live_session_id} forward.", output)
+
+
+class BrowserLiveReloadTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="browser_live_reload",
+            description="Reload the active tab in a live browser session.",
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema({"live_session_id": {"type": "string"}}, required=["live_session_id"]),
+            capability_group="browser",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        live_session_id = str(tool_input.get("live_session_id", "")).strip()
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would reload the live browser tab.",
+                {"live_session_id": live_session_id, "reload_not_performed": True},
+            )
+        try:
+            output = LIVE_BROWSER_MANAGER.reload(live_session_id)
+        except Exception as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Live browser reload failed.", error=str(exc))
+        return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Reloaded live browser session {live_session_id}.", output)
+
+
 class BrowserLiveNewTabTool(Tool):
     def __init__(self) -> None:
         super().__init__(
@@ -576,6 +843,230 @@ class BrowserLiveQuerySelectorTool(Tool):
         except Exception as exc:
             return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Live browser selector query failed.", error=str(exc))
         return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Found {output['match_count']} live browser selector match(es).", output)
+
+
+class BrowserLiveHtmlTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="browser_live_html",
+            description=(
+                "Read bounded raw HTML from the current live browser page or one CSS-selected element. "
+                "Use when visible text is insufficient and the page structure/attributes matter."
+            ),
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema(
+                {
+                    "live_session_id": {"type": "string"},
+                    "selector": {"type": "string", "description": "Optional CSS selector; when omitted, reads document HTML."},
+                    "max_chars": {"type": "integer", "minimum": 1, "maximum": WEB_TEXT_LIMIT_CHARS},
+                },
+                required=["live_session_id"],
+            ),
+            capability_group="browser",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        live_session_id = str(tool_input.get("live_session_id", "")).strip()
+        selector = str(tool_input.get("selector", "")).strip()
+        max_chars = max(1, min(int(tool_input.get("max_chars") or 12000), WEB_TEXT_LIMIT_CHARS))
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would read live browser HTML.",
+                {"live_session_id": live_session_id, "selector": selector, "html_not_read": True},
+            )
+        try:
+            output = LIVE_BROWSER_MANAGER.html(live_session_id, selector=selector, max_chars=max_chars)
+        except Exception as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Live browser HTML read failed.", error=str(exc))
+        return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, "Read bounded live browser HTML.", output)
+
+
+class BrowserLivePageSearchTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="browser_live_page_search",
+            description=(
+                "Search current live browser page text for a literal string or regex and return bounded context snippets. "
+                "Use for Browser Use-style page search before extracting or clicking."
+            ),
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema(
+                {
+                    "live_session_id": {"type": "string"},
+                    "pattern": {"type": "string", "description": "Text or regex pattern to search for."},
+                    "regex": {"type": "boolean", "description": "Treat pattern as regex when true."},
+                    "case_sensitive": {"type": "boolean"},
+                    "context_chars": {"type": "integer", "minimum": 0, "maximum": 1000},
+                    "css_scope": {"type": "string", "description": "Optional CSS selector limiting the text search scope."},
+                    "max_results": {"type": "integer", "minimum": 1, "maximum": 100},
+                },
+                required=["live_session_id", "pattern"],
+            ),
+            capability_group="browser",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        live_session_id = str(tool_input.get("live_session_id", "")).strip()
+        pattern = str(tool_input.get("pattern", ""))
+        if not pattern:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Search pattern is required.")
+        context_chars = max(0, min(int(tool_input.get("context_chars") or 150), 1000))
+        max_results = max(1, min(int(tool_input.get("max_results") or 25), 100))
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would search live browser page text.",
+                {"live_session_id": live_session_id, "pattern": pattern, "page_not_searched": True},
+            )
+        try:
+            output = LIVE_BROWSER_MANAGER.search_page(
+                live_session_id,
+                pattern=pattern,
+                regex=bool(tool_input.get("regex", False)),
+                case_sensitive=bool(tool_input.get("case_sensitive", False)),
+                context_chars=context_chars,
+                css_scope=str(tool_input.get("css_scope", "")).strip(),
+                max_results=max_results,
+            )
+        except Exception as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Live browser page search failed.", error=str(exc))
+        if output.get("error"):
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, str(output["error"]), output, error=str(output["error"]))
+        return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Found {output['total']} page text match(es).", output)
+
+
+class BrowserLiveFindElementsTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="browser_live_find_elements",
+            description=(
+                "Find elements on the current live browser page by CSS selector and return tag, bounded text, selected attributes, and child counts. "
+                "Use for Browser Use-style structured DOM extraction."
+            ),
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema(
+                {
+                    "live_session_id": {"type": "string"},
+                    "selector": {"type": "string", "description": "CSS selector such as table tr, a, img, or div.product."},
+                    "attributes": {"type": "array", "items": {"type": "string"}, "maxItems": 20},
+                    "max_results": {"type": "integer", "minimum": 1, "maximum": 100},
+                    "include_text": {"type": "boolean"},
+                },
+                required=["live_session_id", "selector"],
+            ),
+            capability_group="browser",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        live_session_id = str(tool_input.get("live_session_id", "")).strip()
+        selector = str(tool_input.get("selector", "")).strip()
+        if not selector:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "CSS selector is required.")
+        raw_attributes = tool_input.get("attributes") or []
+        attributes = [str(item).strip() for item in raw_attributes[:20] if str(item).strip()] if isinstance(raw_attributes, list) else []
+        max_results = max(1, min(int(tool_input.get("max_results") or 50), 100))
+        include_text = bool(tool_input.get("include_text", True))
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would find live browser elements.",
+                {"live_session_id": live_session_id, "selector": selector, "elements_not_found": True},
+            )
+        try:
+            output = LIVE_BROWSER_MANAGER.find_elements(
+                live_session_id,
+                selector=selector,
+                attributes=attributes,
+                max_results=max_results,
+                include_text=include_text,
+            )
+        except Exception as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Live browser element search failed.", error=str(exc))
+        if output.get("error"):
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, str(output["error"]), output, error=str(output["error"]))
+        return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Found {output['total']} selector match(es).", output)
+
+
+class BrowserLiveExtractTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="browser_live_extract",
+            description=(
+                "Extract query-relevant snippets, links, images, and optional schema-shaped data from the current rendered live browser page. "
+                "Use for Browser Use-style extraction when static browser_extract is insufficient."
+            ),
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema(
+                {
+                    "live_session_id": {"type": "string"},
+                    "query": {"type": "string", "description": "What to extract from the rendered page."},
+                    "include_links": {"type": "boolean", "description": "Include matching links."},
+                    "include_images": {"type": "boolean", "description": "Include matching image URLs and alt/title metadata."},
+                    "start_from_char": {"type": "integer", "minimum": 0, "description": "Character offset for long rendered page text."},
+                    "max_snippets": {"type": "integer", "minimum": 1, "maximum": 20},
+                    "output_schema": {"type": "object", "description": "Optional JSON schema used to shape extracted evidence fields."},
+                    "already_collected": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "maxItems": 100,
+                        "description": "Identifiers, names, URLs, or snippets already collected on earlier pages.",
+                    },
+                },
+                required=["live_session_id", "query"],
+            ),
+            capability_group="browser",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        live_session_id = str(tool_input.get("live_session_id", "")).strip()
+        query = str(tool_input.get("query", "")).strip()
+        if not live_session_id:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Live browser session id is required.")
+        if not query:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Live browser extraction query is required.")
+        output_schema = tool_input.get("output_schema")
+        if output_schema is not None and not isinstance(output_schema, dict):
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "output_schema must be an object when provided.")
+        raw_collected = tool_input.get("already_collected") or []
+        already_collected = [str(item).strip() for item in raw_collected[:100] if str(item).strip()] if isinstance(raw_collected, list) else []
+        start_from_char = max(0, int(tool_input.get("start_from_char") or 0))
+        max_snippets = max(1, min(int(tool_input.get("max_snippets") or 8), 20))
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would extract rendered live browser page evidence.",
+                {
+                    "live_session_id": live_session_id,
+                    "query": query,
+                    "include_links": bool(tool_input.get("include_links", True)),
+                    "include_images": bool(tool_input.get("include_images", False)),
+                    "output_schema_used": bool(output_schema),
+                    "extraction_not_performed": True,
+                },
+            )
+        try:
+            output = LIVE_BROWSER_MANAGER.extract(
+                live_session_id,
+                query=query,
+                include_links=bool(tool_input.get("include_links", True)),
+                include_images=bool(tool_input.get("include_images", False)),
+                start_from_char=start_from_char,
+                max_snippets=max_snippets,
+                output_schema=output_schema,
+                already_collected=already_collected,
+            )
+        except Exception as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Live browser extraction failed.", error=str(exc))
+        return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Extracted {len(output['snippets'])} rendered browser snippet(s).", output)
 
 
 class BrowserLiveSelectOptionTool(Tool):
@@ -733,6 +1224,88 @@ class BrowserLiveClickCoordinatesTool(Tool):
             return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Live browser coordinate click failed.", error=str(exc))
         output["clicked_coordinates"]["reason"] = str(tool_input.get("reason", "")).strip()
         return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Clicked coordinates ({x}, {y}) in live browser session {live_session_id}.", output)
+
+
+class BrowserLiveHoverTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="browser_live_hover",
+            description="Hover over an observed live browser element id to reveal menus, tooltips, or hover state.",
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema(
+                {
+                    "live_session_id": {"type": "string"},
+                    "element_id": {"type": "string", "description": "Observed live element id, for example live:0."},
+                },
+                required=["live_session_id", "element_id"],
+            ),
+            capability_group="browser",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        live_session_id = str(tool_input.get("live_session_id", "")).strip()
+        element_id = str(tool_input.get("element_id", "")).strip()
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would hover over a live browser element.",
+                {"live_session_id": live_session_id, "element_id": element_id, "hover_not_performed": True},
+            )
+        try:
+            output = LIVE_BROWSER_MANAGER.hover(live_session_id, element_id=element_id)
+        except Exception as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Live browser hover failed.", error=str(exc))
+        return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Hovered over {element_id} in live browser session {live_session_id}.", output)
+
+
+class BrowserLiveDragCoordinatesTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="browser_live_drag_coordinates",
+            description="Drag from one viewport coordinate to another in a live browser session after explicit approval.",
+            risk_level=RiskLevel.HIGH,
+            requires_approval=True,
+            input_schema=object_input_schema(
+                {
+                    "live_session_id": {"type": "string"},
+                    "start_x": {"type": "integer", "minimum": 0, "description": "Start viewport x coordinate."},
+                    "start_y": {"type": "integer", "minimum": 0, "description": "Start viewport y coordinate."},
+                    "end_x": {"type": "integer", "minimum": 0, "description": "End viewport x coordinate."},
+                    "end_y": {"type": "integer", "minimum": 0, "description": "End viewport y coordinate."},
+                    "reason": {"type": "string", "description": "Why this drag action is needed."},
+                },
+                required=["live_session_id", "start_x", "start_y", "end_x", "end_y", "reason"],
+            ),
+            capability_group="browser",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        live_session_id = str(tool_input.get("live_session_id", "")).strip()
+        start_x = max(0, int(tool_input.get("start_x", 0)))
+        start_y = max(0, int(tool_input.get("start_y", 0)))
+        end_x = max(0, int(tool_input.get("end_x", 0)))
+        end_y = max(0, int(tool_input.get("end_y", 0)))
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would drag between live browser coordinates after approval.",
+                {
+                    "live_session_id": live_session_id,
+                    "start": {"x": start_x, "y": start_y},
+                    "end": {"x": end_x, "y": end_y},
+                    "drag_not_performed": True,
+                },
+            )
+        try:
+            output = LIVE_BROWSER_MANAGER.drag_coordinates(live_session_id, start_x=start_x, start_y=start_y, end_x=end_x, end_y=end_y)
+        except Exception as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Live browser coordinate drag failed.", error=str(exc))
+        output["dragged_coordinates"]["reason"] = str(tool_input.get("reason", "")).strip()
+        return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Dragged live browser coordinates ({start_x}, {start_y}) to ({end_x}, {end_y}).", output)
 
 
 class BrowserLiveScrollToTextTool(Tool):

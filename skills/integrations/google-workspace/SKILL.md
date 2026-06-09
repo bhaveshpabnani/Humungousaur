@@ -49,7 +49,7 @@ Use for Gmail, Calendar, Drive, Docs, Sheets, shared files, meeting invites, and
 
 ## Native Implementation Boundaries
 
-- Do not import Hermes Google Workspace scripts.
+- Do not import external reference Google Workspace scripts.
 - Gmail/Calendar/Drive/Docs/Sheets tools must be Humungousaur-owned adapters.
 - OAuth tokens must use secret storage, not skill files.
 - Native operation packets are local JSON artifacts and do not execute remote Google API calls.

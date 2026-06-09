@@ -70,4 +70,4 @@ Use after a meeting summary, call transcript, standup, planning conversation, or
 ## References
 
 - Shortlist item: `meeting-follow-up`.
-- Upstream inspiration: Hermes Teams meeting pipeline, Anthropic internal communications.
+- Upstream inspiration: external reference Teams meeting pipeline, Anthropic internal communications.

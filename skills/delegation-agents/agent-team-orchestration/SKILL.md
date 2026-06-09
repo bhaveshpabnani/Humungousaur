@@ -7,7 +7,7 @@ description: Coordinate multiple specialists or agent workers with task lifecycl
 
 ## Purpose
 
-Break complex work into specialist tasks while preserving a single accountable orchestrator. This adapts OpenClaw team orchestration and Hermes kanban-orchestrator concepts into Humungousaur's multi-agent coordination board.
+Break complex work into specialist tasks while preserving a single accountable orchestrator. This adapts external reference team orchestration and external reference kanban-orchestrator concepts into Humungousaur's multi-agent coordination board.
 
 ## When To Use
 
@@ -55,7 +55,7 @@ Use for large engineering changes, research plus implementation, security review
 ## Native Implementation Boundaries
 
 - Use Humungousaur `multi_agent_coordinate`, board, cognitive state, priority, Codex delegation, and note tools.
-- Hermes/OpenClaw team concepts are reference patterns only; task boards and handoffs must be stored through Humungousaur-native tools.
+- external reference/external reference team concepts are reference patterns only; task boards and handoffs must be stored through Humungousaur-native tools.
 - Worker outputs are imported as evidence packets, not automatically trusted state.
 
 ## Verification
@@ -73,5 +73,5 @@ Use for large engineering changes, research plus implementation, security review
 ## References
 
 - Shortlist item: `agent-team-orchestration`.
-- Upstream inspiration: OpenClaw `agent-team-orchestration`, Hermes `kanban-orchestrator`.
+- Upstream inspiration: external reference `agent-team-orchestration`, external reference `kanban-orchestrator`.
 - Humungousaur tool: `multi_agent_coordinate`.

@@ -77,7 +77,7 @@ Every channel turn has three layers:
 
 ## Native Implementation Boundaries
 
-- Use Humungousaur channel tools, manifests, listener state, outbox, and official adapters; do not import OpenClaw or ClawHub channel packages.
+- Use Humungousaur channel tools, manifests, listener state, outbox, and official adapters; do not import external reference channel packages.
 - Treat `prepared_not_sent`, `blocked_missing_credentials`, and `blocked_no_direct_sender` as honest final states.
 - Use `.env`, desktop runtime secrets, Windows Credential Manager, or approved secret providers for raw credentials; setup records hold only references/config.
 

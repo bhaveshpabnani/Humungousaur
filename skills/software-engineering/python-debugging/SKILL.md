@@ -40,7 +40,7 @@ Use for pytest failures, import errors, scripts, API bugs, data processing issue
 ## Native Implementation Boundaries
 
 - Use Humungousaur Python interpreter and native shell tools.
-- Do not import Hermes debugpy scripts as implementation.
+- Do not import external reference debugpy scripts as implementation.
 - Do not execute untrusted Python without sandbox/profile awareness.
 
 ## Safety And Approval

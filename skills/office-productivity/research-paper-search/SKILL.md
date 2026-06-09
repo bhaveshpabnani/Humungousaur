@@ -42,7 +42,7 @@ Use for arXiv-style searches, paper lists, related work, literature reviews, met
 
 ## Native Implementation Boundaries
 
-- Do not import Hermes arXiv or OpenClaw academic plugins.
+- Do not import external reference arXiv or external reference academic plugins.
 - Add scholarly API adapters natively when needed.
 - Avoid fabricating citations.
 - Literature-set artifacts are local evidence organization, not proof of live scholarly search by themselves.

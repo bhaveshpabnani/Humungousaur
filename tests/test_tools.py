@@ -124,6 +124,31 @@ class ToolTests(unittest.TestCase):
         self.assertEqual(tools["tool_search"].input_schema["required"], ["query"])
         self.assertEqual(tools["tool_describe"].capability_group, "capabilities")
         self.assertEqual(tools["tool_describe"].input_schema["required"], ["record_id"])
+        self.assertEqual(tools["tool_call"].capability_group, "capabilities")
+        self.assertTrue(tools["tool_call"].requires_approval)
+        self.assertEqual(tools["tool_call"].input_schema["required"], ["name", "arguments"])
+        self.assertEqual(tools["write_file"].capability_group, "files")
+        self.assertTrue(tools["write_file"].requires_approval)
+        self.assertEqual(tools["patch"].capability_group, "files")
+        self.assertTrue(tools["patch"].requires_approval)
+        self.assertEqual(tools["process"].capability_group, "shell")
+        self.assertTrue(tools["process"].requires_approval)
+        self.assertEqual(tools["terminal"].input_schema, tools["run_shell_command"].input_schema)
+        self.assertEqual(tools["web_extract"].input_schema, tools["fetch_web_page"].input_schema)
+        self.assertEqual(tools["send_message"].input_schema, tools["channel_message_send"].input_schema)
+        self.assertEqual(tools["native_toolset_catalog"].capability_group, "toolsets")
+        self.assertEqual(tools["native_toolset_describe"].input_schema["required"], ["toolset"])
+        self.assertEqual(tools["mcp_server_catalog"].capability_group, "mcp")
+        self.assertEqual(tools["mcp_server_manifest"].input_schema["required"], ["server_id"])
+        self.assertTrue(tools["mcp_server_launch"].requires_approval)
+        self.assertEqual(tools["mcp_tool_discover"].input_schema["required"], ["server_id"])
+        self.assertTrue(tools["mcp_tool_call"].requires_approval)
+        self.assertEqual(tools["mcp_oauth_status"].capability_group, "mcp")
+        self.assertTrue(tools["plugin_state"].requires_approval)
+        self.assertEqual(tools["provider_registry"].capability_group, "providers")
+        self.assertEqual(tools["runtime_hook_catalog"].capability_group, "runtime")
+        self.assertEqual(tools["native_skill_pack_build"].capability_group, "skills")
+        self.assertTrue(tools["native_skill_pack_build"].requires_approval)
         self.assertEqual(tools["codex_capability_status"].capability_group, "codex")
         self.assertEqual(tools["codex_cli_status"].capability_group, "codex")
         self.assertEqual(tools["codex_cli_plan"].capability_group, "codex")
@@ -184,6 +209,14 @@ class ToolTests(unittest.TestCase):
         self.assertTrue(tools["browser_live_close_tab"].requires_approval)
         self.assertEqual(tools["browser_live_query_selector"].input_schema["required"], ["live_session_id", "selector"])
         self.assertEqual(tools["browser_live_query_selector"].capability_group, "browser")
+        self.assertEqual(tools["browser_live_extract"].input_schema["required"], ["live_session_id", "query"])
+        self.assertEqual(tools["browser_live_extract"].capability_group, "browser")
+        self.assertEqual(tools["browser_live_html"].input_schema["required"], ["live_session_id"])
+        self.assertEqual(tools["browser_live_html"].capability_group, "browser")
+        self.assertEqual(tools["browser_live_page_search"].input_schema["required"], ["live_session_id", "pattern"])
+        self.assertEqual(tools["browser_live_page_search"].capability_group, "browser")
+        self.assertEqual(tools["browser_live_find_elements"].input_schema["required"], ["live_session_id", "selector"])
+        self.assertEqual(tools["browser_live_find_elements"].capability_group, "browser")
         self.assertEqual(tools["browser_live_dropdown_options"].input_schema["required"], ["live_session_id", "element_id"])
         self.assertEqual(tools["browser_live_dropdown_options"].capability_group, "browser")
         self.assertEqual(tools["browser_live_select_option"].input_schema["required"], ["live_session_id", "element_id", "values", "reason"])
@@ -331,6 +364,9 @@ class ToolTests(unittest.TestCase):
         self.assertEqual(tools["activity_prune"].input_schema["required"], ["reason"])
         self.assertTrue(tools["activity_prune"].requires_approval)
         self.assertEqual(tools["external_integrations_status"].capability_group, "integrations")
+        self.assertEqual(tools["browser_use_capability_map"].capability_group, "integrations")
+        self.assertEqual(tools["browser_use_agent_run"].input_schema["required"], ["task", "reason"])
+        self.assertTrue(tools["browser_use_agent_run"].requires_approval)
         self.assertEqual(tools["screenpipe_search"].capability_group, "integrations")
         self.assertTrue(tools["screenpipe_search"].requires_approval)
         self.assertEqual(tools["rss_feed_read"].input_schema["required"], ["source"])
@@ -343,6 +379,7 @@ class ToolTests(unittest.TestCase):
         self.assertEqual(tools["airtable_operation_prepare"].input_schema["required"], ["operation", "base_id", "reason"])
         self.assertEqual(tools["google_workspace_operation_prepare"].input_schema["required"], ["app", "operation", "reason"])
         self.assertEqual(tools["api_operation_inspect"].input_schema["required"], ["path"])
+
         self.assertEqual(tools["dns_lookup"].capability_group, "network")
         self.assertEqual(tools["dns_lookup"].input_schema["required"], ["hostname", "reason"])
         self.assertEqual(tools["http_endpoint_check"].input_schema["required"], ["url", "reason"])
@@ -417,6 +454,41 @@ class ToolTests(unittest.TestCase):
         self.assertIn("provider", tools["voice_speak"].input_schema["properties"])
         self.assertEqual(tools["voice_speak"].capability_group, "voice")
         self.assertEqual(tools["voice_responses"].capability_group, "voice")
+
+    def test_browser_use_capability_map_executes_against_registry(self) -> None:
+        tool = default_tools()["browser_use_capability_map"]
+
+        result = tool.execute({"include_native_tools": True}, AgentConfig())
+
+        self.assertEqual(result.status, ActionStatus.SUCCEEDED)
+        capabilities = {item["capability"]: item for item in result.output["capabilities"]}
+        self.assertIn("autonomous_agent_task", capabilities)
+        self.assertEqual(capabilities["autonomous_agent_task"]["status"], "native")
+        self.assertIn("browser_use_agent_run", capabilities["autonomous_agent_task"]["native_tools"])
+        self.assertIn("browser_live_page_search", capabilities["page_text_search"]["native_tools"])
+        self.assertIn("browser_live_extract", capabilities["rendered_page_extraction"]["native_tools"])
+        self.assertIn("browser_live_drag", capabilities["click_type_keyboard_scroll"]["native_tools"])
+        self.assertIn("browser_live_fill_form", capabilities["forms_and_viewport"]["native_tools"])
+        self.assertIn("browser_live_resize", capabilities["forms_and_viewport"]["native_tools"])
+
+    def test_browser_use_agent_run_dry_run_is_bounded(self) -> None:
+        tool = default_tools()["browser_use_agent_run"]
+        config = AgentConfig(dry_run=True, model_name="gpt-5.4")
+
+        result = tool.execute(
+            {
+                "task": "Open example.com and report the heading.",
+                "reason": "Testing Browser Use delegation without launching a browser.",
+                "max_steps": 5,
+                "allowed_domains": ["example.com"],
+            },
+            config,
+        )
+
+        self.assertEqual(result.status, ActionStatus.SKIPPED)
+        self.assertTrue(result.output["browser_use_not_run"])
+        self.assertEqual(result.output["model"], "gpt-5.4")
+        self.assertEqual(result.output["allowed_domains"], ["example.com"])
 
     def test_codex_prompt_templates_are_loaded_from_bundled_resource(self) -> None:
         templates = load_prompt_templates(CODEX_PROMPT_RESOURCE)
@@ -1085,6 +1157,365 @@ class ToolTests(unittest.TestCase):
             self.assertIn("Inline shell", workspace_write.summary)
             self.assertEqual(blocked.status, ActionStatus.BLOCKED)
             self.assertIn("profile blocks", blocked.summary)
+
+    def test_native_reference_file_tools(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(
+                workspace=workspace,
+                data_dir=workspace / "artifacts",
+                allowed_read_roots=(workspace,),
+                allowed_write_roots=(workspace,),
+            ).normalized()
+            tools = default_tools(config)
+
+            written = tools["write_file"].execute(
+                {"path": "notes/example.txt", "content": "alpha beta\n", "reason": "test"},
+                config,
+            )
+            self.assertEqual(written.status, ActionStatus.SUCCEEDED)
+
+            searched = tools["search_files"].execute({"query": "alpha", "path": "notes"}, config)
+            self.assertEqual(searched.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(searched.output["matches"][0]["path"], "notes/example.txt")
+
+            patched = tools["patch"].execute(
+                {
+                    "path": "notes/example.txt",
+                    "search": "alpha",
+                    "replace": "gamma",
+                    "expected_replacements": 1,
+                    "reason": "test",
+                },
+                config,
+            )
+            self.assertEqual(patched.status, ActionStatus.SUCCEEDED)
+            self.assertEqual((workspace / "notes/example.txt").read_text(encoding="utf-8"), "gamma beta\n")
+
+    def test_tool_call_invokes_low_risk_target(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            (workspace / "readme.txt").write_text("hello from tool_call\n", encoding="utf-8")
+            config = AgentConfig(
+                workspace=workspace,
+                data_dir=workspace / "artifacts",
+                allowed_read_roots=(workspace,),
+                allowed_write_roots=(workspace,),
+            ).normalized()
+
+            result = default_tools(config)["tool_call"].execute(
+                {"name": "read_file", "arguments": {"path": "readme.txt"}},
+                config,
+            )
+
+            self.assertEqual(result.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(result.output["target_tool"], "read_file")
+            self.assertEqual(result.output["target_result"]["text"], "hello from tool_call\n")
+
+    def test_tool_call_requires_target_approval(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(
+                workspace=workspace,
+                data_dir=workspace / "artifacts",
+                allowed_read_roots=(workspace,),
+                allowed_write_roots=(workspace,),
+            ).normalized()
+
+            result = default_tools(config)["tool_call"].execute(
+                {"name": "write_file", "arguments": {"path": "x.txt", "content": "x", "reason": "test"}},
+                config,
+            )
+
+            self.assertEqual(result.status, ActionStatus.NEEDS_APPROVAL)
+            self.assertEqual(result.output["target_tool"], "write_file")
+
+    def test_process_list_has_registry_shape(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts").normalized()
+
+            result = default_tools(config)["process"].execute({"action": "list"}, config)
+
+            self.assertEqual(result.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(result.output["processes"], [])
+
+    def test_native_runtime_primitives_persist_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts").normalized()
+            tools = default_tools(config)
+
+            clarify = tools["clarify"].execute({"question": "Which route?", "options": ["A", "B"]}, config)
+            self.assertEqual(clarify.status, ActionStatus.NEEDS_APPROVAL)
+            self.assertEqual(clarify.output["options"], ["A", "B"])
+
+            added = tools["todo"].execute({"action": "add", "title": "Ship parity"}, config)
+            self.assertEqual(added.status, ActionStatus.SUCCEEDED)
+            todo_id = added.output["todo"]["todo_id"]
+            updated = tools["todo"].execute({"action": "update", "todo_id": todo_id, "status": "completed"}, config)
+            self.assertEqual(updated.output["todo"]["status"], "completed")
+            listed = tools["todo"].execute({"action": "list"}, config)
+            self.assertEqual(len(listed.output["todos"]), 1)
+
+            created = tools["cronjob"].execute(
+                {"action": "create", "name": "Daily note", "schedule": "0 9 * * *", "prompt": "Summarize yesterday."},
+                config,
+            )
+            self.assertEqual(created.status, ActionStatus.SUCCEEDED)
+            triggered = tools["cronjob"].execute({"action": "trigger", "job_id": created.output["job"]["job_id"]}, config)
+            self.assertEqual(triggered.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(triggered.output["prompt"], "Summarize yesterday.")
+
+            delegated = tools["delegate_task"].execute({"task": "Inspect MCP parity", "toolsets": ["file"]}, config)
+            self.assertEqual(delegated.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(delegated.output["delegation"]["status"], "queued")
+
+    def test_session_search_finds_notes_and_execute_code_wraps_python(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            data_dir = workspace / "artifacts"
+            notes_dir = data_dir / "notes"
+            notes_dir.mkdir(parents=True)
+            (notes_dir / "session.md").write_text("native parity checkpoint\n", encoding="utf-8")
+            config = AgentConfig(workspace=workspace, data_dir=data_dir, dry_run=True).normalized()
+            tools = default_tools(config)
+
+            found = tools["session_search"].execute({"query": "parity"}, config)
+            self.assertEqual(found.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(found.output["matches"][0]["path"], "artifacts/notes/session.md")
+
+            executed = tools["execute_code"].execute({"code": "print('ok')", "reason": "test"}, config)
+            self.assertEqual(executed.status, ActionStatus.SKIPPED)
+            self.assertEqual(executed.tool_name, "execute_code")
+
+    def test_native_toolsets_mcp_provider_and_hook_surfaces(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            toolset_dir = workspace / ".umang" / "toolsets"
+            mcp_dir = workspace / ".umang" / "mcp"
+            toolset_dir.mkdir(parents=True)
+            mcp_dir.mkdir(parents=True)
+            (toolset_dir / "custom.json").write_text(
+                json.dumps(
+                    {
+                        "name": "custom-minimal",
+                        "description": "A custom toolset used by tests.",
+                        "tools": ["read_file", "terminal", "not_native_yet"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (mcp_dir / "demo.json").write_text(
+                json.dumps(
+                    {
+                        "server_id": "demo",
+                        "display_name": "Demo MCP",
+                        "transport": "stdio",
+                        "command": "node",
+                        "args": ["server.js"],
+                        "tools": ["demo_echo"],
+                        "required_env": ["DEMO_MCP_TOKEN"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", dry_run=True).normalized()
+            tools = default_tools(config)
+
+            catalog = tools["native_toolset_catalog"].execute({"query": "custom", "include_tools": True}, config)
+            self.assertEqual(catalog.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(catalog.output["toolsets"][0]["name"], "custom-minimal")
+            self.assertIn("not_native_yet", catalog.output["toolsets"][0]["missing_tools"])
+            described = tools["native_toolset_describe"].execute({"toolset": "native-cli"}, config)
+            self.assertEqual(described.output["toolset"]["name"], "native-cli")
+            self.assertIn({"tool": "terminal", "target": "run_shell_command"}, described.output["toolset"]["alias_backed_tools"])
+
+            mcp_catalog = tools["mcp_server_catalog"].execute({"server_id": "demo", "include_tools": True}, config)
+            self.assertEqual(mcp_catalog.output["servers"][0]["server_id"], "demo")
+            self.assertEqual(mcp_catalog.output["servers"][0]["missing_env"], ["DEMO_MCP_TOKEN"])
+            manifest = tools["mcp_server_manifest"].execute({"server_id": "linear"}, config)
+            self.assertEqual(manifest.status, ActionStatus.SUCCEEDED)
+            discovered = tools["mcp_tool_discover"].execute({"server_id": "demo"}, config)
+            self.assertEqual(discovered.output["tools"], ["demo_echo"])
+            needs_approval = tools["mcp_tool_call"].execute({"server_id": "demo", "tool": "demo_echo", "arguments": {"x": 1}}, config)
+            self.assertEqual(needs_approval.status, ActionStatus.NEEDS_APPROVAL)
+            dry_call = tools["mcp_tool_call"].execute(
+                {"server_id": "demo", "tool": "demo_echo", "arguments": {"x": 1}, "approved": True},
+                config,
+            )
+            self.assertEqual(dry_call.status, ActionStatus.SKIPPED)
+            launch = tools["mcp_server_launch"].execute({"server_id": "demo", "approved": True}, config)
+            self.assertEqual(launch.status, ActionStatus.SKIPPED)
+            oauth = tools["mcp_oauth_status"].execute({"server_id": "demo"}, config)
+            self.assertFalse(oauth.output["servers"][0]["configured"])
+
+            enabled = tools["plugin_state"].execute({"action": "enable", "plugin_id": "mcp.demo", "reason": "test"}, config)
+            self.assertTrue(enabled.output["plugin"]["enabled"])
+            providers = tools["provider_registry"].execute({"provider_id": "anthropic"}, config)
+            self.assertEqual(providers.output["providers"][0]["missing_env"], ["ANTHROPIC_API_KEY"])
+            hooks = tools["runtime_hook_catalog"].execute({"event": "tool_call"}, config)
+            self.assertEqual({hook["hook_id"] for hook in hooks.output["hooks"]}, {"tool.before_execute", "tool.after_execute"})
+
+            surface = tools["capability_surface"].execute({"include_records": True}, config)
+            self.assertIn("native_parity", surface.output)
+            self.assertGreaterEqual(surface.output["native_parity"]["toolset_count"], 57)
+            search = tools["tool_search"].execute({"query": "demo mcp", "kind": "mcp_server"}, config)
+            self.assertEqual(search.output["matches"][0]["record_id"], "mcp_server:demo")
+
+    def test_native_exact_tool_families_have_native_contracts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", dry_run=True).normalized()
+            tools = default_tools(config)
+
+            required = {
+                "browser_console",
+                "browser_dialog",
+                "browser_get_images",
+                "browser_vision",
+                "computer_use",
+                "discord",
+                "discord_admin",
+                "feishu_doc_read",
+                "feishu_drive_add_comment",
+                "feishu_drive_list_comment_replies",
+                "feishu_drive_list_comments",
+                "feishu_drive_reply_comment",
+                "ha_call_service",
+                "ha_get_state",
+                "ha_list_entities",
+                "ha_list_services",
+                "image_generate",
+                "kanban_block",
+                "kanban_comment",
+                "kanban_complete",
+                "kanban_create",
+                "kanban_heartbeat",
+                "kanban_link",
+                "kanban_list",
+                "kanban_show",
+                "kanban_unblock",
+                "memory",
+                "mixture_of_agents",
+                "spotify_albums",
+                "spotify_devices",
+                "spotify_library",
+                "spotify_playback",
+                "spotify_playlists",
+                "spotify_queue",
+                "spotify_search",
+                "video_analyze",
+                "video_generate",
+                "vision_analyze",
+                "x_search",
+                "yb_query_group_info",
+                "yb_query_group_members",
+                "yb_search_sticker",
+                "yb_send_dm",
+                "yb_send_sticker",
+            }
+            self.assertEqual(required - set(tools), set())
+
+            created = tools["kanban_create"].execute({"title": "Wire native parity"}, config)
+            self.assertEqual(created.status, ActionStatus.SUCCEEDED)
+            task_id = created.output["task"]["task_id"]
+            blocked = tools["kanban_block"].execute({"task_id": task_id, "blocked_reason": "waiting"}, config)
+            self.assertEqual(blocked.output["task"]["status"], "blocked")
+            commented = tools["kanban_comment"].execute({"task_id": task_id, "comment": "checkpoint"}, config)
+            self.assertEqual(commented.output["task"]["comments"][0]["text"], "checkpoint")
+            linked = tools["kanban_link"].execute({"task_id": task_id, "target_task_id": "task-other"}, config)
+            self.assertEqual(linked.output["task"]["links"][0]["target_task_id"], "task-other")
+            completed = tools["kanban_complete"].execute({"task_id": task_id}, config)
+            self.assertEqual(completed.output["task"]["status"], "completed")
+            listed = tools["kanban_list"].execute({}, config)
+            self.assertEqual(listed.output["board"]["task_count"], 1)
+
+            memory = tools["memory"].execute({"action": "summary", "period": "today"}, config)
+            self.assertEqual(memory.status, ActionStatus.SUCCEEDED)
+            image = tools["image_generate"].execute({"prompt": "diagram of parity", "reason": "test"}, config)
+            self.assertEqual(image.status, ActionStatus.SKIPPED)
+            video = tools["video_generate"].execute({"prompt": "product tour", "reason": "test"}, config)
+            self.assertEqual(video.status, ActionStatus.SKIPPED)
+            vision = tools["vision_analyze"].execute({"path": "screen.png"}, config)
+            self.assertEqual(vision.status, ActionStatus.SUCCEEDED)
+            ha = tools["ha_list_entities"].execute({}, config)
+            self.assertEqual(ha.status, ActionStatus.BLOCKED)
+            self.assertEqual(ha.output["missing_env"], ["HOME_ASSISTANT_URL", "HOME_ASSISTANT_TOKEN"])
+            spotify = tools["spotify_search"].execute({"query": "song"}, config)
+            self.assertEqual(spotify.output["missing_env"], ["SPOTIFY_ACCESS_TOKEN"])
+            x_search = tools["x_search"].execute({"query": "humungousaur"}, config)
+            self.assertEqual(x_search.output["missing_env"], ["XAI_API_KEY"])
+
+    def test_native_gateway_security_ops_and_skill_pack_surfaces(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", dry_run=True).normalized()
+            tools = default_tools(config)
+
+            paired = tools["gateway_control"].execute(
+                {"action": "authorize", "channel_id": "slack", "principal": "user-1"},
+                config,
+            )
+            self.assertEqual(paired.status, ActionStatus.SUCCEEDED)
+            session_id = next(iter(paired.output["gateway"]["sessions"]))
+            interrupted = tools["gateway_control"].execute({"action": "interrupt", "session_id": session_id, "reason": "stop"}, config)
+            self.assertEqual(interrupted.output["gateway"]["interrupts"][0]["reason"], "stop")
+
+            delivery = tools["channel_delivery"].execute(
+                {"action": "record", "channel_id": "slack", "job_id": "cron-1", "message": "hello"},
+                config,
+            )
+            self.assertEqual(delivery.output["delivery"]["status"], "queued")
+            sent = tools["channel_delivery"].execute({"action": "mark_sent", "delivery_id": delivery.output["delivery"]["delivery_id"]}, config)
+            self.assertEqual(sent.output["delivery"]["status"], "sent")
+
+            policy = tools["native_security_policy"].execute({"url": "http://127.0.0.1/admin", "command": "rm -rf /tmp/x"}, config)
+            self.assertFalse(policy.output["allowed"])
+            credentials = tools["credential_file_policy"].execute(
+                {"action": "declare", "skill_id": "apple-notes", "paths": ["~/.config/example"], "reason": "test"},
+                config,
+            )
+            self.assertEqual(credentials.output["declaration"]["skill_id"], "apple-notes")
+            dependency = tools["optional_dependency_installer"].execute({"package": "playwright", "reason": "browser support"}, config)
+            self.assertEqual(dependency.status, ActionStatus.SKIPPED)
+
+            stored = tools["tool_output_store"].execute({"action": "store", "tool_name": "terminal", "content": "a" * 50}, config)
+            read = tools["tool_output_store"].execute({"action": "read", "output_id": stored.output["output"]["output_id"], "limit": 10}, config)
+            self.assertEqual(read.output["content"], "a" * 10)
+            self.assertTrue(read.output["truncated"])
+
+            packs = tools["native_skill_pack_catalog"].execute({"category": "mlops"}, config)
+            self.assertEqual(packs.output["packs"][0]["pack_id"], "mlops_data_science")
+            built = tools["native_skill_pack_build"].execute(
+                {"pack_ids": ["apple", "autonomous_devops"], "reason": "parity"},
+                config,
+            )
+            self.assertEqual(built.status, ActionStatus.SKIPPED)
+            self.assertEqual(len(built.output["builds"]), 2)
+            self.assertFalse(built.output["builds"][0]["upstream_imported"])
+            self.assertEqual(built.output["builds"][0]["security_review"], "passed_contract_review")
+            self.assertTrue(built.output["builds"][0]["skills"][0]["path"].endswith("skills/desktop-control/apple-notes/SKILL.md"))
+
+    def test_native_skill_pack_build_writes_native_skill_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts").normalized()
+            tools = default_tools(config)
+
+            result = tools["native_skill_pack_build"].execute(
+                {"pack_ids": ["apple"], "overwrite": True, "reason": "native skill test"},
+                config,
+            )
+            skill_path = workspace / "skills" / "desktop-control" / "apple-notes" / "SKILL.md"
+            text = skill_path.read_text(encoding="utf-8")
+
+            self.assertEqual(result.status, ActionStatus.SUCCEEDED)
+            self.assertTrue(skill_path.exists())
+            self.assertIn("Humungousaur-native skill", text)
+            self.assertIn("Do not import, execute, or vendor upstream assistant code", text)
+            self.assertFalse(result.output["builds"][0]["upstream_imported"])
+            self.assertEqual(result.output["builds"][0]["skills"][0]["status"], "built_native")
 
     def test_shell_trusted_dev_profile_allows_approved_inline_python(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

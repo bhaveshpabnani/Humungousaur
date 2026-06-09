@@ -71,6 +71,7 @@ class InteractionHarness:
         *,
         response_mode: str | None = None,
         approve_high_risk: bool = False,
+        run_id: str | None = None,
     ) -> HarnessResult:
         normalized = normalize_stimulus(stimulus)
         if approve_high_risk:
@@ -92,7 +93,11 @@ class InteractionHarness:
         run: AgentRunResult | None = None
         voice_result: dict[str, Any] | None = None
         if decision.should_run_agent:
-            run = AgentOrchestrator(self.config).run(decision.request, approve_high_risk=approve_high_risk)
+            run = AgentOrchestrator(self.config).run(
+                decision.request,
+                approve_high_risk=approve_high_risk,
+                run_id=run_id,
+            )
             if decision.should_prepare_voice or decision.should_speak:
                 voice_result = self._emit_voice_response(
                     text=run.final_response,

@@ -40,7 +40,7 @@ Use for spreadsheet analysis, CSV/XLSX cleaning, formulas, tables, summaries, wo
 
 ## Native Implementation Boundaries
 
-- Do not import Anthropic XLSX skill code or Hermes spreadsheet scripts.
+- Do not import Anthropic XLSX skill code or external reference spreadsheet scripts.
 - Use Humungousaur-owned interpreter/tool paths only.
 - Use the Humungousaur-owned `xlsx_workbook_create` and `xlsx_workbook_inspect` tools for basic workbook creation and verification; add additional native spreadsheet tools with schemas/tests when needed.
 

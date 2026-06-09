@@ -36,7 +36,7 @@ Use when the user asks to use OpenCode, compare worker agents, or route a coding
 
 ## Native Implementation Boundaries
 
-- Do not import Hermes OpenCode scripts.
+- Do not import external reference OpenCode scripts.
 - Do not call arbitrary OpenCode commands as the skill implementation without user-approved native/shell path.
 - Missing adapter means no live delegation claim.
 
@@ -60,4 +60,4 @@ Use when the user asks to use OpenCode, compare worker agents, or route a coding
 ## References
 
 - Shortlist item: `opencode-delegation`.
-- Upstream inspiration: Hermes OpenCode references only.
+- Upstream inspiration: external reference OpenCode references only.

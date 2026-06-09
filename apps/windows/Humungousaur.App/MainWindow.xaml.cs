@@ -31,6 +31,7 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
         SystemBackdrop = new MicaBackdrop();
         ExtendsContentIntoTitleBar = true;
+        AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "Humungousaur.ico"));
         SetTitleBar(AppTitleBar);
 
         RootGrid.Loaded += RootGrid_Loaded;
@@ -45,7 +46,7 @@ public sealed partial class MainWindow : Window
     {
         _settings = _settingsStore.Load();
         ApplySettingsToUi();
-        ShellNav.SelectedItem = ShellNav.MenuItems[0];
+        ShellNav.SelectedItem = FirstNavigationItem("assistant");
         ShowPage("assistant");
         AddChat("Humungousaur", "Native shell ready. Connect to the local agent or start it from Runtime.", "assistant");
         await RefreshAllAsync();
@@ -218,13 +219,13 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            var result = await _api.SendStimulusAsync(text, source, responseMode, _settings);
-            var response = result["response"]?.GetValue<string>()
-                ?? result["run"]?["final_response"]?.GetValue<string>()
-                ?? result["decision"]?["reason"]?.GetValue<string>()
-                ?? AgentApiClient.Pretty(result);
-            AddChat("Humungousaur", response, "assistant");
+            AddChat("Thinking", "Connected to the live agent stream.", "activity");
+            await foreach (var streamEvent in _api.StreamStimulusAsync(text, source, responseMode, _settings))
+            {
+                ApplyStreamEvent(streamEvent);
+            }
             await RefreshAutonomyAsync();
+            await RefreshRuntimeAsync();
         }
         catch (Exception exc)
         {
@@ -771,6 +772,13 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private NavigationViewItem? FirstNavigationItem(string tag)
+    {
+        return ShellNav.MenuItems
+            .OfType<NavigationViewItem>()
+            .FirstOrDefault(item => string.Equals(item.Tag?.ToString(), tag, StringComparison.OrdinalIgnoreCase));
+    }
+
     private void ShowPage(string tag)
     {
         AssistantPage.Visibility = tag == "assistant" ? Visibility.Visible : Visibility.Collapsed;
@@ -1167,6 +1175,114 @@ public sealed partial class MainWindow : Window
         ChatLog.ScrollIntoView(_chat.Last());
     }
 
+    private void ApplyStreamEvent(AgentStreamEvent streamEvent)
+    {
+        if (streamEvent.Event == "final_response")
+        {
+            var response = streamEvent.Data["response"]?.GetValue<string>()
+                ?? streamEvent.Data["result"]?["response"]?.GetValue<string>()
+                ?? AgentApiClient.Pretty(streamEvent.Data);
+            AddChat("Humungousaur", response, "assistant");
+            return;
+        }
+        if (streamEvent.Event == "stream_error")
+        {
+            AddChat("Humungousaur", streamEvent.Data["error"]?.GetValue<string>() ?? "The stream failed.", "error");
+            return;
+        }
+        if (streamEvent.Event != "run_event")
+        {
+            return;
+        }
+
+        var eventType = streamEvent.Data["event_type"]?.GetValue<string>() ?? "";
+        var message = streamEvent.Data["message"]?.GetValue<string>() ?? Humanize(eventType);
+        var payload = streamEvent.Data["payload"] as JsonObject;
+        switch (eventType)
+        {
+            case "run_started":
+            case "planning_context_collected":
+                AddChat("Thinking", message, "activity");
+                break;
+            case "plan_created":
+                AddChat("Plan", FormatPlannedSteps(payload), "activity");
+                var skillText = FormatSelectedSkills(payload);
+                if (!string.IsNullOrWhiteSpace(skillText))
+                {
+                    AddChat("Skills", skillText, "activity");
+                }
+                break;
+            case "action_started":
+                AddChat(
+                    "Tool",
+                    $"{Humanize(payload?["tool_name"]?.GetValue<string>() ?? "tool")}: {payload?["reason"]?.GetValue<string>() ?? message}",
+                    "activity");
+                break;
+            case "action_finished":
+                AddChat(
+                    "Tool",
+                    $"{Humanize(payload?["tool_name"]?.GetValue<string>() ?? "tool")} {Humanize(payload?["status"]?.GetValue<string>() ?? "")}: {payload?["summary"]?.GetValue<string>() ?? message}",
+                    "activity");
+                break;
+            case "run_waiting_for_approval":
+                AddChat("Approval", message, "activity");
+                break;
+            case "run_finished":
+            case "run_cancelled":
+                AddChat("Run", message, "activity");
+                break;
+        }
+    }
+
+    private static string FormatPlannedSteps(JsonObject? payload)
+    {
+        var planned = payload?["planned_steps"] as JsonArray;
+        if (planned is not null && planned.Count > 0)
+        {
+            return string.Join(
+                Environment.NewLine,
+                planned.Select((step, index) =>
+                {
+                    var tool = Humanize(step?["tool_name"]?.GetValue<string>() ?? "tool");
+                    var reason = step?["reason"]?.GetValue<string>() ?? "";
+                    return string.IsNullOrWhiteSpace(reason) ? $"{index + 1}. {tool}" : $"{index + 1}. {tool}: {reason}";
+                }));
+        }
+
+        var steps = payload?["steps"] as JsonArray;
+        if (steps is null || steps.Count == 0)
+        {
+            return "No tool steps planned.";
+        }
+        return string.Join(", ", steps.Select(step => Humanize(step?.GetValue<string>() ?? "")));
+    }
+
+    private static string FormatSelectedSkills(JsonObject? payload)
+    {
+        var skills = payload?["active_workspace_skills"] as JsonArray;
+        if (skills is null || skills.Count == 0)
+        {
+            return "";
+        }
+        return string.Join(
+            ", ",
+            skills.Select(skill => skill?["name"]?.GetValue<string>() ?? skill?["relative_path"]?.GetValue<string>() ?? "")
+                .Where(value => !string.IsNullOrWhiteSpace(value)));
+    }
+
+    private static string Humanize(string value)
+    {
+        var clean = value.Replace("_", " ").Replace("-", " ").Replace(".", " ").Trim();
+        if (string.IsNullOrWhiteSpace(clean))
+        {
+            return "";
+        }
+        return string.Join(
+            " ",
+            clean.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                .Select(word => word.Length <= 1 ? word.ToUpperInvariant() : char.ToUpperInvariant(word[0]) + word[1..]));
+    }
+
     private void AddProcessLine(string line)
     {
         _processLines.Add($"{DateTime.Now:h:mm:ss tt}  {line}");
@@ -1179,6 +1295,7 @@ public sealed partial class MainWindow : Window
     private void SetStatus(bool online, string text)
     {
         StatusDot.Fill = new SolidColorBrush(online ? Colors.SeaGreen : Colors.IndianRed);
+        PaneStatusDot.Fill = StatusDot.Fill;
         StatusText.Text = text;
     }
 

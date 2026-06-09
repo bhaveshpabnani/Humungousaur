@@ -42,7 +42,7 @@ Use this skill only when the user explicitly asks to message someone else on Wha
 ## Native Implementation Boundaries
 
 - Normal WhatsApp assistant conversations go through `channel-gateway` and Humungousaur channel tools.
-- `wacli` is a local CLI adapter path invoked through `run_shell_command`, not an imported OpenClaw/third-party runtime dependency.
+- `wacli` is a local CLI adapter path invoked through `run_shell_command`, not an imported external reference/third-party runtime dependency.
 - Missing `wacli`, unauthenticated QR state, ambiguous JIDs, or send errors must be reported as blockers.
 
 ## Search

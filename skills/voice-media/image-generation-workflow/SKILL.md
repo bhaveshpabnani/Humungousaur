@@ -39,7 +39,7 @@ Use for generated images, mockups, illustrations, textures, icons, storyboards, 
 
 ## Native Implementation Boundaries
 
-- Do not import Hermes ComfyUI or OpenClaw image plugins.
+- Do not import external reference ComfyUI or external reference image plugins.
 - Image providers require Humungousaur-owned adapters or approved available tools.
 - Prompt drafts are not generated artifacts.
 - Storyboard artifacts are local visual planning outputs and must be labeled separately from generated images.

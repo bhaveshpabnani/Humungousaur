@@ -46,7 +46,7 @@ Use for unfamiliar repos, architecture summaries, "where is this implemented", d
 ## Native Implementation Boundaries
 
 - Use Humungousaur file/shell tools or current workspace tools.
-- Do not import Hermes codebase-inspection scripts as implementation.
+- Do not import external reference codebase-inspection scripts as implementation.
 - Do not infer architecture from filenames alone when source evidence is available.
 
 ## Safety And Approval
@@ -70,4 +70,4 @@ Use for unfamiliar repos, architecture summaries, "where is this implemented", d
 ## References
 
 - Shortlist item: `codebase-inspection`.
-- Upstream inspiration: Hermes codebase inspection reference only.
+- Upstream inspiration: external reference codebase inspection reference only.

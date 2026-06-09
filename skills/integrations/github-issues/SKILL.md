@@ -45,7 +45,7 @@ Use for issue creation, triage, updates, linking PRs, labeling, milestones, and 
 
 - Use native Humungousaur GitHub packet tools first for drafts and triage.
 - Use native shell/gh only for approved live GitHub action.
-- Do not import Hermes GitHub issue scripts.
+- Do not import external reference GitHub issue scripts.
 - Do not pretend GitHub was updated when only a draft was written.
 
 ## Safety And Approval

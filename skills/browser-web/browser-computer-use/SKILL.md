@@ -9,9 +9,37 @@ description: Use browser, Playwright, and computer-use style tools through obser
 
 - `browser_live_status`
 - `browser_live_open`
+- `browser_live_navigate`
 - `browser_live_observe`
+- `browser_live_back`
+- `browser_live_forward`
+- `browser_live_reload`
+- `browser_live_html`
+- `browser_live_page_search`
+- `browser_live_find_elements`
+- `browser_live_extract`
 - `browser_live_click`
+- `browser_live_hover`
+- `browser_live_click_coordinates`
+- `browser_live_drag`
+- `browser_live_drag_coordinates`
 - `browser_live_type`
+- `browser_live_fill_form`
+- `browser_live_scroll`
+- `browser_live_scroll_to_text`
+- `browser_live_resize`
+- `browser_live_press_key`
+- `browser_live_tabs`
+- `browser_live_new_tab`
+- `browser_live_switch_tab`
+- `browser_live_close_tab`
+- `browser_live_query_selector`
+- `browser_live_dropdown_options`
+- `browser_live_select_option`
+- `browser_live_upload_file`
+- `browser_live_download`
+- `browser_live_save_pdf`
+- `browser_live_evaluate_js`
 - `browser_live_screenshot`
 - `browser_live_wait`
 - `os_active_window`
@@ -47,7 +75,7 @@ Use this skill when a task requires web navigation, browser UI testing, desktop 
 ## Native Implementation Boundaries
 
 - Use Humungousaur `browser_live_*`, stored browser-session tools, `os_*`, and screen tools.
-- Do not import Browser Use, OpenAI computer-use, Claude computer-use, Playwright wrappers, OpenClaw, or Windows-use as implementation.
+- Do not import Browser Use, OpenAI computer-use, Claude computer-use, Playwright wrappers, external reference, or Windows-use as implementation.
 - Reference projects may inform the observe-act-verify loop, but Humungousaur executes through its own schemas, approval gates, audit logs, and dry-run behavior.
 - Coordinates are fallback-only when semantic element IDs are unavailable and the visual target is stable.
 

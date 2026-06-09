@@ -40,7 +40,7 @@ Use for Ollama, voice wakeup, browser live backend, automation daemon, channels,
 ## Native Implementation Boundaries
 
 - Use Humungousaur status/trigger tools.
-- Do not import OpenClaw active-maintenance code.
+- Do not import external reference active-maintenance code.
 - Do not run hidden background loops.
 
 ## Safety And Approval

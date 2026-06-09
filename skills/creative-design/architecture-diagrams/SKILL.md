@@ -44,7 +44,7 @@ Use for agent architecture, API flows, deployment maps, data pipelines, sequence
 ## Native Implementation Boundaries
 
 - Use Humungousaur markdown/canvas/file tools.
-- Do not import Hermes architecture-diagram scripts.
+- Do not import external reference architecture-diagram scripts.
 - Do not make diagrams from stale assumptions.
 - Native diagram artifacts must mark `current`, `proposed`, or `draft` status explicitly.
 

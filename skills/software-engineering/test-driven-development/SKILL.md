@@ -39,7 +39,7 @@ Use for bug fixes, new behavior, parser/planner changes, shared APIs, regression
 ## Native Implementation Boundaries
 
 - Use the repo's own test framework and Humungousaur tools.
-- Do not import Hermes TDD scripts.
+- Do not import external reference TDD scripts.
 - Do not replace model-led planning with hardcoded test-name routing.
 
 ## Safety And Approval
@@ -63,4 +63,4 @@ Use for bug fixes, new behavior, parser/planner changes, shared APIs, regression
 ## References
 
 - Shortlist item: `test-driven-development`.
-- Upstream inspiration: Hermes TDD reference only.
+- Upstream inspiration: external reference TDD reference only.

@@ -40,7 +40,7 @@ Use for UI builds, redesigns, frontend polish, app screens, visual QA, responsiv
 ## Native Implementation Boundaries
 
 - Use repo-native frontend code and Humungousaur browser tools.
-- Do not import Anthropic frontend-design or Hermes design code.
+- Do not import Anthropic frontend-design or external reference design code.
 - Generated visual references may inspire, but implementation must be project-owned.
 
 ## Safety And Approval

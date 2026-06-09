@@ -39,7 +39,7 @@ Use for short videos, explainer animations, Manim-style scenes, ASCII/video conc
 
 ## Native Implementation Boundaries
 
-- Do not import Hermes Manim or ASCII video scripts.
+- Do not import external reference Manim or ASCII video scripts.
 - Rendering pipelines must be Humungousaur-owned or explicitly approved.
 - Storyboards are not rendered videos.
 - The native storyboard tool creates Markdown/JSON/SVG contact sheets and does not render video files.

@@ -9,11 +9,32 @@ from urllib.parse import parse_qs, urlparse
 from humungousaur.config import AgentConfig
 from humungousaur.schemas import ActionStatus
 from humungousaur.tools.external_tools import (
+    CitationRedirectCanonicalizeTool,
+    DevicePairingPrepareTool,
+    ExternalSkillCatalogTool,
+    ExternalSkillShortlistPrepareTool,
     ExternalIntegrationsStatusTool,
+    GoogleMeetContextPrepareTool,
+    LTMRecordPrepareTool,
+    LTMSearchTool,
+    LTMStatusTool,
+    MemoryWikiEntryPrepareTool,
+    MemoryWikiSearchTool,
+    OCPathResolveTool,
+    NativeCapabilityDeltaAuditTool,
+    ExternalExtensionCatalogTool,
+    ExternalExtensionManifestTool,
+    NativeProviderConfigPrepareTool,
+    NativeProviderRegistryTool,
+    NativeProviderRequestPrepareTool,
+    WebProviderRegistryTool,
+    WebProviderRequestPrepareTool,
+    PolicyExplainTool,
     RSSFeedReadTool,
     RSSWatchListTool,
     RSSWatchPrepareTool,
     ScreenpipeSearchTool,
+    WebReadabilityExtractTool,
 )
 
 
@@ -30,6 +51,278 @@ class ExternalToolTests(unittest.TestCase):
             open_interpreter = next(item for item in result.output["integrations"] if item["key"] == "open_interpreter")
             self.assertEqual(open_interpreter["license"], "AGPL-3.0")
             self.assertIn("plugin integration", open_interpreter["install_hint"])
+
+    def test_external_extension_catalog_reads_metadata_without_executing_code(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            _write_native_extension_fixture(workspace)
+            _write_native_docs_fixture(workspace)
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts").normalized()
+
+            result = ExternalExtensionCatalogTool().execute({"kind": "all", "limit": 10}, config)
+            manifest = ExternalExtensionManifestTool().execute({"extension_id": "line", "include_package": True}, config)
+
+        self.assertEqual(result.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(result.output["summary"]["total"], 2)
+        line = next(item for item in result.output["extensions"] if item["extension_id"] == "line")
+        self.assertEqual(line["channels"], ["line"])
+        self.assertEqual(line["command_aliases"], ["line-login"])
+        self.assertEqual(line["env_vars"], ["LINE_CHANNEL_SECRET"])
+        self.assertFalse(line["provenance"]["runtime_code_executed"])
+        self.assertIn(line["humungousaur_mapping"]["status"], {"native_present", "native_gap_pending", "external_tracked"})
+        self.assertEqual(manifest.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(manifest.output["extension"]["package"]["script_names"], ["postinstall"])
+
+    def test_external_skill_catalog_reports_category_coverage(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            _write_external_skill_fixture(workspace)
+            _write_native_docs_fixture(workspace)
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts").normalized()
+
+            result = ExternalSkillCatalogTool().execute({"category": "browser-and-automation", "limit": 5}, config)
+
+        self.assertEqual(result.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(result.output["summary"]["total"], 2)
+        first = result.output["skills"][0]
+        self.assertEqual(first["category"], "browser-and-automation")
+        self.assertFalse(first["provenance"]["runtime_code_executed"])
+        self.assertIn("coverage_status", first)
+
+    def test_external_skill_shortlist_prepare_writes_native_proposals_without_importing_code(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            _write_external_skill_fixture(workspace)
+            _write_native_docs_fixture(workspace)
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts").normalized()
+
+            result = ExternalSkillShortlistPrepareTool().execute(
+                {
+                    "category": "browser-and-automation",
+                    "query": "browser",
+                    "max_items": 2,
+                    "reason": "Prioritize owned browser skills.",
+                },
+                config,
+            )
+            path_exists = Path(result.output["path"]).exists()
+
+        self.assertEqual(result.status, ActionStatus.SUCCEEDED)
+        self.assertTrue(path_exists)
+        self.assertEqual(result.output["shortlist"]["status"], "prepared_for_native_implementation_review")
+        self.assertGreaterEqual(result.output["shortlist"]["proposal_count"], 1)
+        proposal = result.output["shortlist"]["proposals"][0]
+        self.assertEqual(proposal["implementation_mode"], "humungousaur_owned_from_scratch")
+        self.assertFalse(proposal["source_evidence"]["trusted_as_implementation"])
+
+    def test_native_provider_registry_and_config_prepare_are_redacted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(
+                workspace=workspace,
+                data_dir=workspace / "artifacts",
+                runtime_secrets={"CEREBRAS_API_KEY": "secret-value"},
+            ).normalized()
+
+            registry = NativeProviderRegistryTool().execute({"provider_id": "cerebras"}, config)
+            prepared = NativeProviderConfigPrepareTool().execute(
+                {"provider_id": "cerebras", "model": "llama3.1-8b", "reason": "Provider adapter smoke."},
+                config,
+            )
+            provider_config_path_exists = Path(prepared.output["path"]).exists()
+
+        self.assertEqual(registry.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(registry.output["providers"][0]["provider_id"], "cerebras")
+        self.assertTrue(registry.output["providers"][0]["configured"])
+        self.assertEqual(registry.output["providers"][0]["missing_env"], [])
+        self.assertEqual(prepared.status, ActionStatus.SUCCEEDED)
+        self.assertTrue(provider_config_path_exists)
+        self.assertEqual(prepared.output["provider_config"]["api_key_value"], "redacted")
+        self.assertNotIn("secret-value", json.dumps(prepared.output))
+
+    def test_native_provider_request_prepare_supports_synthetic_and_prepared_packets(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts").normalized()
+
+            synthetic = NativeProviderRequestPrepareTool().execute(
+                {"provider_id": "synthetic", "prompt": "hello", "reason": "Exercise local provider."},
+                config,
+            )
+            prepared = NativeProviderRequestPrepareTool().execute(
+                {"provider_id": "mistral", "prompt": "hello", "reason": "Prepare provider packet."},
+                config,
+            )
+            request_path_exists = Path(prepared.output["path"]).exists()
+
+        self.assertEqual(synthetic.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(synthetic.output["status"], "completed_locally")
+        self.assertFalse(synthetic.output["live_request_sent"])
+        self.assertEqual(prepared.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(prepared.output["request"]["status"], "prepared_not_sent")
+        self.assertFalse(prepared.output["request"]["live_request_sent"])
+        self.assertIn("MISTRAL_API_KEY", prepared.output["request"]["missing_env"])
+        self.assertTrue(request_path_exists)
+
+    def test_web_provider_registry_and_request_prepare_are_redacted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(
+                workspace=workspace,
+                data_dir=workspace / "artifacts",
+                runtime_secrets={"BRAVE_SEARCH_API_KEY": "brave-secret"},
+            ).normalized()
+
+            registry = WebProviderRegistryTool().execute({"provider_id": "brave"}, config)
+            prepared = WebProviderRequestPrepareTool().execute(
+                {"provider_id": "firecrawl", "mode": "scrape", "url": "https://example.com", "reason": "Prepare scrape."},
+                config,
+            )
+            request_path_exists = Path(prepared.output["path"]).exists()
+
+        self.assertEqual(registry.status, ActionStatus.SUCCEEDED)
+        self.assertTrue(registry.output["providers"][0]["configured"])
+        self.assertEqual(registry.output["providers"][0]["missing_env"], [])
+        self.assertEqual(prepared.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(prepared.output["request"]["status"], "prepared_not_sent")
+        self.assertIn("FIRECRAWL_API_KEY", prepared.output["request"]["missing_env"])
+        self.assertNotIn("brave-secret", json.dumps(registry.output))
+        self.assertTrue(request_path_exists)
+
+    def test_web_readability_extract_and_citation_canonicalize_are_source_bound(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            page = workspace / "page.html"
+            page.write_text(
+                """<!doctype html>
+<html>
+  <head>
+    <title>Example Page</title>
+    <link rel="canonical" href="https://example.com/articles/main?utm_source=nope" />
+    <style>.hidden{display:none}</style>
+  </head>
+  <body>
+    <article>
+      <h1>Readable Heading</h1>
+      <p>This is readable source text for citation extraction.</p>
+      <a href="/next?utm_campaign=nope&keep=1">Next page</a>
+    </article>
+    <script>window.secret = true;</script>
+  </body>
+</html>
+""",
+                encoding="utf-8",
+            )
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts").normalized()
+
+            extracted = WebReadabilityExtractTool().execute({"source": "page.html", "include_links": True}, config)
+            canonicalized = CitationRedirectCanonicalizeTool().execute(
+                {
+                    "results": [
+                        {
+                            "title": "Wrapped",
+                            "url": "https://duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.example.com%2Farticle%2F%3Futm_source%3Dx%26keep%3D1",
+                        }
+                    ],
+                    "source_provider": "duckduckgo",
+                },
+                config,
+            )
+
+        self.assertEqual(extracted.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(extracted.output["title"], "Example Page")
+        self.assertIn("Readable Heading", extracted.output["text"])
+        self.assertNotIn("window.secret", extracted.output["text"])
+        self.assertEqual(extracted.output["canonical_url"], "https://example.com/articles/main?utm_source=nope")
+        self.assertEqual(canonicalized.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(canonicalized.output["results"][0]["canonical_url"], "https://example.com/article?keep=1")
+
+    def test_native_delta_audit_fails_on_duplicate_native_parity_task_lines(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            _write_native_extension_fixture(workspace)
+            _write_external_skill_fixture(workspace)
+            docs = workspace / "docs"
+            docs.mkdir(parents=True)
+            duplicate = "- `[ ]` Shared duplicate task.\n"
+            (docs / "NATIVE_CAPABILITY_IMPLEMENTATION_TASKS.md").write_text("# native capability\n\n" + duplicate, encoding="utf-8")
+            (docs / "NATIVE_PARITY_IMPLEMENTATION_TASKS.md").write_text("# native parity\n\n" + duplicate, encoding="utf-8")
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts").normalized()
+
+            result = NativeCapabilityDeltaAuditTool().execute({"include_examples": False}, config)
+
+        self.assertEqual(result.status, ActionStatus.FAILED)
+        self.assertEqual(result.output["summary"]["duplicate_task_count"], 1)
+
+    def test_native_command_surfaces_prepare_local_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts").normalized()
+
+            pairing = DevicePairingPrepareTool().execute(
+                {
+                    "device_type": "phone",
+                    "pairing_method": "QR",
+                    "setup_steps": ["Open the mobile app", "Scan QR after approval"],
+                    "required_env_refs": ["PHONE_BRIDGE_TOKEN"],
+                    "approval_note": "Prepare phone pairing plan.",
+                },
+                config,
+            )
+            meet = GoogleMeetContextPrepareTool().execute(
+                {
+                    "meeting_url": "https://meet.google.com/abc-defg-hij",
+                    "capture_goal": "Capture agenda context after consent.",
+                    "approval_note": "Meeting capture needs consent.",
+                },
+                config,
+            )
+            ltm = LTMRecordPrepareTool().execute(
+                {"title": "native capability note", "content": "Remember adapter gap.", "tags": ["adapter"], "reason": "Track parity work."},
+                config,
+            )
+            ltm_search = LTMSearchTool().execute({"query": "adapter"}, config)
+            pairing_path_exists = Path(pairing.output["path"]).exists()
+
+        self.assertEqual(pairing.status, ActionStatus.SUCCEEDED)
+        self.assertTrue(pairing_path_exists)
+        self.assertEqual(pairing.output["pairing"]["status"], "prepared_not_paired")
+        self.assertEqual(meet.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(meet.output["plan"]["status"], "prepared_not_joined")
+        self.assertEqual(ltm.status, ActionStatus.SUCCEEDED)
+        self.assertTrue(ltm.output["record"]["durable_cognitive_memory_written"])
+        self.assertEqual(ltm_search.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(len(ltm_search.output["matches"]), 1)
+
+    def test_oc_path_policy_and_memory_wiki_tools(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            (workspace / "README.md").write_text("hello", encoding="utf-8")
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts").normalized()
+
+            resolved = OCPathResolveTool().execute({"path": "README.md", "must_exist": True}, config)
+            policy = PolicyExplainTool().execute({"include_channels": False}, config)
+            prepared = MemoryWikiEntryPrepareTool().execute(
+                {
+                    "title": "Adapter Note",
+                    "body": "native capability adapter implementation note.",
+                    "tags": ["native"],
+                    "evidence_refs": ["test"],
+                    "reason": "Exercise Memory Wiki surface.",
+                },
+                config,
+            )
+            searched = MemoryWikiSearchTool().execute({"query": "adapter"}, config)
+            ltm_status = LTMStatusTool().execute({}, config)
+
+        self.assertEqual(resolved.status, ActionStatus.SUCCEEDED)
+        self.assertTrue(resolved.output["allowed_read"])
+        self.assertEqual(policy.status, ActionStatus.SUCCEEDED)
+        self.assertIsNone(policy.output["selected_tool"])
+        self.assertEqual(prepared.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(searched.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(len(searched.output["matches"]), 1)
+        self.assertIn(ltm_status.output["vector_backend"], {"sqlite_fts5", "sqlite_like"})
 
     def test_screenpipe_search_queries_loopback_api_and_trims_results(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -236,6 +529,63 @@ def _atom_fixture() -> str:
   </entry>
 </feed>
 """
+
+
+def _write_native_extension_fixture(workspace: Path) -> None:
+    extensions = workspace / "external_repos" / "native" / "extensions"
+    line = extensions / "line"
+    line.mkdir(parents=True)
+    (line / "native.plugin.json").write_text(
+        json.dumps(
+            {
+                "id": "line",
+                "name": "LINE",
+                "channels": ["line"],
+                "commandAliases": [{"name": "line-login"}],
+                "envVars": ["LINE_CHANNEL_SECRET"],
+                "setup": {"requiresRuntime": True},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (line / "package.json").write_text(
+        json.dumps({"name": "@native/line", "version": "1.0.0", "scripts": {"postinstall": "node setup.js"}}),
+        encoding="utf-8",
+    )
+    provider = extensions / "cerebras"
+    provider.mkdir(parents=True)
+    (provider / "native.plugin.json").write_text(
+        json.dumps({"id": "cerebras", "name": "Cerebras", "providers": ["cerebras"]}),
+        encoding="utf-8",
+    )
+
+
+def _write_external_skill_fixture(workspace: Path) -> None:
+    categories = workspace / "external_repos" / "external-skill-catalog" / "categories"
+    categories.mkdir(parents=True)
+    (categories / "browser-and-automation.md").write_text(
+        """# Browser And Automation
+
+**2 skills**
+
+- [agent-browser](https://clawskills.sh/skills/acme-agent-browser) - Headless browser automation for agents.
+- [form-filler](https://clawskills.sh/skills/acme-form-filler) - Fill and review forms with approval gates.
+""",
+        encoding="utf-8",
+    )
+
+
+def _write_native_docs_fixture(workspace: Path) -> None:
+    docs = workspace / "docs"
+    docs.mkdir(parents=True, exist_ok=True)
+    (docs / "NATIVE_PARITY_IMPLEMENTATION_TASKS.md").write_text(
+        "# native parity\n\n- `[ ]` Add unrelated Feishu support.\n",
+        encoding="utf-8",
+    )
+    (docs / "NATIVE_CAPABILITY_IMPLEMENTATION_TASKS.md").write_text(
+        "# native capability\n\n- `[ ]` Add LINE channel adapter.\n",
+        encoding="utf-8",
+    )
 
 
 if __name__ == "__main__":

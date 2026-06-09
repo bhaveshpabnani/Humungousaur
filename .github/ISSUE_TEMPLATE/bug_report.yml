@@ -1,0 +1,77 @@
+name: Bug report
+description: Report a reproducible defect, regression, crash, or incorrect behavior.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please report one issue at a time. Keep secrets, private screenshots, private channel logs, cookies, tokens, and API keys out of public issues.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One sentence describing the observed bug.
+      placeholder: The macOS app shows stale approval state after rejecting a pending browser action.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Provide the shortest concrete repro path.
+      placeholder: |
+        1. Start the daemon with `python -m humungousaur serve --workspace . --port 8765`.
+        2. Launch the macOS app.
+        3. Trigger a high-risk browser action.
+        4. Reject the approval.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: 0.1.0 / commit SHA
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: macOS 15.5 / Windows 11 / Ubuntu 24.04
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: Python 3.12.8
+  - type: input
+    id: model
+    attributes:
+      label: Model provider and model
+      placeholder: openai:gpt-5-mini / groq:... / ollama:llama3.1
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs, screenshots, or command output
+      description: Redact private data and secrets.
+      render: shell
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: Who is affected, how often it happens, and whether data, approvals, channels, files, browser state, or desktop control are involved.

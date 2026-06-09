@@ -157,3 +157,9 @@ public sealed class ChatLogItem
     public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.Now;
     public string TimeText => Timestamp.ToLocalTime().ToString("h:mm tt");
 }
+
+public sealed class AgentStreamEvent
+{
+    public string Event { get; init; } = "";
+    public JsonObject Data { get; init; } = [];
+}

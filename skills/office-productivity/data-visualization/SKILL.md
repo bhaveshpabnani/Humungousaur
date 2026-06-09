@@ -42,7 +42,7 @@ Use for charts, diagrams, architecture flows, KPI visuals, explanatory graphics,
 ## Native Implementation Boundaries
 
 - Use Humungousaur interpreter and canvas tools.
-- Do not import Hermes diagram or Anthropic canvas skill code.
+- Do not import external reference diagram or Anthropic canvas skill code.
 - Bar/line SVG chart generation and inspection are native; add richer chart generators as native tools if needed.
 
 ## Safety And Approval

@@ -73,5 +73,5 @@ Use when the user says how they want the assistant to communicate, how decisions
 ## References
 
 - Shortlist item: `persona-evolution`.
-- Upstream inspiration: personal-development and second-brain skill patterns from OpenClaw.
+- Upstream inspiration: personal-development and second-brain skill patterns from external reference.
 - Humungousaur cognition: persona evolution providers.

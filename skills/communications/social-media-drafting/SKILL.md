@@ -43,7 +43,7 @@ Use for LinkedIn posts, X/Twitter-style threads, community updates, launch posts
 
 ## Native Implementation Boundaries
 
-- Do not use Hermes X/Twitter utilities, OpenClaw social plugins, or third-party posting scripts as implementation.
+- Do not use external reference X/Twitter utilities, external reference social plugins, or third-party posting scripts as implementation.
 - If a native social API adapter does not exist, provide drafts or use approved browser control as a user-directed path.
 
 ## Safety And Approval
@@ -67,4 +67,4 @@ Use for LinkedIn posts, X/Twitter-style threads, community updates, launch posts
 ## References
 
 - Shortlist item: `social-media-drafting`.
-- Upstream inspiration: Hermes X/Twitter and OpenClaw social categories as reference only.
+- Upstream inspiration: external reference X/Twitter and external reference social categories as reference only.

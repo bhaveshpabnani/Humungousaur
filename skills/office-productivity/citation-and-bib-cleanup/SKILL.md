@@ -40,7 +40,7 @@ Use for BibTeX cleanup, citation lists, related-work references, DOI/arXiv metad
 ## Native Implementation Boundaries
 
 - Use Humungousaur web/PDF/search tools.
-- Do not import OpenClaw abstract searcher or citation scripts.
+- Do not import external reference abstract searcher or citation scripts.
 - Dedicated DOI/arXiv adapters must be native.
 - Bibliography creation is artifact-only; it does not claim live DOI/arXiv verification unless source evidence is provided.
 

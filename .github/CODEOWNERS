@@ -1,0 +1,8 @@
+# Security-sensitive surfaces should receive maintainer attention.
+/humungousaur/safety/ @bhaveshpabnani
+/humungousaur/tools/ @bhaveshpabnani
+/humungousaur/resources/prompts/ @bhaveshpabnani
+/apps/ @bhaveshpabnani
+/.github/workflows/ @bhaveshpabnani
+/script/ @bhaveshpabnani
+/SECURITY.md @bhaveshpabnani

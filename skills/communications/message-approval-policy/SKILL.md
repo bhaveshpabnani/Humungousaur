@@ -45,7 +45,7 @@ Use before sending any message to another person, room, phone number, work chann
 ## Native Implementation Boundaries
 
 - Approval policy is enforced through Humungousaur risk levels, approval queue, channel tools, workflow tools, and audit logs.
-- Do not use upstream AgentGate/Passport/OpenClaw policy code directly.
+- Do not use upstream AgentGate/Passport/external reference policy code directly.
 - If a new external action tool is added, make it Humungousaur-owned, schema-bound, and approval-gated.
 
 ## Safety And Approval

@@ -23,15 +23,28 @@ from humungousaur.tools.browser_tools import (
     BrowserFindTextTool,
     BrowserFillFormTool,
     BrowserForgetSessionTool,
+    BrowserLiveBackTool,
     BrowserLiveCloseTabTool,
     BrowserLiveClickCoordinatesTool,
+    BrowserLiveDragTool,
+    BrowserLiveDragCoordinatesTool,
     BrowserLiveDownloadTool,
     BrowserLiveDropdownOptionsTool,
     BrowserLiveEvaluateJsTool,
+    BrowserLiveExtractTool,
+    BrowserLiveFillFormTool,
+    BrowserLiveFindElementsTool,
+    BrowserLiveForwardTool,
+    BrowserLiveHtmlTool,
+    BrowserLiveHoverTool,
+    BrowserLiveNavigateTool,
     BrowserLiveNewTabTool,
     BrowserLiveOpenTool,
+    BrowserLivePageSearchTool,
     BrowserLivePressKeyTool,
     BrowserLiveQuerySelectorTool,
+    BrowserLiveReloadTool,
+    BrowserLiveResizeTool,
     BrowserLiveSavePdfTool,
     BrowserLiveScrollToTextTool,
     BrowserLiveSelectOptionTool,
@@ -467,6 +480,48 @@ class BrowserToolTests(unittest.TestCase):
 
             self.assertEqual(result.status, ActionStatus.BLOCKED)
 
+    def test_live_browser_navigation_history_and_reload_dry_runs_do_not_mutate_page(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(
+                workspace=Path(tmp_dir),
+                data_dir=Path(tmp_dir) / "artifacts",
+                dry_run=True,
+            ).normalized()
+            with running_web_server({"/": SAMPLE_HTML}) as base_url:
+                navigate = BrowserLiveNavigateTool().execute(
+                    {"live_session_id": "live-test", "url": f"{base_url}/next", "new_tab": False},
+                    config,
+                )
+            back = BrowserLiveBackTool().execute({"live_session_id": "live-test"}, config)
+            forward = BrowserLiveForwardTool().execute({"live_session_id": "live-test"}, config)
+            reload = BrowserLiveReloadTool().execute({"live_session_id": "live-test"}, config)
+
+            self.assertEqual(navigate.status, ActionStatus.SKIPPED)
+            self.assertEqual(back.status, ActionStatus.SKIPPED)
+            self.assertEqual(forward.status, ActionStatus.SKIPPED)
+            self.assertEqual(reload.status, ActionStatus.SKIPPED)
+            self.assertTrue(navigate.output["navigation_not_performed"])
+            self.assertTrue(back.output["history_not_changed"])
+            self.assertEqual(back.output["direction"], "back")
+            self.assertTrue(forward.output["history_not_changed"])
+            self.assertEqual(forward.output["direction"], "forward")
+            self.assertTrue(reload.output["reload_not_performed"])
+
+    def test_live_browser_navigate_blocks_unsafe_url(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(
+                workspace=Path(tmp_dir),
+                data_dir=Path(tmp_dir) / "artifacts",
+                dry_run=True,
+            ).normalized()
+
+            result = BrowserLiveNavigateTool().execute(
+                {"live_session_id": "live-test", "url": "file:///C:/secret.txt"},
+                config,
+            )
+
+            self.assertEqual(result.status, ActionStatus.BLOCKED)
+
     def test_live_browser_selector_query_dry_run_does_not_query(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = AgentConfig(
@@ -482,6 +537,146 @@ class BrowserToolTests(unittest.TestCase):
 
             self.assertEqual(result.status, ActionStatus.SKIPPED)
             self.assertTrue(result.output["selector_not_queried"])
+
+    def test_live_browser_html_page_search_and_find_elements_dry_runs_do_not_inspect_page(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(
+                workspace=Path(tmp_dir),
+                data_dir=Path(tmp_dir) / "artifacts",
+                dry_run=True,
+            ).normalized()
+
+            html = BrowserLiveHtmlTool().execute(
+                {"live_session_id": "live-test", "selector": "main", "max_chars": 500},
+                config,
+            )
+            page_search = BrowserLivePageSearchTool().execute(
+                {"live_session_id": "live-test", "pattern": "Checkout", "css_scope": "main", "max_results": 5},
+                config,
+            )
+            elements = BrowserLiveFindElementsTool().execute(
+                {"live_session_id": "live-test", "selector": "a.product", "attributes": ["href", "data-id"], "max_results": 5},
+                config,
+            )
+            extract = BrowserLiveExtractTool().execute(
+                {"live_session_id": "live-test", "query": "Checkout", "include_links": True, "output_schema": {"type": "object"}},
+                config,
+            )
+
+            self.assertEqual(html.status, ActionStatus.SKIPPED)
+            self.assertEqual(page_search.status, ActionStatus.SKIPPED)
+            self.assertEqual(elements.status, ActionStatus.SKIPPED)
+            self.assertEqual(extract.status, ActionStatus.SKIPPED)
+            self.assertTrue(html.output["html_not_read"])
+            self.assertTrue(page_search.output["page_not_searched"])
+            self.assertTrue(elements.output["elements_not_found"])
+            self.assertTrue(extract.output["extraction_not_performed"])
+
+    def test_live_browser_html_page_search_and_find_elements_delegate_to_manager(self) -> None:
+        class FakeLiveBrowserManager:
+            def html(self, session_id: str, selector: str, max_chars: int):
+                return {
+                    "live_session_id": session_id,
+                    "selector": selector,
+                    "html": "<main>Browser research needle</main>"[:max_chars],
+                    "source": "live_browser_html",
+                }
+
+            def search_page(self, session_id: str, pattern: str, regex: bool, case_sensitive: bool, context_chars: int, css_scope: str, max_results: int):
+                return {
+                    "live_session_id": session_id,
+                    "pattern": pattern,
+                    "regex": regex,
+                    "case_sensitive": case_sensitive,
+                    "css_scope": css_scope,
+                    "matches": [
+                        {
+                            "match_text": "needle",
+                            "context": "Browser research needle",
+                            "element_path": "main",
+                            "char_position": 17,
+                        }
+                    ],
+                    "total": 1,
+                    "has_more": False,
+                    "error": None,
+                    "source": "live_browser_page_search",
+                }
+
+            def find_elements(self, session_id: str, selector: str, attributes: list[str], max_results: int, include_text: bool):
+                return {
+                    "live_session_id": session_id,
+                    "selector": selector,
+                    "attributes": attributes,
+                    "elements": [{"index": 0, "tag": "a", "text": "Next", "attrs": {"href": "https://example.com"}}],
+                    "total": 1,
+                    "showing": 1,
+                    "error": None,
+                    "source": "live_browser_find_elements",
+                }
+
+            def extract(
+                self,
+                session_id: str,
+                query: str,
+                include_links: bool,
+                include_images: bool,
+                start_from_char: int,
+                max_snippets: int,
+                output_schema: dict | None,
+                already_collected: list[str],
+            ):
+                return {
+                    "live_session_id": session_id,
+                    "query": query,
+                    "snippets": [{"index": 0, "text": "Browser research needle", "truncated": False}],
+                    "links": [{"index": 0, "text": "Next", "href": "/next", "resolved_url": "https://example.com/next"}] if include_links else [],
+                    "images": [],
+                    "structured_data": {"summary": "Browser research needle"} if output_schema else {},
+                    "source": "live_browser_extraction",
+                }
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
+            with patch("humungousaur.tools.browser.live_tools.LIVE_BROWSER_MANAGER", FakeLiveBrowserManager()):
+                html = BrowserLiveHtmlTool().execute({"live_session_id": "live-test", "selector": "main", "max_chars": 500}, config)
+                page_search = BrowserLivePageSearchTool().execute({"live_session_id": "live-test", "pattern": "needle"}, config)
+                elements = BrowserLiveFindElementsTool().execute(
+                    {"live_session_id": "live-test", "selector": "a", "attributes": ["href"]},
+                    config,
+                )
+                extract = BrowserLiveExtractTool().execute(
+                    {
+                        "live_session_id": "live-test",
+                        "query": "needle",
+                        "include_links": True,
+                        "output_schema": {"type": "object", "properties": {"summary": {"type": "string"}}},
+                        "already_collected": ["old item"],
+                    },
+                    config,
+                )
+
+        self.assertEqual(html.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(page_search.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(elements.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(extract.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(html.output["source"], "live_browser_html")
+        self.assertEqual(page_search.output["total"], 1)
+        self.assertEqual(elements.output["elements"][0]["attrs"]["href"], "https://example.com")
+        self.assertEqual(extract.output["source"], "live_browser_extraction")
+        self.assertEqual(extract.output["structured_data"]["summary"], "Browser research needle")
+
+    def test_browser_use_style_live_inspection_tools_are_registered(self) -> None:
+        tools = default_tools()
+
+        self.assertIn("browser_live_html", tools)
+        self.assertIn("browser_live_page_search", tools)
+        self.assertIn("browser_live_find_elements", tools)
+        self.assertIn("browser_live_extract", tools)
+        self.assertEqual(tools["browser_live_html"].capability_group, "browser")
+        self.assertEqual(tools["browser_live_page_search"].capability_group, "browser")
+        self.assertEqual(tools["browser_live_find_elements"].capability_group, "browser")
+        self.assertEqual(tools["browser_live_extract"].capability_group, "browser")
 
     def test_live_browser_search_scroll_and_dropdown_dry_runs_do_not_mutate_page(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -545,6 +740,54 @@ class BrowserToolTests(unittest.TestCase):
             self.assertTrue(press.output["key_not_pressed"])
             self.assertTrue(coordinate_click.output["coordinates_not_clicked"])
 
+    def test_live_browser_hover_and_drag_dry_runs_do_not_mutate_page(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(
+                workspace=Path(tmp_dir),
+                data_dir=Path(tmp_dir) / "artifacts",
+                dry_run=True,
+            ).normalized()
+
+            hover = BrowserLiveHoverTool().execute(
+                {"live_session_id": "live-test", "element_id": "live:1"},
+                config,
+            )
+            drag = BrowserLiveDragCoordinatesTool().execute(
+                {"live_session_id": "live-test", "start_x": 10, "start_y": 20, "end_x": 80, "end_y": 120, "reason": "move slider"},
+                config,
+            )
+            element_drag = BrowserLiveDragTool().execute(
+                {"live_session_id": "live-test", "start_element_id": "live:1", "end_element_id": "live:2", "reason": "reorder cards"},
+                config,
+            )
+            fill = BrowserLiveFillFormTool().execute(
+                {
+                    "live_session_id": "live-test",
+                    "fields": [{"element_id": "live:3", "text": "hello"}],
+                    "reason": "fill observed fields",
+                },
+                config,
+            )
+            resize = BrowserLiveResizeTool().execute(
+                {"live_session_id": "live-test", "width": 1440, "height": 900},
+                config,
+            )
+
+            self.assertEqual(hover.status, ActionStatus.SKIPPED)
+            self.assertEqual(drag.status, ActionStatus.SKIPPED)
+            self.assertEqual(element_drag.status, ActionStatus.SKIPPED)
+            self.assertEqual(fill.status, ActionStatus.SKIPPED)
+            self.assertEqual(resize.status, ActionStatus.SKIPPED)
+            self.assertTrue(hover.output["hover_not_performed"])
+            self.assertTrue(drag.output["drag_not_performed"])
+            self.assertTrue(element_drag.output["drag_not_performed"])
+            self.assertTrue(fill.output["fields_not_filled"])
+            self.assertTrue(resize.output["resize_not_performed"])
+            self.assertEqual(drag.output["start"], {"x": 10, "y": 20})
+            self.assertEqual(drag.output["end"], {"x": 80, "y": 120})
+            self.assertEqual(fill.output["field_count"], 1)
+            self.assertEqual(resize.output["viewport"], {"width": 1440, "height": 900})
+
     def test_live_browser_coordinate_click_requires_approval(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
@@ -561,6 +804,23 @@ class BrowserToolTests(unittest.TestCase):
 
             self.assertEqual(result.status, ActionStatus.NEEDS_APPROVAL)
             self.assertEqual(result.output["approval"]["tool_name"], "browser_live_click_coordinates")
+
+    def test_live_browser_coordinate_drag_requires_approval(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
+            executor = Executor(default_tools(), PolicyEngine())
+
+            result = executor.execute(
+                PlannedStep(
+                    "browser_live_drag_coordinates",
+                    {"live_session_id": "live-test", "start_x": 10, "start_y": 20, "end_x": 80, "end_y": 120, "reason": "move slider"},
+                    "test",
+                ),
+                config,
+            )
+
+            self.assertEqual(result.status, ActionStatus.NEEDS_APPROVAL)
+            self.assertEqual(result.output["approval"]["tool_name"], "browser_live_drag_coordinates")
 
     def test_live_browser_upload_dry_run_validates_allowed_file_without_uploading(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

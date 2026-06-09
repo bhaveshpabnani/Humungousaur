@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import threading
 import time
+import uuid
 from dataclasses import asdict
 from datetime import datetime, timezone
 from http import HTTPStatus
@@ -387,6 +388,13 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                     )
                     self._send_json(harness_result_to_dict(result), HTTPStatus.CREATED)
                     return
+                if path == "/stimuli/stream":
+                    text = str(payload.get("text", "")).strip()
+                    if not text:
+                        self._send_error(HTTPStatus.BAD_REQUEST, "Field 'text' is required.")
+                        return
+                    self._stream_stimulus(payload)
+                    return
                 if path == "/channels/inbound":
                     run_config = request_config(effective_config(), payload)
                     result = handle_channel_inbound(
@@ -695,6 +703,110 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
             self.end_headers()
             self.wfile.write(body)
 
+        def _stream_stimulus(self, payload: dict[str, Any]) -> None:
+            run_config = request_config(effective_config(), payload)
+            run_id = str(payload.get("run_id") or uuid.uuid4())
+            stimulus = {
+                "text": str(payload.get("text", "")).strip(),
+                "source": str(payload.get("source", "user_text")),
+                "metadata": payload.get("metadata", {}),
+                "stimulus_id": payload.get("stimulus_id", ""),
+                "occurred_at": payload.get("occurred_at", ""),
+            }
+            approve_high_risk = bool(payload.get("approve_high_risk", False))
+            result_holder: dict[str, Any] = {}
+
+            def worker() -> None:
+                try:
+                    result_holder["result"] = InteractionHarness(run_config).handle(
+                        stimulus,
+                        response_mode=payload.get("response_mode"),
+                        approve_high_risk=approve_high_risk,
+                        run_id=run_id,
+                    )
+                except Exception as exc:
+                    result_holder["error"] = exc
+
+            thread = threading.Thread(target=worker, daemon=True)
+            audit = AuditLog(run_config.audit_db_path)
+            started = time.monotonic()
+            last_event_id = 0
+            last_heartbeat = 0.0
+            self._log_response(HTTPStatus.OK, {"content_type": "text/event-stream", "run_id": run_id})
+            self.send_response(HTTPStatus.OK.value)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.send_header("Access-Control-Allow-Origin", "http://127.0.0.1")
+            self.send_header("Access-Control-Allow-Headers", "content-type")
+            self.end_headers()
+            self._send_sse_event(
+                "stream_started",
+                {
+                    "run_id": run_id,
+                    "status": "running",
+                    "text_preview": stimulus["text"][:160],
+                    "source": stimulus["source"],
+                },
+            )
+            thread.start()
+            try:
+                while thread.is_alive():
+                    events = audit.get_run_events(run_id, after_id=last_event_id, limit=100)
+                    for event in events:
+                        last_event_id = max(last_event_id, int(event.get("id", last_event_id)))
+                        self._send_sse_event("run_event", event)
+                    now = time.monotonic()
+                    if now - last_heartbeat >= 1.5:
+                        self._send_sse_event(
+                            "heartbeat",
+                            {
+                                "run_id": run_id,
+                                "status": (audit.get_run(run_id) or {}).get("status", "starting"),
+                                "elapsed_ms": round((now - started) * 1000, 3),
+                            },
+                        )
+                        last_heartbeat = now
+                    time.sleep(0.1)
+                thread.join(timeout=0.1)
+                events = audit.get_run_events(run_id, after_id=last_event_id, limit=500)
+                for event in events:
+                    last_event_id = max(last_event_id, int(event.get("id", last_event_id)))
+                    self._send_sse_event("run_event", event)
+                if result_holder.get("error") is not None:
+                    error = result_holder["error"]
+                    self._send_sse_event(
+                        "stream_error",
+                        {"run_id": run_id, "error": str(error), "error_type": type(error).__name__},
+                    )
+                    return
+                result = result_holder.get("result")
+                if result is not None:
+                    payload_result = harness_result_to_dict(result)
+                    self._send_sse_event(
+                        "final_response",
+                        {
+                            "run_id": run_id,
+                            "response": payload_result.get("response", ""),
+                            "result": payload_result,
+                        },
+                    )
+                self._send_sse_event(
+                    "stream_finished",
+                    {
+                        "run_id": run_id,
+                        "status": (audit.get_run(run_id) or {}).get("status", "succeeded"),
+                        "elapsed_ms": round((time.monotonic() - started) * 1000, 3),
+                    },
+                )
+            except (BrokenPipeError, ConnectionResetError):
+                return
+
+        def _send_sse_event(self, event: str, payload: dict[str, Any]) -> None:
+            body = f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False, sort_keys=True)}\n\n".encode("utf-8")
+            self.wfile.write(body)
+            self.wfile.flush()
+
         def _send_dashboard_asset(self, path: str) -> None:
             relative = "index.html" if path == "/" else path.removeprefix("/dashboard/")
             asset_path = (DASHBOARD_DIR / relative).resolve()
@@ -736,9 +848,9 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
 
 class HumungousaurAPIServer(ThreadingHTTPServer):
     def __init__(self, server_address: tuple[str, int], handler_class: type[BaseHTTPRequestHandler]) -> None:
-        super().__init__(server_address, handler_class)
         self._background_threads: list[threading.Thread] = []
         self._background_threads_lock = threading.Lock()
+        super().__init__(server_address, handler_class)
 
     def start_background_worker(self, worker: threading.Thread) -> None:
         with self._background_threads_lock:

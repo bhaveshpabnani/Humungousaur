@@ -54,5 +54,5 @@ The runtime must stay model-led for broad cognition and tool choice. Determinist
 ## Release
 
 - Follow `docs/RELEASE_RUNBOOK.md` for the ordered public release flow.
-- Follow `docs/OPEN_SOURCE_RELEASE_GOAL.md` for the June 10, 2026 open-source readiness checklist.
+- Use `docs/RELEASE_CHECKLIST.md` as the public source of truth for release readiness.
 - Do not announce or tag a release until backend tests, source hygiene, desktop parity, package verification, release report verification, and website publication checks pass.

@@ -20,6 +20,7 @@ Use this parent skill when a task needs public web research, live browser state,
 
 - `browser-computer-use`
 - `browser-evidence-workflow`
+- `browser-use-agent`
 - `frontend-design`
 - `live-browser-testing`
 - `mcp-server-builder`
@@ -35,6 +36,7 @@ Use this parent skill when a task needs public web research, live browser state,
 - Use web form automation only after observing real form controls and before any approval-gated submission.
 - Use live browser testing and frontend design for local apps and UI verification.
 - Use browser computer-use when semantic browser tools cannot reach required visible state.
+- Use browser-use-agent when native live browser tools need Browser Use-style inspection or last-resort autonomous delegation.
 - Use web artifact and MCP server skills when the output is a tool, site, or integration artifact.
 
 ## Verification

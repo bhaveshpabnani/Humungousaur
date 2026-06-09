@@ -7,7 +7,7 @@ description: Create, review, evaluate, and cancel future reminders, wakeups, and
 
 ## Purpose
 
-Manage future stimuli for the assistant in a bounded, auditable way. This skill adapts reminder and scheduling patterns from Hermes Apple Reminders and OpenClaw calendar/scheduling skills into Humungousaur triggers and wakeups.
+Manage future stimuli for the assistant in a bounded, auditable way. This skill adapts reminder and scheduling patterns from external reference Apple Reminders and external reference calendar/scheduling skills into Humungousaur triggers and wakeups.
 
 ## When To Use
 
@@ -54,7 +54,7 @@ Use when the user asks to remind, check later, follow up, monitor, continue tomo
 ## Native Implementation Boundaries
 
 - Use Humungousaur trigger, commitment, and automation daemon tools.
-- Calendar/reminder systems from Hermes/OpenClaw are reference patterns only unless a separate native channel/calendar adapter is selected.
+- Calendar/reminder systems from external reference/external reference are reference patterns only unless a separate native channel/calendar adapter is selected.
 - Deterministic code persists exact trigger records and evaluations; semantic timing/priority decisions must use user input or model-led review, not keyword guesses.
 
 ## Verification
@@ -72,5 +72,5 @@ Use when the user asks to remind, check later, follow up, monitor, continue tomo
 ## References
 
 - Shortlist item: `wakeup-scheduling`.
-- Upstream inspiration: Hermes `apple-reminders`, OpenClaw calendar/scheduling category.
+- Upstream inspiration: external reference `apple-reminders`, external reference calendar/scheduling category.
 - Humungousaur tools: trigger and automation daemon tools.

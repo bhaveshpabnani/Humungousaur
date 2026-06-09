@@ -9,6 +9,7 @@ from uuid import uuid4
 from humungousaur.config import AgentConfig
 from humungousaur.schemas import ActionStatus, RiskLevel, ToolResult
 from humungousaur.tools.base import Tool, object_input_schema
+from humungousaur.tools.domain_capabilities import build_domain_capability_tools
 
 
 MAX_CITATION_ENTRIES = 300
@@ -262,7 +263,9 @@ def default_research_tools() -> dict[str, Tool]:
         LiteratureSetCreateTool(),
         LiteratureSetInspectTool(),
     ]
-    return {tool.name: tool for tool in tools}
+    registry = {tool.name: tool for tool in tools}
+    registry.update(build_domain_capability_tools("research"))
+    return registry
 
 
 def _citation_entries(value: Any) -> list[dict[str, Any]]:

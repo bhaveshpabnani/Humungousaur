@@ -39,7 +39,7 @@ Use for Airtable bases, record lookup, filters, updates, upserts, sync planning,
 
 ## Native Implementation Boundaries
 
-- Do not import Hermes Airtable scripts.
+- Do not import external reference Airtable scripts.
 - Implement Airtable as Humungousaur-owned tools with tests.
 - Keep tokens in secret storage.
 - The current native adapter prepares and inspects operation artifacts; live Airtable mutation must be added as a separate approval-gated tool.

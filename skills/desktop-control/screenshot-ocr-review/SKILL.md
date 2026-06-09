@@ -42,7 +42,7 @@ Use when the user asks what is on screen, needs visual UI evidence, wants screen
 ## Native Implementation Boundaries
 
 - Use Humungousaur screen and browser screenshot tools.
-- Do not import OpenClaw OCR, computer-use, or screenshot scripts as implementation.
+- Do not import external reference OCR, computer-use, or screenshot scripts as implementation.
 - Do not claim OCR/text extraction if only visual observation was performed.
 
 ## Safety And Approval

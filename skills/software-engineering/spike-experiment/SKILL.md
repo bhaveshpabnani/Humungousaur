@@ -39,7 +39,7 @@ Use for unfamiliar APIs, performance questions, parsing approaches, provider beh
 ## Native Implementation Boundaries
 
 - Use Humungousaur interpreter/shell/browser tools.
-- Do not import Hermes spike scripts.
+- Do not import external reference spike scripts.
 - Do not call external services unless explicitly approved and necessary.
 
 ## Safety And Approval
@@ -63,4 +63,4 @@ Use for unfamiliar APIs, performance questions, parsing approaches, provider beh
 ## References
 
 - Shortlist item: `spike-experiment`.
-- Upstream inspiration: Hermes spike reference only.
+- Upstream inspiration: external reference spike reference only.

@@ -11,6 +11,9 @@ final class AgentAPIClient {
     private var baseURL: URL
     private let decoder: JSONDecoder
     private let encoder = JSONEncoder()
+    private let responseFormattingInstruction = """
+    Respond with a detailed final answer in GitHub-flavored Markdown. Use clear sections, bullets, and tables where they make the answer easier to scan. Include caveats, source/tool evidence, and next steps when relevant. Do not return a single unformatted paragraph unless the user explicitly asks for a very short answer.
+    """
 
     init(baseURL: String) {
         self.baseURL = AgentAPIClient.normalizedBaseURL(baseURL)
@@ -170,15 +173,60 @@ final class AgentAPIClient {
 
     func sendStimulus(_ text: String, source: String, responseMode: String, settings: AppSettings, secrets: RuntimeSecrets) async throws -> AgentRunResponse {
         var payload = runtimePayload(settings: settings, secrets: secrets)
-        payload["text"] = text
+        payload["text"] = formattedRequestText(text)
         payload["source"] = source
         payload["response_mode"] = responseMode
         payload["metadata"] = [
             "response_mode": responseMode,
             "tts_provider": settings.ttsProvider,
-            "voice_id": settings.voiceId
+            "voice_id": settings.voiceId,
+            "response_format": "markdown",
+            "response_detail": "detailed"
         ]
         return try await post("stimuli", body: payload)
+    }
+
+    func streamStimulus(_ text: String, source: String, responseMode: String, settings: AppSettings, secrets: RuntimeSecrets) throws -> AsyncThrowingStream<AgentStreamEvent, Error> {
+        var payload = runtimePayload(settings: settings, secrets: secrets)
+        payload["text"] = formattedRequestText(text)
+        payload["source"] = source
+        payload["response_mode"] = responseMode
+        payload["metadata"] = [
+            "response_mode": responseMode,
+            "tts_provider": settings.ttsProvider,
+            "voice_id": settings.voiceId,
+            "response_format": "markdown",
+            "response_detail": "detailed"
+        ]
+
+        var request = URLRequest(url: try routeURL("stimuli/stream"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 300
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
+
+        return AsyncThrowingStream { continuation in
+            Task {
+                do {
+                    let (bytes, response) = try await URLSession.shared.bytes(for: request)
+                    if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                        throw AgentAPIError.requestFailed("stimuli/stream failed with HTTP \(http.statusCode).")
+                    }
+                    var parser = ServerSentEventParser()
+                    for try await line in bytes.lines {
+                        if let event = try parser.consume(line) {
+                            continuation.yield(event)
+                        }
+                    }
+                    if let event = try parser.finish() {
+                        continuation.yield(event)
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+        }
     }
 
     func approve(_ token: String, note: String) async throws -> JSONValue {
@@ -226,6 +274,17 @@ final class AgentAPIClient {
             let message = String(data: data, encoding: .utf8) ?? "Request failed."
             throw AgentAPIError.requestFailed(message)
         }
+    }
+
+    private func formattedRequestText(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return text }
+        return """
+        \(trimmed)
+
+        Response formatting requirements:
+        \(responseFormattingInstruction)
+        """
     }
 
     private func runtimePayload(settings: AppSettings, secrets: RuntimeSecrets) -> [String: Any] {
@@ -335,5 +394,36 @@ enum AgentAPIError: LocalizedError {
         switch self {
         case .requestFailed(let message): message
         }
+    }
+}
+
+private struct ServerSentEventParser {
+    private var eventName = "message"
+    private var dataLines: [String] = []
+    private let decoder = JSONDecoder()
+
+    mutating func consume(_ line: String) throws -> AgentStreamEvent? {
+        if line.hasPrefix("event: ") {
+            eventName = String(line.dropFirst("event: ".count)).trimmingCharacters(in: .whitespaces)
+            return nil
+        }
+        if line.hasPrefix("data: ") {
+            dataLines.append(String(line.dropFirst("data: ".count)))
+            return try finish()
+        }
+        if line.isEmpty {
+            return try finish()
+        }
+        return nil
+    }
+
+    mutating func finish() throws -> AgentStreamEvent? {
+        guard !dataLines.isEmpty else { return nil }
+        let data = Data(dataLines.joined(separator: "\n").utf8)
+        let value = try decoder.decode(JSONValue.self, from: data)
+        let event = AgentStreamEvent(event: eventName, data: value)
+        eventName = "message"
+        dataLines = []
+        return event
     }
 }

@@ -45,7 +45,7 @@ Use for email drafts, inbox summaries from pasted/exported email, follow-up word
 
 ## Native Implementation Boundaries
 
-- Do not use Hermes Himalaya, Gmail scripts, OpenClaw plugins, or external mail packages as the skill implementation.
+- Do not use external reference Himalaya, Gmail scripts, external reference plugins, or external mail packages as the skill implementation.
 - Drafting is natively supported through Humungousaur-owned draft artifact tools. Sending still requires a future Humungousaur-owned Gmail/Outlook/IMAP/SMTP adapter with schemas, approvals, tests, and redaction.
 - Do not scrape a mail UI with OS/browser tools unless the user explicitly asks and approves that path.
 
@@ -71,4 +71,4 @@ Use for email drafts, inbox summaries from pasted/exported email, follow-up word
 ## References
 
 - Shortlist item: `email-operations`.
-- Upstream inspiration: Hermes Himalaya and Google Workspace references only.
+- Upstream inspiration: external reference Himalaya and Google Workspace references only.

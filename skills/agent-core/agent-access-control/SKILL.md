@@ -39,7 +39,7 @@ Use for channel onboarding, group chats, unknown senders, shared rooms, bot mess
 ## Native Implementation Boundaries
 
 - Use Humungousaur channel policy and approval tools.
-- Do not import OpenClaw agent-access-control code.
+- Do not import external reference agent-access-control code.
 - Do not make semantic access decisions with keyword matching.
 
 ## Safety And Approval

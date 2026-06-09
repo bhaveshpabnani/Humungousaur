@@ -1,4 +1,39 @@
 import SwiftUI
+import AppKit
+
+struct HumungousaurLogoMark: View {
+    var size: CGFloat = 38
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Group {
+            if let image = Self.image(named: resourceName) {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+            } else {
+                Text("H")
+                    .font(.system(size: max(12, size * 0.46), weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .frame(width: size, height: size)
+                    .background(DS.accent, in: RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
+            }
+        }
+        .frame(width: size, height: size)
+        .accessibilityLabel("Humungousaur")
+    }
+
+    private var resourceName: String {
+        colorScheme == .dark ? "humungousaur-logo-mark-light" : "humungousaur-logo-mark"
+    }
+
+    private static func image(named name: String) -> NSImage? {
+        guard let url = Bundle.module.url(forResource: name, withExtension: "png") else {
+            return nil
+        }
+        return NSImage(contentsOf: url)
+    }
+}
 
 struct MetricTile: View {
     let title: String

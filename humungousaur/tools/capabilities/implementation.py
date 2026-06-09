@@ -7,6 +7,7 @@ from typing import Any
 from humungousaur.config import AgentConfig
 from humungousaur.schemas import ActionStatus, RiskLevel, ToolResult
 from humungousaur.tools.base import Tool, object_input_schema
+from humungousaur.tools.validation import ToolInputValidationError, validate_tool_input
 
 
 CAPABILITY_SURFACES: tuple[dict[str, Any], ...] = (
@@ -28,14 +29,14 @@ CAPABILITY_SURFACES: tuple[dict[str, Any], ...] = (
         "surface_id": "web",
         "display_name": "Web",
         "groups": ["browser"],
-        "expected_tools": ["fetch_web_page", "research_web_pages", "browser_live_search"],
+        "expected_tools": ["fetch_web_page", "research_web_pages", "browser_live_search", "browser_live_extract"],
         "purpose": "Fetch pages, research provided URLs, and search or navigate with browser-backed tools.",
     },
     {
         "surface_id": "browser",
         "display_name": "Browser",
         "groups": ["browser"],
-        "expected_tools": ["browser_open", "browser_observe", "browser_extract", "browser_live_open", "browser_live_observe"],
+        "expected_tools": ["browser_open", "browser_observe", "browser_extract", "browser_live_open", "browser_live_observe", "browser_live_extract"],
         "purpose": "Operate static and live browser views with observation-first, approval-gated actions.",
     },
     {
@@ -104,8 +105,26 @@ CAPABILITY_SURFACES: tuple[dict[str, Any], ...] = (
         "surface_id": "plugins",
         "display_name": "Plugins",
         "groups": ["plugins"],
-        "expected_tools": ["plugin_catalog", "plugin_setup_plan", "plugin_manifests", "plugin_manifest"],
-        "purpose": "Expose Humungousaur-owned capability contracts plus local blocked plugin declarations.",
+        "expected_tools": ["plugin_catalog", "plugin_setup_plan", "plugin_manifests", "plugin_manifest", "plugin_state"],
+        "purpose": "Expose Humungousaur-owned capability contracts plus local blocked plugin declarations and enablement state.",
+    },
+    {
+        "surface_id": "native_toolsets_mcp",
+        "display_name": "Native Toolsets And MCP",
+        "groups": ["toolsets", "mcp", "providers", "runtime"],
+        "expected_tools": [
+            "native_toolset_catalog",
+            "native_toolset_describe",
+            "mcp_server_catalog",
+            "mcp_server_manifest",
+            "mcp_server_launch",
+            "mcp_tool_discover",
+            "mcp_tool_call",
+            "mcp_oauth_status",
+            "provider_registry",
+            "runtime_hook_catalog",
+        ],
+        "purpose": "Expose native toolset records, MCP server manifests, provider readiness, and observer hook contracts.",
     },
     {
         "surface_id": "large_catalog_search",
@@ -203,7 +222,7 @@ class ToolSearchTool(Tool):
                     "query": {"type": "string", "description": "Catalog search text such as voice, Slack, browser, approval, or wakeup."},
                     "kind": {
                         "type": "string",
-                        "enum": ["all", "tool", "skill", "plugin", "channel", "surface", "provider"],
+                        "enum": ["all", "tool", "skill", "plugin", "channel", "surface", "provider", "toolset", "mcp_server"],
                         "description": "Optional record kind filter.",
                     },
                     "limit": {"type": "integer", "minimum": 1, "maximum": 50},
@@ -271,8 +290,65 @@ class ToolDescribeTool(Tool):
         return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, f"Unknown catalog record: {record_id}")
 
 
+class ToolCallTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="tool_call",
+            description=(
+                "Invoke an available tool by exact name after discovering it through tool_search/tool_describe. "
+                "This is the Humungousaur native equivalent of deferred tool invocation."
+            ),
+            risk_level=RiskLevel.HIGH,
+            requires_approval=True,
+            input_schema=object_input_schema(
+                {
+                    "name": {"type": "string", "description": "Exact tool name to invoke."},
+                    "arguments": {"type": "object", "description": "Arguments matching the target tool schema."},
+                    "approved": {"type": "boolean", "description": "Set only after approval for approval-required target tools."},
+                },
+                required=["name", "arguments"],
+            ),
+            capability_group="capabilities",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        target_name = str(tool_input.get("name") or "").strip()
+        if not target_name:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Target tool name is required.")
+        if target_name in {"tool_call", "tool_search", "tool_describe", "capability_surface"}:
+            return ToolResult(self.name, ActionStatus.BLOCKED, self.risk_level, f"tool_call cannot invoke bridge tool {target_name}.")
+        arguments = tool_input.get("arguments")
+        if not isinstance(arguments, dict):
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "tool_call arguments must be an object.")
+        tools = _tool_registry(config)
+        target = tools.get(target_name)
+        if target is None:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, f"Unknown target tool: {target_name}.")
+        if target.requires_approval and not bool(tool_input.get("approved", False)):
+            return ToolResult(
+                self.name,
+                ActionStatus.NEEDS_APPROVAL,
+                target.risk_level,
+                f"Target tool {target_name} requires approval.",
+                {"target_tool": target_name, "target_arguments": arguments, "target_risk_level": target.risk_level},
+            )
+        try:
+            validate_tool_input(arguments, target.input_schema)
+        except ToolInputValidationError as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, target.risk_level, f"Invalid arguments for {target_name}.", error=str(exc))
+        result = target.execute(arguments, config)
+        return ToolResult(
+            self.name,
+            result.status,
+            result.risk_level,
+            f"Invoked {target_name}: {result.summary}",
+            {"target_tool": target_name, "target_result": result.output},
+            result.error,
+        )
+
+
 def default_capability_tools() -> dict[str, Tool]:
-    tools: list[Tool] = [CapabilitySurfaceTool(), ToolSearchTool(), ToolDescribeTool()]
+    tools: list[Tool] = [CapabilitySurfaceTool(), ToolSearchTool(), ToolDescribeTool(), ToolCallTool()]
     return {tool.name: tool for tool in tools}
 
 
@@ -292,6 +368,7 @@ def build_capability_surface(
     voice_status = _voice_status(normalized)
     plugin_contracts = _plugin_tool_contracts(plugins, set(tools))
     groups = _tool_groups(tools)
+    native_parity = _native_parity_status(normalized, tools)
     surface = {
         "workspace": str(normalized.workspace),
         "data_dir": str(normalized.data_dir),
@@ -302,6 +379,8 @@ def build_capability_surface(
             "memory_skills": len(memory_skills),
             "plugins": len(plugins),
             "channels": len(channels),
+            "native_toolsets": native_parity["toolset_count"],
+            "mcp_servers": native_parity["mcp_server_count"],
         },
         "surfaces": [_surface_status(item, tools, groups) for item in CAPABILITY_SURFACES],
         "tool_groups": groups,
@@ -309,6 +388,7 @@ def build_capability_surface(
         "model_providers": _model_provider_status(plugins),
         "channels": _channel_summary(channels),
         "plugins": _plugin_summary(plugins),
+        "native_parity": native_parity,
         "skills": {
             "workspace": workspace_skills[:24],
             "memory": memory_skills[:24],
@@ -432,6 +512,10 @@ def capability_records(config: AgentConfig, *, include_tool_schemas: bool = Fals
                 }
             )
         )
+    for toolset in _native_toolset_records(normalized, tools):
+        records.append(_with_search_text(toolset))
+    for server in _mcp_server_records(normalized):
+        records.append(_with_search_text(server))
     for surface in CAPABILITY_SURFACES:
         records.append(
             _with_search_text(
@@ -624,6 +708,98 @@ def _plugin_tool_contracts(plugins: list[dict[str, Any]], tool_names: set[str]) 
             else:
                 missing.append(record)
     return {"missing": missing, "available": available}
+
+
+def _native_parity_status(config: AgentConfig, tools: dict[str, Tool]) -> dict[str, Any]:
+    try:
+        from humungousaur.tools.native_parity.implementation import NATIVE_ALIAS_MAP, _load_mcp_manifests, _load_toolsets, _toolset_status
+
+        toolsets = [_toolset_status(name, definition, tools) for name, definition in _load_toolsets(config).items()]
+        mcp_servers = _load_mcp_manifests(config)
+        missing_tools = sorted({tool for record in toolsets for tool in record["missing_tools"]})
+        return {
+            "toolset_count": len(toolsets),
+            "implemented_toolsets": sum(1 for record in toolsets if record["status"] == "implemented"),
+            "partial_toolsets": sum(1 for record in toolsets if record["status"] == "partial"),
+            "missing_exact_tools": missing_tools,
+            "missing_exact_tool_count": len(missing_tools),
+            "alias_map": NATIVE_ALIAS_MAP,
+            "mcp_server_count": len(mcp_servers),
+            "mcp_servers": [
+                {
+                    "server_id": str(server.get("server_id", "")),
+                    "status": str(server.get("status", "")),
+                    "transport": str(server.get("transport", "")),
+                    "tool_count": len(server.get("tools", [])) if isinstance(server.get("tools"), list) else 0,
+                }
+                for server in mcp_servers
+            ],
+        }
+    except Exception as exc:
+        return {
+            "toolset_count": 0,
+            "implemented_toolsets": 0,
+            "partial_toolsets": 0,
+            "missing_exact_tools": [],
+            "missing_exact_tool_count": 0,
+            "alias_map": {},
+            "mcp_server_count": 0,
+            "mcp_servers": [],
+            "error": str(exc),
+        }
+
+
+def _native_toolset_records(config: AgentConfig, tools: dict[str, Tool]) -> list[dict[str, Any]]:
+    try:
+        from humungousaur.tools.native_parity.implementation import _load_toolsets, _toolset_status
+
+        return [
+            {
+                "record_id": f"toolset:{name}",
+                "kind": "toolset",
+                "name": name,
+                "display_name": name,
+                "description": record["description"],
+                "status": record["status"],
+                "tool_count": record["tool_count"],
+                "available_count": record["available_count"],
+                "missing_count": record["missing_count"],
+                "missing_tools": record["missing_tools"][:80],
+                "alias_backed_tools": record["alias_backed_tools"][:80],
+                "source": record["source"],
+            }
+            for name, definition in _load_toolsets(config).items()
+            for record in [_toolset_status(name, definition, tools)]
+        ]
+    except Exception:
+        return []
+
+
+def _mcp_server_records(config: AgentConfig) -> list[dict[str, Any]]:
+    try:
+        from humungousaur.tools.native_parity.implementation import _credential_readiness, _load_mcp_manifests
+
+        records = []
+        for server in _load_mcp_manifests(config):
+            readiness = _credential_readiness(server)
+            records.append(
+                {
+                    "record_id": f"mcp_server:{server.get('server_id', '')}",
+                    "kind": "mcp_server",
+                    "name": str(server.get("server_id", "")),
+                    "display_name": str(server.get("display_name") or server.get("server_id") or ""),
+                    "description": f"MCP server manifest for {server.get('display_name') or server.get('server_id')}.",
+                    "status": str(server.get("status") or "manifest_ready"),
+                    "transport": str(server.get("transport") or ""),
+                    "configured": readiness["configured"],
+                    "missing_env": readiness["missing_env"],
+                    "tools": server.get("tools", []) if isinstance(server.get("tools"), list) else [],
+                    "source": str(server.get("source") or ""),
+                }
+            )
+        return records
+    except Exception:
+        return []
 
 
 def _schema_summary(schema: dict[str, Any]) -> dict[str, Any]:

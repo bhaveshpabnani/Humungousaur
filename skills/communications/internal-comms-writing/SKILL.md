@@ -45,7 +45,7 @@ Use for team updates, exec summaries, incident notes, rollout announcements, FAQ
 ## Native Implementation Boundaries
 
 - Use Humungousaur document, note, channel, and cognition tools.
-- Do not import Anthropic or Hermes communication skill code as implementation.
+- Do not import Anthropic or external reference communication skill code as implementation.
 - Use upstream writing examples only as reference inspiration.
 
 ## Safety And Approval

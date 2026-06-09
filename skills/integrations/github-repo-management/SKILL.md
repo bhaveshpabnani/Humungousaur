@@ -38,7 +38,7 @@ Use for cloning, adding remotes, checking origin/upstream, forking, listing bran
 ## Native Implementation Boundaries
 
 - Use Git/gh through native shell tooling or future Humungousaur GitHub adapters.
-- Do not import Hermes repo-management scripts.
+- Do not import external reference repo-management scripts.
 - Do not use destructive Git commands unless explicitly requested and approved.
 
 ## Safety And Approval

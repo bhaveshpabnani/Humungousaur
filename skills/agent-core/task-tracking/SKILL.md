@@ -7,7 +7,7 @@ description: Track tasks, commitments, blockers, statuses, and next actions acro
 
 ## Purpose
 
-Maintain a concrete working ledger of tasks and obligations using Humungousaur's commitment, cognition, memory, and activity tools. This skill adapts OpenClaw task tracker patterns into local-first, evidence-backed tracking.
+Maintain a concrete working ledger of tasks and obligations using Humungousaur's commitment, cognition, memory, and activity tools. This skill adapts external reference task tracker patterns into local-first, evidence-backed tracking.
 
 ## When To Use
 
@@ -57,7 +57,7 @@ Use when the user asks to track work, update task status, review blockers, list 
 ## Native Implementation Boundaries
 
 - Use Humungousaur commitment, cognition, memory, and activity tools.
-- OpenClaw task-tracker ideas are reference workflow patterns only; records must remain Humungousaur-native and evidence-backed.
+- external reference task-tracker ideas are reference workflow patterns only; records must remain Humungousaur-native and evidence-backed.
 - Similar task titles are not enough for deterministic merging; use exact IDs or model-led review over evidence.
 
 ## Verification
@@ -75,5 +75,5 @@ Use when the user asks to track work, update task status, review blockers, list 
 ## References
 
 - Shortlist item: `task-tracking`.
-- Upstream inspiration: OpenClaw `agent-task-tracker`.
+- Upstream inspiration: external reference `agent-task-tracker`.
 - Humungousaur tools: commitment and cognition tool groups.

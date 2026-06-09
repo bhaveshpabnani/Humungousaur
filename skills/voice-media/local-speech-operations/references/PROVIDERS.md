@@ -14,4 +14,4 @@
 - `local-whisper`: implemented in `humungousaur.tools.voice.providers`.
 - `system`: Windows SAPI implementation in Humungousaur voice provider code.
 
-Do not use Hermes/OpenClaw speech scripts as runtime implementations.
+Do not use external reference/external reference speech scripts as runtime implementations.

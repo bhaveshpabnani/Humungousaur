@@ -2,7 +2,7 @@
 
 Humungousaur skills must follow the Agent Skills format used by the `skills/` workspace library and by forged `.umang/skills/` packs.
 
-This is the required contract for every new or updated agent skill. It applies to hand-written skills, model-forged skills, imported reference adaptations, and the planned 100+ personal-assistant skill integration from Hermes Agent, Anthropic Skills, and OpenClaw/ClawHub references.
+This is the required contract for every new or updated agent skill. It applies to hand-written skills, model-forged skills, external reference adaptations, and the planned 100+ personal-assistant skill buildout based on capability analysis from external reference Agent, Anthropic Skills, and external references.
 
 ## Directory Contract
 
@@ -83,7 +83,7 @@ Every tool, script, adapter, runtime helper, and execution path used by a Humung
 
 Rules:
 
-- Do not import tools, adapters, scripts, or runtime packages directly from Hermes Agent, OpenClaw, Anthropic Skills, ClawHub, Codex plugins, or other upstream skill repositories.
+- Do not import tools, adapters, scripts, or runtime packages directly from external reference Agent, external reference, Anthropic Skills, external skill catalog, Codex plugins, or other upstream skill repositories.
 - Do not make a skill depend on third-party skill code being present in `external_repos/`.
 - Use upstream repositories only as reference evidence for capability design, workflow shape, safety lessons, and useful examples.
 - If an upstream skill implies a missing capability, implement a Humungousaur-owned tool or script with a clear schema, tests, safety policy, and verification.
@@ -109,7 +109,7 @@ Rules:
 - Scripts must enforce read/write root boundaries before reading or writing user files.
 - Scripts are mechanical helpers. They must not become deterministic intent routers or broad semantic decision engines.
 - Add the script to the owning `SKILL.md` under a `Native Scripts` section and list `agent_skill_script_catalog` / `agent_skill_script_run` in the tool map.
-- Use `docs/SKILL_CAPABILITY_REFERENCE_MATRIX.md` when translating Hermes, OpenClaw, Codex, Anthropic, or other upstream examples into native Humungousaur tools and scripts.
+- Use `docs/COGNITIVE_AGENT_ARCHITECTURE.md`, the local skill catalog, and reviewed upstream references when translating external examples into native Humungousaur tools and scripts.
 
 ## Validation
 

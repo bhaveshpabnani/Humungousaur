@@ -39,7 +39,7 @@ Use for Node runtime errors, npm scripts, bundler issues, frontend bugs, server 
 ## Native Implementation Boundaries
 
 - Use repo commands through Humungousaur shell/browser tools.
-- Do not import Hermes node-inspector scripts.
+- Do not import external reference node-inspector scripts.
 - Do not install packages without user approval.
 
 ## Safety And Approval
@@ -63,4 +63,4 @@ Use for Node runtime errors, npm scripts, bundler issues, frontend bugs, server 
 ## References
 
 - Shortlist item: `node-debugging`.
-- Upstream inspiration: Hermes node debugging references only.
+- Upstream inspiration: external reference node debugging references only.

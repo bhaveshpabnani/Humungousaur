@@ -1376,6 +1376,112 @@
       "notes": ["NAS-hosted chat surface."]
     },
     {
+      "channel_id": "clickclack",
+      "display_name": "ClickClack",
+      "name": "ClickClack",
+      "transport": "ClickClack local or hosted chat bridge",
+      "plugin_kind": "humungousaur_native_channel",
+      "plugin_status": "prepared_adapter_contract",
+      "runtime_adapter": "humungousaur.channel_adapters.clickclack",
+      "setup_kind": "clickclack_bridge",
+      "supports_text": true,
+      "supports_media": true,
+      "supports_reactions": false,
+      "conversation_types": ["private", "group", "room"],
+      "setup": {
+        "auth_type": "bridge_token",
+        "required_fields": ["conversation_id"],
+        "required_secrets": ["CLICKCLACK_BRIDGE_URL", "CLICKCLACK_BRIDGE_TOKEN"],
+        "optional_secrets": [],
+        "secret_storage": "env_reference_only",
+        "steps": ["Configure a trusted ClickClack bridge URL and token.", "Use room, group, or contact id as conversation_id.", "Keep sends approval-gated until bridge ownership is verified."],
+        "doctor_checks": ["env:CLICKCLACK_BRIDGE_URL", "env:CLICKCLACK_BRIDGE_TOKEN"],
+        "notes": ["Prepared outbox, policy, pairing, and troubleshooting contract are available."]
+      },
+      "policies": {
+        "dm_policy": "allowlist_or_pairing",
+        "group_policy": "allowlist",
+        "allowlist_supported": true,
+        "pairing_supported": true,
+        "bot_loop_protection_supported": true,
+        "ambient_room_events_supported": true,
+        "mention_required_by_default": true
+      },
+      "delivery": {
+        "prepared_outbox": true,
+        "official_send": {"implemented": false, "mode": "clickclack_bridge", "required_env": ["CLICKCLACK_BRIDGE_URL", "CLICKCLACK_BRIDGE_TOKEN"], "target": "conversation_id"},
+        "text": true,
+        "media": true,
+        "reactions": false,
+        "markdown_image_to_media": false,
+        "native_threads": true,
+        "approval_reactions": false
+      },
+      "runtime": {
+        "owned_by": "Humungousaur Gateway",
+        "listener_required_for_inbound": true,
+        "listener_required_for_outbound": true,
+        "stateful_auth": true,
+        "state_dir_hint": "data_dir/channel_state/clickclack",
+        "privacy_hook_opt_in": true,
+        "ignored_targets": []
+      },
+      "notes": ["native ClickClack bridge surface."]
+    },
+    {
+      "channel_id": "qa_channel",
+      "display_name": "QA Channel",
+      "name": "QA Channel",
+      "transport": "Deterministic local channel test harness",
+      "plugin_kind": "humungousaur_first_party_surface",
+      "plugin_status": "implemented",
+      "runtime_adapter": "humungousaur.channel_adapters.qa_channel",
+      "setup_kind": "local_test_harness",
+      "supports_text": true,
+      "supports_media": true,
+      "supports_reactions": true,
+      "conversation_types": ["test_dm", "test_group", "ambient_room"],
+      "setup": {
+        "auth_type": "local_loopback",
+        "required_fields": ["conversation_id"],
+        "required_secrets": [],
+        "optional_secrets": [],
+        "secret_storage": "not_required",
+        "steps": ["Use qa_channel in tests and smoke runs for deterministic channel behavior.", "Use any stable fixture id as conversation_id."],
+        "doctor_checks": [],
+        "notes": ["No network, account, or credential is required."]
+      },
+      "policies": {
+        "dm_policy": "local_fixture",
+        "group_policy": "local_fixture",
+        "allowlist_supported": true,
+        "pairing_supported": true,
+        "bot_loop_protection_supported": true,
+        "ambient_room_events_supported": true,
+        "mention_required_by_default": false
+      },
+      "delivery": {
+        "prepared_outbox": true,
+        "official_send": {"implemented": false, "mode": "local_fixture_outbox", "required_env": [], "target": "conversation_id"},
+        "text": true,
+        "media": true,
+        "reactions": true,
+        "markdown_image_to_media": true,
+        "native_threads": true,
+        "approval_reactions": true
+      },
+      "runtime": {
+        "owned_by": "Humungousaur Gateway",
+        "listener_required_for_inbound": false,
+        "listener_required_for_outbound": false,
+        "stateful_auth": false,
+        "state_dir_hint": "data_dir/channel_state/qa_channel",
+        "privacy_hook_opt_in": false,
+        "ignored_targets": []
+      },
+      "notes": ["Deterministic native channel harness for tests, docs, and smoke runs."]
+    },
+    {
       "channel_id": "yuanbao",
       "display_name": "Yuanbao",
       "name": "Yuanbao",

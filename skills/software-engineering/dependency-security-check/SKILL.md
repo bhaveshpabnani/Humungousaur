@@ -43,7 +43,7 @@ Use before installing packages, running unfamiliar scripts, adding plugins, upda
 
 ## Native Implementation Boundaries
 
-- Do not import OpenClaw audit/Snyk skill code.
+- Do not import external reference audit/Snyk skill code.
 - External scanners require native wrapper or approved shell path.
 - Do not execute package scripts just to inspect them.
 - Native security artifacts are local review documents and do not install packages or run scanners.

@@ -9,6 +9,7 @@ from uuid import uuid4
 from humungousaur.config import AgentConfig
 from humungousaur.schemas import ActionStatus, RiskLevel, ToolResult
 from humungousaur.tools.base import Tool, object_input_schema
+from humungousaur.tools.domain_capabilities import build_domain_capability_tools
 
 
 MAX_COMMERCE_ITEMS = 200
@@ -241,7 +242,9 @@ def default_commerce_tools() -> dict[str, Tool]:
         PurchaseIntentPrepareTool(),
         PurchaseIntentInspectTool(),
     ]
-    return {tool.name: tool for tool in tools}
+    registry = {tool.name: tool for tool in tools}
+    registry.update(build_domain_capability_tools("commerce"))
+    return registry
 
 
 def _comparison_artifact(tool_input: dict[str, Any], *, title: str, products: list[dict[str, Any]], reason: str, markdown_path: Path) -> dict[str, Any]:

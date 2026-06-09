@@ -44,7 +44,7 @@ Use when the user asks to open an app, bring a window forward, resize/move windo
 ## Native Implementation Boundaries
 
 - Use Humungousaur-owned Windows tools.
-- Do not import Windows-use or OpenClaw app-control code.
+- Do not import Windows-use or external reference app-control code.
 - Treat OS tool limitations as gaps, not reasons to call upstream runtimes directly.
 
 ## Safety And Approval

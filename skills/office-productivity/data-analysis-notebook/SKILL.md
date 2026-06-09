@@ -47,7 +47,7 @@ Use for data exploration, CSV/JSON analysis, calculations, simulations, small pl
 ## Native Implementation Boundaries
 
 - Use Humungousaur `python_interpreter` tools.
-- Do not import Hermes Jupyter live-kernel code.
+- Do not import external reference Jupyter live-kernel code.
 - CSV profiling is native; notebook/live-kernel support beyond this requires native implementation.
 
 ## Safety And Approval

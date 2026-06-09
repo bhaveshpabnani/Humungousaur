@@ -43,7 +43,7 @@ Use for data summaries, educational graphics, product explainers, reports, and o
 ## Native Implementation Boundaries
 
 - Use Humungousaur visualization/canvas/web tools.
-- Do not import Hermes infographic scripts.
+- Do not import external reference infographic scripts.
 - Use generated assets only through approved native workflows.
 - Native infographic plans must preserve source refs and draft/review/final status.
 

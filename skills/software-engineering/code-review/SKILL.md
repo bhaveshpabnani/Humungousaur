@@ -38,7 +38,7 @@ Use when the user asks for review, PR review, diff review, bug hunt, pre-merge c
 ## Native Implementation Boundaries
 
 - Use Humungousaur file/shell/diff tools.
-- Do not import Hermes GitHub code-review scripts.
+- Do not import external reference GitHub code-review scripts.
 - Do not use regex-only static checks as the review brain.
 
 ## Safety And Approval

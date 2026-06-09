@@ -40,7 +40,7 @@ Use for DOCX planning, drafting content for Word, reading provided document text
 
 ## Native Implementation Boundaries
 
-- Do not import Anthropic DOCX skill code or Hermes document scripts.
+- Do not import Anthropic DOCX skill code or external reference document scripts.
 - Dedicated DOCX helpers are Humungousaur-owned, tested, and schema-bound.
 - Upstream document skills are reference evidence only.
 

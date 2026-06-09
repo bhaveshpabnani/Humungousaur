@@ -47,7 +47,7 @@ Use this skill when the assistant receives wake-word activation, recorded audio,
 ## Native Implementation Boundaries
 
 - Use native voice, interaction harness, cognition, and runtime tools only.
-- Do not implement voice-loop behavior by importing OpenClaw, Hermes, or external assistant runtime loops.
+- Do not implement voice-loop behavior by importing external reference, external reference, or external assistant runtime loops.
 - Treat wake-word activation as a stimulus; cognition still decides whether to respond or observe.
 
 ## Verification

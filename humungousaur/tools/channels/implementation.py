@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+import json
 from typing import Any
+import uuid
 
 from humungousaur.config import AgentConfig
 from humungousaur.integrations.channel_listeners import (
@@ -533,6 +536,157 @@ class ChannelWebhookIngestTool(Tool):
         )
 
 
+class ChannelRoutingPolicyPrepareTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="channel_routing_policy_prepare",
+            description=(
+                "Prepare native channel routing policy for access groups, broadcast groups, group routing, "
+                "location events, ambient room events, pairing, and troubleshooting notes."
+            ),
+            risk_level=RiskLevel.MEDIUM,
+            input_schema=object_input_schema(
+                {
+                    "channel_id": {"type": "string"},
+                    "access_groups": {"type": "array", "items": {"type": "string"}, "maxItems": 100},
+                    "broadcast_groups": {"type": "array", "items": {"type": "string"}, "maxItems": 100},
+                    "group_routes": {"type": "array", "items": {"type": "object"}, "maxItems": 100},
+                    "location_events_enabled": {"type": "boolean"},
+                    "ambient_room_events_enabled": {"type": "boolean"},
+                    "pairing_required": {"type": "boolean"},
+                    "troubleshooting_notes": {"type": "array", "items": {"type": "string"}, "maxItems": 50},
+                    "reason": {"type": "string"},
+                },
+                required=["channel_id", "reason"],
+            ),
+            capability_group="channels",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        channel_id = _clean_id(tool_input.get("channel_id"))
+        channel = find_channel(channel_id)
+        if channel is None:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, f"Unknown channel_id: {channel_id}")
+        reason = str(tool_input.get("reason") or "").strip()
+        if not reason:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Reason is required.")
+        policy_id = f"channel-routing-{channel_id}-{uuid.uuid4().hex[:8]}"
+        policy = {
+            "policy_id": policy_id,
+            "channel_id": channel_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "status": "prepared",
+            "access_groups": _string_list(tool_input.get("access_groups"), limit=100),
+            "broadcast_groups": _string_list(tool_input.get("broadcast_groups"), limit=100),
+            "group_routes": _object_list(tool_input.get("group_routes"), limit=100),
+            "location_events_enabled": bool(tool_input.get("location_events_enabled", False)),
+            "ambient_room_events_enabled": bool(tool_input.get("ambient_room_events_enabled", False)),
+            "pairing_required": bool(tool_input.get("pairing_required", channel.get("policies", {}).get("pairing_supported", False))),
+            "troubleshooting_notes": _string_list(tool_input.get("troubleshooting_notes"), limit=50),
+            "reason": reason,
+            "catalog_policy": channel.get("policies", {}),
+            "delivery_boundary": "Prepared routing policy only; live channel routing requires a trusted listener/runtime.",
+        }
+        path = (config.normalized().data_dir / "channel_state" / "routing_policies" / f"{policy_id}.json").resolve()
+        if config.dry_run:
+            return ToolResult(self.name, ActionStatus.SKIPPED, self.risk_level, "Dry run: would prepare channel routing policy.", {"policy": policy, "path": str(path)})
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(policy, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        policy["path"] = str(path)
+        return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Prepared channel routing policy for {channel_id}.", {"policy": policy})
+
+
+class ChannelPairingPrepareTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="channel_pairing_prepare",
+            description="Prepare a native channel pairing artifact for DM, group, device, or bridge setup without contacting the provider.",
+            risk_level=RiskLevel.MEDIUM,
+            input_schema=object_input_schema(
+                {
+                    "channel_id": {"type": "string"},
+                    "conversation_id": {"type": "string"},
+                    "pairing_kind": {"type": "string", "enum": ["dm", "group", "device", "bridge", "webhook"]},
+                    "identity_hint": {"type": "string"},
+                    "expires_minutes": {"type": "integer", "minimum": 1, "maximum": 10080},
+                    "reason": {"type": "string"},
+                },
+                required=["channel_id", "conversation_id", "pairing_kind", "reason"],
+            ),
+            capability_group="channels",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        channel_id = _clean_id(tool_input.get("channel_id"))
+        channel = find_channel(channel_id)
+        if channel is None:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, f"Unknown channel_id: {channel_id}")
+        conversation_id = str(tool_input.get("conversation_id") or "").strip()
+        reason = str(tool_input.get("reason") or "").strip()
+        if not conversation_id or not reason:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "conversation_id and reason are required.")
+        pairing_id = f"channel-pairing-{channel_id}-{uuid.uuid4().hex[:8]}"
+        pairing = {
+            "pairing_id": pairing_id,
+            "channel_id": channel_id,
+            "conversation_id": conversation_id,
+            "pairing_kind": str(tool_input.get("pairing_kind") or "").strip(),
+            "identity_hint": str(tool_input.get("identity_hint") or "").strip(),
+            "expires_minutes": max(1, min(int(tool_input.get("expires_minutes") or 60), 10080)),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "status": "prepared_not_paired",
+            "reason": reason,
+            "pairing_supported": bool(channel.get("policies", {}).get("pairing_supported", False)),
+            "next_step": "Present this artifact through the trusted channel bridge or setup UI, then save non-secret setup state after human confirmation.",
+        }
+        path = (config.normalized().data_dir / "channel_state" / "pairings" / f"{pairing_id}.json").resolve()
+        if config.dry_run:
+            return ToolResult(self.name, ActionStatus.SKIPPED, self.risk_level, "Dry run: would prepare channel pairing.", {"pairing": pairing, "path": str(path)})
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(pairing, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        pairing["path"] = str(path)
+        return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Prepared channel pairing for {channel_id}.", {"pairing": pairing})
+
+
+class ChannelTroubleshootingGuideTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="channel_troubleshooting_guide",
+            description="Build a per-channel troubleshooting guide from setup requirements, doctor checks, policy, listener mode, and delivery contract.",
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema({"channel_id": {"type": "string"}}, required=["channel_id"]),
+            capability_group="channels",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        del config
+        channel_id = _clean_id(tool_input.get("channel_id"))
+        channel = find_channel(channel_id)
+        if channel is None:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, f"Unknown channel_id: {channel_id}")
+        setup = channel.get("setup", {}) if isinstance(channel.get("setup"), dict) else {}
+        guide = {
+            "channel_id": channel_id,
+            "display_name": channel.get("display_name", channel.get("name", "")),
+            "setup_kind": channel.get("setup_kind", ""),
+            "required_fields": setup.get("required_fields", []),
+            "required_secrets": setup.get("required_secrets", []),
+            "optional_secrets": setup.get("optional_secrets", []),
+            "doctor_checks": setup.get("doctor_checks", []),
+            "setup_steps": setup.get("steps", []),
+            "policy": channel.get("policies", {}),
+            "delivery": channel.get("delivery", {}),
+            "runtime": channel.get("runtime", {}),
+            "common_fixes": [
+                "Verify all required env references are present in runtime secrets or the workspace environment.",
+                "Confirm conversation_id matches the provider's native room, DM, phone number, or bridge id.",
+                "Use channel_integration_smoke before attempting any live send.",
+                "Keep prepared outbox review enabled until the channel bridge is trusted.",
+            ],
+        }
+        return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Built troubleshooting guide for {channel_id}.", {"guide": guide})
+
+
 def default_channel_tools() -> dict[str, Tool]:
     tools: list[Tool] = [
         ChannelCatalogTool(),
@@ -549,6 +703,9 @@ def default_channel_tools() -> dict[str, Tool]:
         ChannelListenerStatusTool(),
         ChannelListenerTickTool(),
         ChannelWebhookIngestTool(),
+        ChannelRoutingPolicyPrepareTool(),
+        ChannelPairingPrepareTool(),
+        ChannelTroubleshootingGuideTool(),
     ]
     return {tool.name: tool for tool in tools}
 
@@ -583,3 +740,17 @@ def _channel_summary(channel: dict[str, Any], *, include_notes: bool) -> dict[st
 
 def _clean_id(value: object) -> str:
     return "_".join(str(value or "").strip().lower().replace("-", "_").split())[:120]
+
+
+def _string_list(value: Any, *, limit: int) -> list[str]:
+    if isinstance(value, str):
+        return [value.strip()] if value.strip() else []
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value[:limit] if str(item).strip()]
+
+
+def _object_list(value: Any, *, limit: int) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value[:limit] if isinstance(item, dict)]

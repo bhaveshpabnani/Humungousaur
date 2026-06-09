@@ -7,7 +7,7 @@ description: Handle telephony or voice-call channel workflows with strict consen
 
 ## Purpose
 
-Represent voice-call capability as a safe Humungousaur channel workflow. OpenClaw voice-call entries are reference evidence only; Humungousaur must use native channel adapters or clearly report missing implementation.
+Represent voice-call capability as a safe Humungousaur channel workflow. external reference voice-call entries are reference evidence only; Humungousaur must use native channel adapters or clearly report missing implementation.
 
 ## When To Use
 
@@ -33,7 +33,7 @@ Use when the user asks about phone calls, voice-call channel setup, call transcr
 ## Workflow
 
 1. Check whether a Humungousaur-native voice-call adapter exists in the channel catalog.
-2. If missing, report the native implementation gap and do not pretend OpenClaw voice-call code is available.
+2. If missing, report the native implementation gap and do not pretend external reference voice-call code is available.
 3. For supported calls, validate caller allowlist and consent before transcription or response.
 4. Route transcript turns through the interaction harness as voice/channel stimuli.
 5. Prepare responses as voice artifacts or call-channel messages according to the adapter contract.
@@ -43,7 +43,7 @@ Use when the user asks about phone calls, voice-call channel setup, call transcr
 
 - Phone calls require strict identity, consent, and loop protection.
 - Do not record or transcribe calls without permission.
-- Do not import OpenClaw telephony plugins directly.
+- Do not import external reference telephony plugins directly.
 
 ## Native Implementation Boundaries
 
@@ -66,4 +66,4 @@ Use when the user asks about phone calls, voice-call channel setup, call transcr
 ## References
 
 - Shortlist item: `voice-call-gateway`.
-- Upstream inspiration: OpenClaw voice-call plugin references.
+- Upstream inspiration: external reference voice-call plugin references.

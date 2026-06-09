@@ -40,7 +40,7 @@ Use for slide outlines, speaker notes, deck narratives, content extraction from 
 
 ## Native Implementation Boundaries
 
-- Do not import Anthropic PPTX or Hermes PowerPoint scripts.
+- Do not import Anthropic PPTX or external reference PowerPoint scripts.
 - Dedicated PPTX creation/inspection is Humungousaur-owned for structured local artifacts.
 - Upstream skills are design references only.
 

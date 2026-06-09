@@ -42,7 +42,7 @@ Use for ML/research papers, abstracts, related-work sections, experiment narrati
 ## Native Implementation Boundaries
 
 - Use Humungousaur writing/search/file tools.
-- Do not import Hermes research-paper-writing scripts.
+- Do not import external reference research-paper-writing scripts.
 - Do not invent experiments or citations.
 - Treat `literature_set_create` and `citation_bibliography_create` outputs as evidence artifacts, not as permission to fabricate missing results.
 

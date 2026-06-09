@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -192,6 +193,62 @@ public sealed class AgentApiClient
             ["voice_id"] = settings.VoiceId,
         };
         return PostJsonObjectAsync("stimuli", payload);
+    }
+
+    public async IAsyncEnumerable<AgentStreamEvent> StreamStimulusAsync(
+        string text,
+        string source,
+        string responseMode,
+        AppSettings settings,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var payload = RuntimePayload(settings);
+        payload["text"] = text;
+        payload["source"] = source;
+        payload["response_mode"] = responseMode;
+        payload["metadata"] = new JsonObject
+        {
+            ["response_mode"] = responseMode,
+            ["tts_provider"] = settings.TtsProvider,
+            ["voice_id"] = settings.VoiceId,
+        };
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(_baseUri, "stimuli/stream"))
+        {
+            Content = new StringContent(payload.ToJsonString(JsonOptions), Encoding.UTF8, "application/json"),
+        };
+        using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        await EnsureSuccessAsync(response, "stimuli/stream");
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        var eventName = "message";
+        var dataLines = new List<string>();
+        while (!reader.EndOfStream && !cancellationToken.IsCancellationRequested)
+        {
+            var line = await reader.ReadLineAsync(cancellationToken) ?? "";
+            if (line.StartsWith("event: ", StringComparison.Ordinal))
+            {
+                eventName = line["event: ".Length..].Trim();
+                continue;
+            }
+            if (line.StartsWith("data: ", StringComparison.Ordinal))
+            {
+                dataLines.Add(line["data: ".Length..]);
+                continue;
+            }
+            if (line.Length == 0 && dataLines.Count > 0)
+            {
+                var data = JsonNode.Parse(string.Join(Environment.NewLine, dataLines)) as JsonObject ?? [];
+                yield return new AgentStreamEvent { Event = eventName, Data = data };
+                eventName = "message";
+                dataLines.Clear();
+            }
+        }
+        if (dataLines.Count > 0)
+        {
+            var data = JsonNode.Parse(string.Join(Environment.NewLine, dataLines)) as JsonObject ?? [];
+            yield return new AgentStreamEvent { Event = eventName, Data = data };
+        }
     }
 
     public Task<JsonObject> SendChannelInboundAsync(ChannelInfo channel, ChannelSetup setup, string text, AppSettings settings)

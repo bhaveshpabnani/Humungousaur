@@ -42,7 +42,7 @@ Use for SMS onboarding, short outbound messages, phone-number channel diagnosis,
 ## Native Implementation Boundaries
 
 - Use the Humungousaur Twilio SMS adapter only.
-- Do not import OpenClaw SMS plugins or third-party scripts as runtime implementation.
+- Do not import external reference SMS plugins or third-party scripts as runtime implementation.
 - MMS/media support must be treated according to the native manifest and adapter result.
 
 ## Safety And Approval

@@ -42,7 +42,7 @@ Use when the user asks for accessibility help, easier navigation, reading screen
 ## Native Implementation Boundaries
 
 - Use Humungousaur voice, browser, OS, and memory tools.
-- Do not import OpenClaw accessibility-toolkit code or upstream scripts.
+- Do not import external reference accessibility-toolkit code or upstream scripts.
 - Do not hardcode assumptions about disability or preference.
 
 ## Safety And Approval
@@ -66,4 +66,4 @@ Use when the user asks for accessibility help, easier navigation, reading screen
 ## References
 
 - Shortlist item: `accessibility-assistance`.
-- Upstream inspiration: OpenClaw accessibility category as reference only.
+- Upstream inspiration: external reference accessibility category as reference only.

@@ -39,7 +39,7 @@ Use for scans, images of documents, receipts, screenshots, forms, and PDFs where
 
 ## Native Implementation Boundaries
 
-- Do not import Hermes OCR or upstream document scripts directly.
+- Do not import external reference OCR or upstream document scripts directly.
 - OCR adapters must be Humungousaur-owned and tested; readiness checks do not equal extraction.
 - Upstream OCR workflows are reference only.
 

@@ -7,7 +7,7 @@ description: Create, update, validate, and improve Humungousaur SKILL.md packs w
 
 ## Purpose
 
-Author high-quality Humungousaur skills that follow the project standard and can be selected by model-led planning. This adapts Hermes skill authoring and Anthropic skill-creator guidance.
+Author high-quality Humungousaur skills that follow the project standard and can be selected by model-led planning. This adapts external reference skill authoring and Anthropic skill-creator guidance.
 
 ## When To Use
 
@@ -41,7 +41,7 @@ Use when creating new skills, improving existing skills, integrating upstream sk
 2. Search existing skills for overlap and decide whether to update or create.
 3. Use upstream material only as reference evidence; write Humungousaur-owned guidance.
 4. Ensure every required tool, script, adapter, or helper is native to Humungousaur or already exposed through a trusted Humungousaur platform tool.
-5. If upstream material implies a missing tool, record the gap or implement a Humungousaur-owned tool; do not depend on Hermes, OpenClaw, Anthropic Skills, ClawHub, or Codex plugin code directly.
+5. If upstream material implies a missing tool, record the gap or implement a Humungousaur-owned tool; do not depend on external reference, external reference, Anthropic Skills, external skill catalog, or Codex plugin code directly.
 6. Create valid frontmatter: lowercase hyphenated `name`, description under 1024 chars, optional compatibility/license/metadata.
 7. Include purpose, when-to-use, evidence, tool map, workflow, safety, verification, failure modes, and references.
 8. Add `scripts/`, `references/`, or `assets/` only when they improve execution or progressive disclosure and are Humungousaur-owned.
@@ -58,7 +58,7 @@ Use when creating new skills, improving existing skills, integrating upstream sk
 ## Native Implementation Boundaries
 
 - Use `skill_forge_draft`, skill catalog/read/script tools, filesystem tools, and tests as the native authoring path.
-- Upstream skills, OpenClaw extensions, Hermes tools, Codex plugin skills, and Anthropic skills are references only unless reimplemented as Humungousaur-owned tools/scripts.
+- Upstream skills, external reference extensions, external reference tools, Codex plugin skills, and Anthropic skills are references only unless reimplemented as Humungousaur-owned tools/scripts.
 - Scripts must be repo-local, schema-bounded, and safe under configured workspace roots before they are advertised as capability.
 
 ## Verification
@@ -78,5 +78,5 @@ Use when creating new skills, improving existing skills, integrating upstream sk
 ## References
 
 - Shortlist item: `skill-authoring`.
-- Upstream inspiration: Hermes skill authoring, Anthropic `skill-creator`.
+- Upstream inspiration: external reference skill authoring, Anthropic `skill-creator`.
 - Required standard: `docs/AGENT_SKILL_AUTHORING_STANDARD.md`.

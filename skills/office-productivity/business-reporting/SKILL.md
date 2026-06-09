@@ -42,7 +42,7 @@ Use for KPI reports, executive summaries, weekly/monthly business reviews, sales
 
 ## Native Implementation Boundaries
 
-- Do not import OpenClaw business-reporting plugins.
+- Do not import external reference business-reporting plugins.
 - Use Humungousaur-owned analysis/report/chart artifact tools.
 - External BI connectors need native adapters.
 

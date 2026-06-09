@@ -29,6 +29,7 @@ Use for account forms, contact forms, filters, search boxes, checkout-like forms
 - `browser_submit_form`
 - `browser_live_observe`
 - `browser_live_type`
+- `browser_live_fill_form`
 - `browser_live_select_option`
 - `browser_live_press_key`
 - `browser_live_click`
@@ -45,7 +46,7 @@ Use for account forms, contact forms, filters, search boxes, checkout-like forms
 ## Native Implementation Boundaries
 
 - Use Humungousaur browser tools and schemas.
-- Do not import OpenClaw Actionbook, browser-use, or upstream automation code.
+- Do not import external reference Actionbook, browser-use, or upstream automation code.
 - Do not use deterministic keyword matching to decide field semantics; use observed labels and model reasoning.
 
 ## Safety And Approval

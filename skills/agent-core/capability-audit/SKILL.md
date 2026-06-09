@@ -7,7 +7,7 @@ description: Audit Humungousaur's effective tools, skills, plugins, channels, pr
 
 ## Purpose
 
-Give the user and model an evidence-backed map of what the assistant can actually do now. This skill adapts OpenClaw agent audit patterns to Humungousaur's capability surface and plugin catalogs.
+Give the user and model an evidence-backed map of what the assistant can actually do now. This skill adapts external reference agent audit patterns to Humungousaur's capability surface and plugin catalogs.
 
 ## When To Use
 
@@ -74,5 +74,5 @@ Use before large architecture changes, after adding tools/skills/plugins, when d
 ## References
 
 - Shortlist item: `capability-audit`.
-- Upstream inspiration: OpenClaw agent audit entries.
+- Upstream inspiration: external reference agent audit entries.
 - Humungousaur tools: capability surface, plugin catalog, channel catalog.

@@ -48,7 +48,7 @@ Use before end-to-end smoke tests, local model/voice/channel/browser setup, app 
 ## Native Implementation Boundaries
 
 - Use Humungousaur status and capability tools.
-- Do not call upstream health-check scripts from Hermes/OpenClaw/Windows-use.
+- Do not call upstream health-check scripts from external reference/external reference/Windows-use.
 - Do not infer readiness from installed reference repos alone.
 
 ## Safety And Approval

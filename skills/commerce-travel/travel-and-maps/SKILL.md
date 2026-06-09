@@ -43,7 +43,7 @@ Use for travel plans, local places, route comparisons, hotel/activity research, 
 ## Native Implementation Boundaries
 
 - Use Humungousaur-owned web/browser tools or future native map adapters.
-- Do not import Hermes map skills or OpenClaw transportation plugins as implementation.
+- Do not import external reference map skills or external reference transportation plugins as implementation.
 - Do not claim exact live routing without a current source.
 - `travel_plan_create` is a local planning artifact tool; it is not live geocoding, routing, booking, or venue contact.
 
@@ -69,4 +69,4 @@ Use for travel plans, local places, route comparisons, hotel/activity research, 
 ## References
 
 - Shortlist item: `travel-and-maps`.
-- Upstream inspiration: Hermes maps and OpenClaw transportation references only.
+- Upstream inspiration: external reference maps and external reference transportation references only.

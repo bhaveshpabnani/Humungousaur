@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #fafafa;
+      }
+
+      body {
+        font-family: sans-serif;
+        color: #111827;
+      }
+
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 15% 18%, rgba(214, 61, 54, 0.18), transparent 28%),
+          radial-gradient(circle at 76% 18%, rgba(36, 107, 254, 0.15), transparent 30%),
+          radial-gradient(circle at 80% 80%, rgba(16, 163, 127, 0.18), transparent 30%),
+          #fafafa;
+      }
+
+      .scene {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 92px 118px;
+        gap: 42px;
+      }
+
+      .topline {
+        display: flex;
+        align-items: center;
+        gap: 22px;
+      }
+
+      .mark {
+        display: grid;
+        width: 96px;
+        height: 96px;
+        place-items: center;
+        border-radius: 26px;
+        background: linear-gradient(135deg, #f86a52, #d63d36 48%, #841c2b);
+        color: white;
+        font-size: 48px;
+        font-weight: 900;
+        box-shadow: 0 26px 48px rgba(132, 28, 43, 0.2);
+      }
+
+      .eyebrow {
+        color: #d63d36;
+        font-size: 22px;
+        font-weight: 800;
+        letter-spacing: 4px;
+        text-transform: uppercase;
+      }
+
+      .title {
+        max-width: 1260px;
+        font-size: 96px;
+        font-weight: 850;
+        line-height: 0.98;
+        letter-spacing: 0;
+      }
+
+      .subtitle {
+        max-width: 980px;
+        color: #475569;
+        font-size: 34px;
+        font-weight: 520;
+        line-height: 1.24;
+      }
+
+      .loop {
+        position: relative;
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 22px;
+        width: 100%;
+        margin-top: 24px;
+      }
+
+      .card {
+        position: relative;
+        min-height: 186px;
+        padding: 26px;
+        border: 1px solid rgba(148, 163, 184, 0.38);
+        border-radius: 28px;
+        background: rgba(255, 255, 255, 0.82);
+        box-shadow: 0 22px 52px rgba(15, 23, 42, 0.1);
+      }
+
+      .number {
+        display: grid;
+        width: 42px;
+        height: 42px;
+        margin-bottom: 20px;
+        place-items: center;
+        border-radius: 14px;
+        background: #f1f5f9;
+        color: #334155;
+        font-weight: 850;
+      }
+
+      .label {
+        font-size: 28px;
+        font-weight: 830;
+        line-height: 1.1;
+      }
+
+      .detail {
+        margin-top: 12px;
+        color: #334155;
+        font-size: 18px;
+        font-weight: 520;
+        line-height: 1.28;
+      }
+
+      .connector {
+        position: absolute;
+        top: 92px;
+        right: -32px;
+        z-index: 2;
+        width: 42px;
+        height: 4px;
+        border-radius: 999px;
+        background: #cbd5e1;
+      }
+
+      .connector::after {
+        position: absolute;
+        top: -7px;
+        right: -7px;
+        width: 0;
+        height: 0;
+        border-top: 9px solid transparent;
+        border-bottom: 9px solid transparent;
+        border-left: 12px solid #cbd5e1;
+        content: "";
+      }
+
+      .card:last-child .connector {
+        display: none;
+      }
+
+      .active-red {
+        border-color: rgba(214, 61, 54, 0.6);
+        box-shadow: 0 24px 58px rgba(214, 61, 54, 0.18);
+      }
+
+      .active-blue {
+        border-color: rgba(36, 107, 254, 0.58);
+        box-shadow: 0 24px 58px rgba(36, 107, 254, 0.16);
+      }
+
+      .active-green {
+        border-color: rgba(16, 163, 127, 0.6);
+        box-shadow: 0 24px 58px rgba(16, 163, 127, 0.16);
+      }
+
+      .active-red .number {
+        background: #fff1ef;
+        color: #7f1d1d;
+      }
+
+      .active-blue .number {
+        background: #eff6ff;
+        color: #1e3a8a;
+      }
+
+      .active-green .number {
+        background: #ecfdf5;
+        color: #064e3b;
+      }
+
+      .active-red .connector {
+        background: #d63d36;
+      }
+
+      .active-red .connector::after {
+        border-left-color: #d63d36;
+      }
+
+      .active-blue .connector {
+        background: #246bfe;
+      }
+
+      .active-blue .connector::after {
+        border-left-color: #246bfe;
+      }
+
+      .active-green .connector {
+        background: #10a37f;
+      }
+
+      .active-green .connector::after {
+        border-left-color: #10a37f;
+      }
+
+      .footer {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        color: #475569;
+        font-size: 22px;
+        font-weight: 650;
+      }
+
+      .pulse {
+        width: 14px;
+        height: 14px;
+        border-radius: 999px;
+        background: #10a37f;
+        box-shadow: 0 0 0 10px rgba(16, 163, 127, 0.14);
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="10"
+      data-width="1920"
+      data-height="1080"
+    >
+      <div id="scene" class="scene clip" data-start="0" data-duration="10" data-track-index="1">
+        <div class="topline">
+          <div class="mark">H</div>
+          <div>
+            <div class="eyebrow">Humungousaur</div>
+            <div class="subtitle">Local-first cognition for a real desktop agent.</div>
+          </div>
+        </div>
+
+        <h1 class="title">A personal assistant that thinks in evidence, tools, approvals, and memory.</h1>
+
+        <div class="loop" aria-label="Cognition loop">
+          <div class="card step active-red">
+            <div class="number">1</div>
+            <div class="label">Stimulus</div>
+            <div class="detail">Voice, chat, browser, files, desktop state.</div>
+            <div class="connector"></div>
+          </div>
+          <div class="card step">
+            <div class="number">2</div>
+            <div class="label">Attention</div>
+            <div class="detail">Respond, observe, monitor, or ignore.</div>
+            <div class="connector"></div>
+          </div>
+          <div class="card step active-blue">
+            <div class="number">3</div>
+            <div class="label">Plan</div>
+            <div class="detail">Model-led choices from explicit schemas.</div>
+            <div class="connector"></div>
+          </div>
+          <div class="card step">
+            <div class="number">4</div>
+            <div class="label">Approve</div>
+            <div class="detail">Pause before risky or external actions.</div>
+            <div class="connector"></div>
+          </div>
+          <div class="card step active-green">
+            <div class="number">5</div>
+            <div class="label">Act</div>
+            <div class="detail">Browser, OS, files, voice, channels.</div>
+            <div class="connector"></div>
+          </div>
+          <div class="card step">
+            <div class="number">6</div>
+            <div class="label">Remember</div>
+            <div class="detail">Audit, learn, recover, and improve.</div>
+          </div>
+        </div>
+
+        <div class="footer">
+          <div class="pulse"></div>
+          <div>Runs locally. Shows its work. Keeps the human in control.</div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      tl.from(".mark", { opacity: 0, scale: 0.78, duration: 0.7, ease: "back.out(1.5)" }, 0);
+      tl.from(".eyebrow", { opacity: 0, y: 18, duration: 0.5, ease: "power3.out" }, 0.12);
+      tl.from(".subtitle", { opacity: 0, y: 18, duration: 0.5, ease: "power3.out" }, 0.2);
+      tl.from(".title", { opacity: 0, y: 34, duration: 0.72, ease: "power3.out" }, 0.48);
+      tl.from(".step", { opacity: 0, y: 42, scale: 0.96, duration: 0.62, stagger: 0.13, ease: "power3.out" }, 1.08);
+      tl.from(".footer", { opacity: 0, y: 22, duration: 0.52, ease: "power3.out" }, 2.12);
+      tl.to(".step", { y: -8, duration: 0.42, stagger: 0.12, ease: "power2.out" }, 3.0);
+      tl.to(".step", { y: 0, duration: 0.48, stagger: 0.12, ease: "power2.inOut" }, 3.5);
+      tl.to(".pulse", { scale: 1.55, duration: 0.45, repeat: 8, yoyo: true, ease: "power1.inOut" }, 4.0);
+      tl.to(".connector", { opacity: 0.38, duration: 0.28, repeat: 10, yoyo: true, ease: "power1.inOut" }, 4.1);
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

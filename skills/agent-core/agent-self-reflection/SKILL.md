@@ -7,7 +7,7 @@ description: Review recent agent behavior, uncertainty, mistakes, interaction qu
 
 ## Purpose
 
-Run a model-led reflection over recent work so the assistant can understand what happened, what worked, what failed, and what should change. This is a Humungousaur-owned adaptation of OpenClaw self-reflection patterns.
+Run a model-led reflection over recent work so the assistant can understand what happened, what worked, what failed, and what should change. This is a Humungousaur-owned adaptation of external reference self-reflection patterns.
 
 ## When To Use
 
@@ -74,5 +74,5 @@ Use after a smoke failure, user correction, long debugging session, complex impl
 ## References
 
 - Shortlist item: `agent-self-reflection`.
-- Upstream inspiration: OpenClaw `agent-self-reflection`.
+- Upstream inspiration: external reference `agent-self-reflection`.
 - Humungousaur cognition: self-review and interaction-review providers.

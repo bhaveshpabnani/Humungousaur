@@ -7,14 +7,7 @@ struct SidebarView: View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 11) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(DS.accent.gradient)
-                        Image(systemName: "brain.head.profile")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(.white)
-                    }
-                    .frame(width: 38, height: 38)
+                    HumungousaurLogoMark(size: 38)
 
                     VStack(alignment: .leading, spacing: 1) {
                         Text("CONTROL")

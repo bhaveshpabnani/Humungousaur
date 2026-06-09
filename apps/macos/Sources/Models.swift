@@ -12,6 +12,23 @@ struct ChatMessage: Identifiable, Equatable {
     var role: Role
     var text: String
     var date = Date()
+    var activities: [StreamActivityItem] = []
+    var isStreaming = false
+}
+
+struct StreamActivityItem: Identifiable, Equatable {
+    let id = UUID()
+    var kind: String
+    var title: String
+    var detail: String
+    var status: String = ""
+    var date = Date()
+}
+
+struct AgentStreamEvent: Identifiable, Equatable {
+    let id = UUID()
+    var event: String
+    var data: JSONValue
 }
 
 struct HealthPayload: Decodable {

@@ -48,7 +48,7 @@ Use for poems, lyrics, stories, scenes, hooks, slogans, creative prompts, and so
 
 ## Native Implementation Boundaries
 
-- Do not import Hermes songwriting scripts.
+- Do not import external reference songwriting scripts.
 - Audio generation requires native/provider-approved tools.
 - Do not claim music was generated when only lyrics/prompts were written.
 - Native creative artifacts are local Markdown/JSON specs; they are not posted, published, or converted to audio automatically.

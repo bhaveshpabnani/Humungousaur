@@ -7,7 +7,7 @@ description: Configure and operate Microsoft Teams webhook or Bot Framework styl
 
 ## Purpose
 
-Use Microsoft Teams as an enterprise communication surface without depending on OpenClaw or Hermes runtime code. Humungousaur currently supports Teams catalog/setup and webhook text sends through native channel adapters, with full Bot Framework behavior represented as a trusted-runtime contract.
+Use Microsoft Teams as an enterprise communication surface without depending on external reference or external reference runtime code. Humungousaur currently supports Teams catalog/setup and webhook text sends through native channel adapters, with full Bot Framework behavior represented as a trusted-runtime contract.
 
 ## When To Use
 
@@ -44,7 +44,7 @@ Use for Teams channel onboarding, Teams webhook sends, meeting follow-ups, Teams
 ## Native Implementation Boundaries
 
 - Use Humungousaur's `msteams` catalog entry and native webhook sender.
-- Do not import OpenClaw Teams plugins or Hermes Teams pipeline code.
+- Do not import external reference Teams plugins or external reference Teams pipeline code.
 - Use meeting skills for summarization/follow-up logic, not upstream Teams scripts.
 
 ## Safety And Approval
@@ -69,4 +69,4 @@ Use for Teams channel onboarding, Teams webhook sends, meeting follow-ups, Teams
 
 - Shortlist item: `teams-operations`.
 - Channel id: `msteams`.
-- Upstream inspiration: OpenClaw Teams channel and Hermes meeting patterns as reference only.
+- Upstream inspiration: external reference Teams channel and external reference meeting patterns as reference only.

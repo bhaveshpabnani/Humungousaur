@@ -40,7 +40,7 @@ Use for YouTube videos, talks, tutorials, demos, lectures, podcasts with video, 
 
 ## Native Implementation Boundaries
 
-- Do not import Hermes YouTube content scripts.
+- Do not import external reference YouTube content scripts.
 - Do not use unofficial downloaders unless the user explicitly approves and policy allows.
 - Add transcript/video adapters natively if needed.
 - The native transcript summary artifact is local and does not publish, download, or post video content.

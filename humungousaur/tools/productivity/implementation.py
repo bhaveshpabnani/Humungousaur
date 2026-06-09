@@ -10,6 +10,7 @@ from uuid import uuid4
 from humungousaur.config import AgentConfig
 from humungousaur.schemas import ActionStatus, RiskLevel, ToolResult
 from humungousaur.tools.base import Tool, object_input_schema
+from humungousaur.tools.domain_capabilities import build_domain_capability_tools
 
 
 EMAIL_ADDRESS_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -485,7 +486,9 @@ def default_productivity_tools() -> dict[str, Tool]:
         GoogleWorkspaceOperationPrepareTool(),
         ApiOperationInspectTool(),
     ]
-    return {tool.name: tool for tool in tools}
+    registry = {tool.name: tool for tool in tools}
+    registry.update(build_domain_capability_tools("productivity"))
+    return registry
 
 
 def _email_draft_schema() -> dict[str, Any]:

@@ -41,7 +41,7 @@ Use for test failures, runtime errors, broken UI flows, flaky behavior, integrat
 ## Native Implementation Boundaries
 
 - Use Humungousaur tools and current repo commands.
-- Do not import Hermes debugging helpers or upstream scripts.
+- Do not import external reference debugging helpers or upstream scripts.
 - Do not implement deterministic error-message-to-fix maps.
 
 ## Safety And Approval
@@ -65,4 +65,4 @@ Use for test failures, runtime errors, broken UI flows, flaky behavior, integrat
 ## References
 
 - Shortlist item: `systematic-debugging`.
-- Upstream inspiration: Hermes systematic debugging reference only.
+- Upstream inspiration: external reference systematic debugging reference only.

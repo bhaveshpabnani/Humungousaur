@@ -1,6 +1,7 @@
 from .base import Tool
 from .activity import default_activity_tools
 from .analysis import default_analysis_tools
+from .apple import default_apple_tools
 from .browser import default_browser_tools
 from .capabilities import default_capability_tools
 from .channels import default_channel_tools
@@ -17,6 +18,8 @@ from .files import default_tools as default_file_tools
 from .github import default_github_tools
 from .memory import default_memory_tools
 from .media import default_media_tools
+from .native_parity import default_native_parity_tools
+from .mlops import default_mlops_tools
 from .office import default_office_tools
 from .network import default_network_tools
 from .os_control import default_os_tools
@@ -27,6 +30,7 @@ from .research import default_research_tools
 from .security import default_security_tools
 from .skills import default_skill_tools
 from .system import default_system_tools
+from .devops import default_devops_tools
 from .travel import default_travel_tools
 from .visuals import default_visual_tools
 from .voice import default_voice_tools
@@ -71,6 +75,10 @@ def default_tools(config=None) -> dict[str, Tool]:
     tools.update(default_design_tools())
     tools.update(default_external_tools())
     tools.update(default_github_tools())
+    tools.update(default_native_parity_tools())
+    tools.update(default_apple_tools())
+    tools.update(default_mlops_tools())
+    tools.update(default_devops_tools())
     tools.update(default_system_tools())
     tools.update(default_os_tools())
     tools.update(default_travel_tools())
@@ -94,6 +102,21 @@ def default_tools(config=None) -> dict[str, Tool]:
             "fetch_webpage": "fetch_web_page",
             "research_webpages": "research_web_pages",
             "active_window": "os_active_window",
+            "terminal": "run_shell_command",
+            "web_extract": "fetch_web_page",
+            "skills_list": "agent_skill_catalog",
+            "skill_view": "agent_skill_read",
+            "skill_manage": "agent_skill_import",
+            "browser_navigate": "browser_live_navigate",
+            "browser_snapshot": "browser_live_observe",
+            "browser_click": "browser_live_click",
+            "browser_type": "browser_live_type",
+            "browser_scroll": "browser_live_scroll",
+            "browser_back": "browser_live_back",
+            "browser_press": "browser_live_press_key",
+            "browser_cdp": "browser_live_evaluate_js",
+            "text_to_speech": "voice_speak",
+            "send_message": "channel_message_send",
         },
     )
     return tools

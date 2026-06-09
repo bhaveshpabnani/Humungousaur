@@ -43,7 +43,7 @@ Use when the user asks about Signal onboarding, Signal private messages, group S
 ## Native Implementation Boundaries
 
 - Humungousaur must own any signal-cli bridge adapter it uses.
-- Do not install or call OpenClaw Signal plugins as implementation.
+- Do not install or call external reference Signal plugins as implementation.
 - Do not claim direct delivery until the native bridge returns a sent status.
 
 ## Safety And Approval
@@ -68,4 +68,4 @@ Use when the user asks about Signal onboarding, Signal private messages, group S
 
 - Shortlist item: `signal-operations`.
 - Channel id: `signal`.
-- Reference inspiration: OpenClaw Signal channel notes only.
+- Reference inspiration: external reference Signal channel notes only.

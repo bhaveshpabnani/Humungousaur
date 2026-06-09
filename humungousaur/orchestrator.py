@@ -150,7 +150,12 @@ class AgentOrchestrator:
                 run_id,
                 "run_finished",
                 f"Run finished with status {status.value}.",
-                {"status": status.value, "approvals_requested": len(approvals), "note_path": note_path},
+                {
+                    "status": status.value,
+                    "approvals_requested": len(approvals),
+                    "note_path": note_path,
+                    "final_response": final_response,
+                },
             )
         self.memory.append(
             "agent_run",
@@ -387,6 +392,17 @@ class AgentOrchestrator:
                 "fallback_used": getattr(plan, "fallback_used", False),
                 "duration_ms": getattr(plan, "duration_ms", 0),
                 "steps": [step.tool_name for step in steps],
+                "planned_steps": [
+                    {
+                        "tool_name": step.tool_name,
+                        "reason": step.reason,
+                        "source": step.source,
+                    }
+                    for step in steps
+                ],
+                "active_workspace_skills": _compact_active_workspace_skills(
+                    context.get("active_workspace_skills", [])
+                ),
                 "context_keys": sorted(context.keys()),
             },
         )
@@ -1172,6 +1188,26 @@ def _skill_domain(relative_path: str) -> str:
     if len(parts) >= 4 and parts[0] == ".umang" and parts[1] == "skills":
         return parts[2]
     return ""
+
+
+def _compact_active_workspace_skills(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+    compact: list[dict[str, object]] = []
+    for item in value[:12]:
+        if not isinstance(item, dict):
+            continue
+        compact.append(
+            {
+                "skill_id": str(item.get("skill_id") or ""),
+                "name": str(item.get("name") or ""),
+                "relative_path": str(item.get("relative_path") or ""),
+                "domain": str(item.get("domain") or ""),
+                "selected_directly": bool(item.get("selected_directly", False)),
+                "content_mode": str(item.get("content_mode") or ""),
+            }
+        )
+    return compact
 
 
 def _workspace_skill_ancestor_ids(skill_id: str, by_id: dict[str, object]) -> list[str]:

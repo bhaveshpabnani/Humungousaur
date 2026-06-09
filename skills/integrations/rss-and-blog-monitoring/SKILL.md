@@ -42,7 +42,7 @@ Use for RSS feeds, blog updates, release notes, newsletters, changelogs, and sch
 
 ## Native Implementation Boundaries
 
-- Do not import Hermes blogwatcher or OpenClaw RSS plugins.
+- Do not import external reference blogwatcher or external reference RSS plugins.
 - Feed parsing and watch preparation must use Humungousaur-owned tools.
 - Prepared watch artifacts do not start polling.
 - Do not silently run background polling.

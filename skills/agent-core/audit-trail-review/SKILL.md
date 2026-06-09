@@ -39,7 +39,7 @@ Use when the user asks current status, "did it send", "what changed", "why did t
 ## Native Implementation Boundaries
 
 - Use Humungousaur audit/artifact/status tools.
-- Do not import OpenClaw audit-trail plugins.
+- Do not import external reference audit-trail plugins.
 - Do not infer completion without evidence.
 
 ## Safety And Approval

@@ -43,7 +43,7 @@ Use when an app is frozen, hidden, misconfigured, failing tests, showing errors,
 ## Native Implementation Boundaries
 
 - Use Humungousaur OS, browser, system, and file tools.
-- Do not import Windows-use, browser-use, or OpenClaw troubleshooting code.
+- Do not import Windows-use, browser-use, or external reference troubleshooting code.
 - Do not replace diagnosis with keyword-based error matching; reason from evidence.
 
 ## Safety And Approval

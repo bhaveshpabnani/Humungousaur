@@ -7,7 +7,7 @@ description: Normalize chat-channel setup, inbound events, outbound preparation,
 
 ## Purpose
 
-Operate channels as native Humungousaur transport surfaces. This skill turns OpenClaw-style Gateway patterns into Humungousaur-owned catalog, setup, policy, outbox, and interaction-harness workflows.
+Operate channels as native Humungousaur transport surfaces. This skill turns native Gateway patterns into Humungousaur-owned catalog, setup, policy, outbox, and interaction-harness workflows.
 
 ## When To Use
 
@@ -51,7 +51,7 @@ Use when the task involves multiple channels, channel onboarding, gateway manife
 ## Native Implementation Boundaries
 
 - Use only Humungousaur Gateway tools and owned adapters.
-- Do not import OpenClaw Gateway code, ClawHub plugins, or external channel packages as the skill implementation.
+- Do not import external reference Gateway code, external skill catalog plugins, or external channel packages as the skill implementation.
 - If a channel is cataloged but direct runtime support is missing, say that clearly and use prepared outbox or setup planning.
 
 ## Safety And Approval

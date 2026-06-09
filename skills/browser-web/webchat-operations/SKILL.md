@@ -7,7 +7,7 @@ description: Operate Humungousaur WebChat-style browser conversations through na
 
 ## Purpose
 
-Treat WebChat as the local/browser-facing user interface channel. This skill supports WebChat setup, event routing, user-visible replies, and debugging without depending on OpenClaw WebChat code.
+Treat WebChat as the local/browser-facing user interface channel. This skill supports WebChat setup, event routing, user-visible replies, and debugging without depending on external reference WebChat code.
 
 ## When To Use
 
@@ -43,7 +43,7 @@ Use when building or diagnosing the browser chat UI, WebSocket events, local Gat
 ## Native Implementation Boundaries
 
 - Implement WebChat runtime and WebSocket behavior in Humungousaur-owned code.
-- Do not import OpenClaw WebChat UI or Gateway implementation.
+- Do not import external reference WebChat UI or Gateway implementation.
 - If only the outbox contract exists, say the UI/runtime handoff is pending.
 
 ## Safety And Approval
@@ -68,4 +68,4 @@ Use when building or diagnosing the browser chat UI, WebSocket events, local Gat
 
 - Shortlist item: `webchat-operations`.
 - Channel id: `webchat`.
-- Reference inspiration: OpenClaw WebChat as design evidence only.
+- Reference inspiration: external reference WebChat as design evidence only.

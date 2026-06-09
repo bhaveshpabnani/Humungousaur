@@ -1,0 +1,51 @@
+name: Feature request
+description: Propose a new capability, integration, desktop behavior, or skill.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Real-world use case
+      description: Describe the actual workflow, not just the implementation idea.
+      placeholder: I want Humungousaur to prepare a weekly project update from recent commits, notes, and open tasks, then draft it for approval in Slack.
+    validations:
+      required: true
+  - type: textarea
+    id: current_gap
+    attributes:
+      label: Current gap
+      description: What cannot be done today?
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Best fit
+      options:
+        - Skill
+        - Tool
+        - Desktop app
+        - Channel adapter
+        - Voice/media
+        - Browser/OS control
+        - Release/docs
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: safety
+    attributes:
+      label: Safety and approval needs
+      description: List any file writes, external sends, payments, installs, browser mutation, desktop control, voice/channel data, or secrets involved.
+    validations:
+      required: true
+  - type: textarea
+    id: proof
+    attributes:
+      label: Success criteria
+      description: What would prove the feature works end to end?
+      placeholder: A smoke test creates the draft, cites sources, pauses before Slack send, and records the approval timeline.
+    validations:
+      required: true

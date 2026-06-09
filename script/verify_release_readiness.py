@@ -242,7 +242,6 @@ def check_source_tree(preflight: Preflight) -> None:
         "SECURITY.md",
         "docs/RELEASE_CHECKLIST.md",
         "docs/RELEASE_RUNBOOK.md",
-        "docs/OPEN_SOURCE_RELEASE_GOAL.md",
         "docs/GLOBAL_AGENT_INSTRUCTIONS.md",
         "docs/COGNITIVE_AGENT_ARCHITECTURE.md",
         "docs/AGENT_SKILL_AUTHORING_STANDARD.md",
@@ -398,18 +397,6 @@ def check_source_tree(preflight: Preflight) -> None:
             "Do not claim that an action happened",
         ],
         "central final-response prompt resource",
-    )
-    preflight.require_text(
-        ROOT / "docs/OPEN_SOURCE_RELEASE_GOAL.md",
-        [
-            "June 10, 2026",
-            "Agent Architecture",
-            "Real-World Task Smoke Tests",
-            "smoke_real_world_tasks.py",
-            "Release Gate",
-            "python3 script/verify_publication_state.py --require-website",
-        ],
-        "open-source release goal document",
     )
     preflight.require_text(
         ROOT / "docs/GLOBAL_AGENT_INSTRUCTIONS.md",

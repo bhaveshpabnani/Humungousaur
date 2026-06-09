@@ -6,6 +6,7 @@ from pathlib import Path
 
 from humungousaur.config import AgentConfig
 from humungousaur.tools import default_tools
+from humungousaur.tools.native_parity.implementation import NATIVE_SKILL_CAPABILITY_TOOLS
 from humungousaur.tools.skill_tools import AgentSkillCatalogTool
 
 
@@ -87,6 +88,21 @@ class WorkspaceSkillFormatTests(unittest.TestCase):
             with self.subTest(skill=path.parent.name):
                 self.assertTrue(entries, "Every workspace skill must map to native tools or referenced skills.")
                 self.assertFalse(missing, f"Unresolved Tool Map entries: {missing}")
+
+    def test_domain_capability_skills_include_first_class_capability_tools(self) -> None:
+        config = AgentConfig(workspace=REPO_ROOT, data_dir=REPO_ROOT / "artifacts").normalized()
+        tool_names = set(default_tools(config))
+
+        for skill_name, capability_tools in sorted(NATIVE_SKILL_CAPABILITY_TOOLS.items()):
+            skill_paths = list((REPO_ROOT / "skills").glob(f"*/{skill_name}/SKILL.md"))
+            if not skill_paths:
+                continue
+            entries = _tool_map_entries(skill_paths[0])
+            present = [tool for tool in capability_tools if tool in entries]
+            unresolved = [tool for tool in capability_tools if tool not in tool_names]
+            with self.subTest(skill=skill_name):
+                self.assertFalse(unresolved, f"Capability tools are not registered: {unresolved}")
+                self.assertTrue(present, f"{skill_name} must include at least one first-class capability tool.")
 
 
 def _frontmatter(path: Path) -> dict[str, str]:

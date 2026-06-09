@@ -24,12 +24,39 @@ Use for frontend smoke tests, local app QA, login-free flows, responsive checks,
 
 - `browser_live_status`
 - `browser_live_open`
+- `browser_live_navigate`
 - `browser_live_observe`
+- `browser_live_back`
+- `browser_live_forward`
+- `browser_live_reload`
+- `browser_live_query_selector`
+- `browser_live_html`
+- `browser_live_page_search`
+- `browser_live_find_elements`
+- `browser_live_extract`
+- `browser_live_dropdown_options`
+- `browser_live_select_option`
 - `browser_live_click`
+- `browser_live_hover`
+- `browser_live_click_coordinates`
+- `browser_live_drag`
+- `browser_live_drag_coordinates`
 - `browser_live_type`
+- `browser_live_fill_form`
+- `browser_live_scroll`
+- `browser_live_scroll_to_text`
+- `browser_live_resize`
+- `browser_live_press_key`
+- `browser_live_upload_file`
+- `browser_live_download`
+- `browser_live_save_pdf`
+- `browser_live_evaluate_js`
 - `browser_live_wait`
 - `browser_live_screenshot`
 - `browser_live_tabs`
+- `browser_live_new_tab`
+- `browser_live_switch_tab`
+- `browser_live_close_tab`
 - `browser_live_close`
 
 ## Workflow
@@ -44,7 +71,7 @@ Use for frontend smoke tests, local app QA, login-free flows, responsive checks,
 ## Native Implementation Boundaries
 
 - Use Humungousaur `browser_live_*` tools only.
-- Do not import Anthropic webapp-testing, Hermes dogfood, or Playwright scripts from upstream skill repos.
+- Do not import Anthropic webapp-testing, external reference dogfood, or Playwright scripts from upstream skill repos.
 - If Playwright dependencies are missing, report the native setup gap.
 
 ## Safety And Approval

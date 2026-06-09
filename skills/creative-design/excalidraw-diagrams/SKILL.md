@@ -40,7 +40,7 @@ Use for informal system maps, whiteboard-style flows, teaching diagrams, and con
 
 ## Native Implementation Boundaries
 
-- Do not import Hermes Excalidraw scripts.
+- Do not import external reference Excalidraw scripts.
 - Excalidraw JSON generation must be Humungousaur-owned.
 - Use upstream examples only as reference.
 - Mark generated sketches as `draft`, `proposed`, or `current`.

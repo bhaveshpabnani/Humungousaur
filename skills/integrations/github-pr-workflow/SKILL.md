@@ -49,7 +49,7 @@ Use for creating branches, committing, pushing, opening PRs, checking PR status,
 
 - Use native Humungousaur GitHub packets for summaries and repo-state handoffs.
 - Use native shell/Git/gh commands through Humungousaur tooling or the current Codex environment only for live Git operations.
-- Do not import Hermes GitHub workflow scripts.
+- Do not import external reference GitHub workflow scripts.
 - Do not use upstream GitHub helpers as runtime implementation.
 
 ## Safety And Approval

@@ -43,7 +43,7 @@ Use when the user asks to remember something about a person, prepare for a conve
 ## Native Implementation Boundaries
 
 - Use Humungousaur memory and commitment tools.
-- Do not import second-brain or CRM plugins from OpenClaw/Hermes.
+- Do not import second-brain or CRM plugins from external references.
 - Do not scrape contacts from apps unless the user explicitly asks and a native approved tool path exists.
 - `contact_note_create` is a local artifact tool; durable memory still requires explicit memory/cognition tool action.
 
@@ -69,4 +69,4 @@ Use when the user asks to remember something about a person, prepare for a conve
 ## References
 
 - Shortlist item: `contact-and-relationship-notes`.
-- Upstream inspiration: OpenClaw second-brain entries as reference only.
+- Upstream inspiration: external reference second-brain entries as reference only.

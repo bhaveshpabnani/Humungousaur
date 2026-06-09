@@ -44,7 +44,7 @@ Use when the user asks to compare products, find options, evaluate specs, inspec
 ## Native Implementation Boundaries
 
 - Use Humungousaur web and browser tools.
-- Do not import OpenClaw shopping plugins or store-specific upstream scripts.
+- Do not import external reference shopping plugins or store-specific upstream scripts.
 - Do not use brittle product-name keyword routing; reason from user criteria and page evidence.
 - Native commerce tools create research and purchase-review artifacts only; they do not buy, add to cart, or contact sellers.
 
@@ -70,4 +70,4 @@ Use when the user asks to compare products, find options, evaluate specs, inspec
 ## References
 
 - Shortlist item: `shopping-assistant`.
-- Upstream inspiration: OpenClaw shopping category as reference only.
+- Upstream inspiration: external reference shopping category as reference only.

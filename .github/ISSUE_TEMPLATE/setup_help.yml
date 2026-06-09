@@ -1,0 +1,52 @@
+name: Setup help
+description: Get help with install, model providers, desktop apps, packaging, or release checks.
+title: "[Setup]: "
+labels:
+  - setup
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Python runtime
+        - Model provider
+        - Browser/Playwright
+        - macOS app
+        - Windows app
+        - Voice
+        - Channels
+        - Release packaging
+        - Website/download checks
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: macOS 15.5 / Windows 11 / Ubuntu 24.04
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command or action
+      description: What did you run or click?
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output or error
+      description: Redact secrets and private data.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: tried
+    attributes:
+      label: What you already tried
+    validations:
+      required: true

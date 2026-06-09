@@ -40,7 +40,7 @@ Use when the user wants to integrate a SaaS API, channel, data service, automati
 ## Native Implementation Boundaries
 
 - Build Humungousaur-owned adapters and tools.
-- Do not import OpenClaw AgentAPI plugins, Hermes scripts, or other upstream runtime code directly.
+- Do not import external reference AgentAPI plugins, external reference scripts, or other upstream runtime code directly.
 - Upstream repos are reference evidence only.
 
 ## Safety And Approval
@@ -64,4 +64,4 @@ Use when the user wants to integrate a SaaS API, channel, data service, automati
 ## References
 
 - Shortlist item: `agent-api-integration`.
-- Upstream inspiration: OpenClaw AgentAPI entries as reference only.
+- Upstream inspiration: external reference AgentAPI entries as reference only.

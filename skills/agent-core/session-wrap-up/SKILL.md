@@ -7,7 +7,7 @@ description: End a work session by summarizing completed work, blockers, tests, 
 
 ## Purpose
 
-Create a reliable end-of-session checkpoint. This skill adapts OpenClaw session wrap-up and Hermes GitHub workflow patterns into Humungousaur's notes, memory, commitments, and optional git surfaces.
+Create a reliable end-of-session checkpoint. This skill adapts external reference session wrap-up and external reference GitHub workflow patterns into Humungousaur's notes, memory, commitments, and optional git surfaces.
 
 ## When To Use
 
@@ -67,5 +67,5 @@ Use when the user asks to wrap up, summarize the session, checkpoint progress, p
 ## References
 
 - Shortlist item: `session-wrap-up`.
-- Upstream inspiration: OpenClaw `alex-session-wrap-up`, Hermes GitHub skills.
+- Upstream inspiration: external reference `alex-session-wrap-up`, external reference GitHub skills.
 - Existing guidance: `docs/GLOBAL_AGENT_INSTRUCTIONS.md`.

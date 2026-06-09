@@ -38,7 +38,7 @@ Use when the user asks to use Claude Code, compare coding workers, or prepare a 
 ## Native Implementation Boundaries
 
 - Do not call Claude Code CLI directly unless a Humungousaur-owned adapter/tool exists or the user explicitly requests an approved shell action.
-- Do not import Hermes Claude Code scripts.
+- Do not import external reference Claude Code scripts.
 - Do not treat external installation as native integration.
 
 ## Safety And Approval
@@ -62,4 +62,4 @@ Use when the user asks to use Claude Code, compare coding workers, or prepare a 
 ## References
 
 - Shortlist item: `claude-code-delegation`.
-- Upstream inspiration: Hermes Claude Code references only.
+- Upstream inspiration: external reference Claude Code references only.

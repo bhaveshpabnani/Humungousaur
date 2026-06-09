@@ -1,4 +1,5 @@
 import json
+import socket
 import tempfile
 import threading
 import time
@@ -16,6 +17,19 @@ from humungousaur.tools.browser_tools import BrowserSessionStore
 
 
 class APITests(unittest.TestCase):
+    def test_api_server_failed_bind_closes_without_masking_port_error(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as blocker:
+                blocker.bind(("127.0.0.1", 0))
+                blocker.listen(1)
+                port = blocker.getsockname()[1]
+
+                with self.assertRaises(OSError) as raised:
+                    create_api_server(AgentConfig(workspace=workspace, data_dir=workspace / "artifacts"), port=port)
+
+                self.assertIn(raised.exception.errno, {48, 98})
+
     def test_api_serves_dashboard_assets(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)
@@ -245,6 +259,20 @@ class APITests(unittest.TestCase):
                 self.assertEqual(stimulus["run"]["results"][0]["tool_name"], "read_file")
                 self.assertIn("README.md", stimulus["run"]["final_response"])
                 self.assertIn("response_id", stimulus["voice_result"])
+                stream_events = api_post_sse(
+                    base_url,
+                    "/stimuli/stream",
+                    {"source": "user_text", "text": 'read_file {"path":"README.md"}', "response_mode": "text", "planner": "explicit"},
+                )
+                stream_event_names = [event["event"] for event in stream_events]
+                run_events = [event["data"] for event in stream_events if event["event"] == "run_event"]
+                self.assertIn("stream_started", stream_event_names)
+                self.assertIn("final_response", stream_event_names)
+                self.assertIn("stream_finished", stream_event_names)
+                self.assertIn("plan_created", [event["event_type"] for event in run_events])
+                self.assertIn("action_started", [event["event_type"] for event in run_events])
+                self.assertIn("action_finished", [event["event_type"] for event in run_events])
+                self.assertIn("README.md", next(event for event in stream_events if event["event"] == "final_response")["data"]["response"])
                 channel = api_post(
                     base_url,
                     "/channels/inbound",
@@ -867,6 +895,34 @@ def api_post_error(base_url: str, path: str, payload: dict):
     except urllib.error.HTTPError as exc:
         return {"status": exc.code, "payload": json.loads(exc.read().decode("utf-8"))}
     raise AssertionError("Expected HTTP error response.")
+
+
+def api_post_sse(base_url: str, path: str, payload: dict):
+    request = urllib.request.Request(
+        base_url + path,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    events = []
+    with urllib.request.urlopen(request, timeout=20) as response:
+        self_event = "message"
+        data_lines = []
+        for raw_line in response:
+            line = raw_line.decode("utf-8").rstrip("\n")
+            if line.startswith("event: "):
+                self_event = line.removeprefix("event: ").strip()
+                continue
+            if line.startswith("data: "):
+                data_lines.append(line.removeprefix("data: "))
+                continue
+            if line == "" and data_lines:
+                events.append({"event": self_event, "data": json.loads("\n".join(data_lines))})
+                if self_event in {"stream_finished", "stream_error"}:
+                    break
+                self_event = "message"
+                data_lines = []
+    return events
 
 
 def wait_for_finished_run(base_url: str, run_id: str, timeout_seconds: float = 5.0):

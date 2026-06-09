@@ -7,7 +7,7 @@ description: Run bounded autonomous cycles over queued events, due wakeups, read
 
 ## Purpose
 
-Operate the assistant's autonomous loop safely: ingest stimuli, decide whether to act, execute bounded work, record evidence, and stop cleanly. This adapts OpenClaw autonomy primitive ideas to Humungousaur's automation daemon and cognition loop.
+Operate the assistant's autonomous loop safely: ingest stimuli, decide whether to act, execute bounded work, record evidence, and stop cleanly. This adapts external reference autonomy primitive ideas to Humungousaur's automation daemon and cognition loop.
 
 ## When To Use
 
@@ -55,7 +55,7 @@ Use when the user wants the agent to run continuously, process queued tasks, wak
 ## Native Implementation Boundaries
 
 - Use Humungousaur automation daemon, trigger, priority review, cognitive state, queue, and autonomous-cycle tools.
-- OpenClaw autonomy patterns are reference concepts only; runtime state and loop execution must remain Humungousaur-native.
+- external reference autonomy patterns are reference concepts only; runtime state and loop execution must remain Humungousaur-native.
 - The model owns semantic decisions about attention and initiative; deterministic code only enforces bounds, queue mechanics, schemas, and approvals.
 
 ## Verification
@@ -73,5 +73,5 @@ Use when the user wants the agent to run continuously, process queued tasks, wak
 ## References
 
 - Shortlist item: `autonomous-loop-operations`.
-- Upstream inspiration: OpenClaw `agent-autonomy-primitives`.
+- Upstream inspiration: external reference `agent-autonomy-primitives`.
 - Humungousaur tools: automation daemon and trigger tools.

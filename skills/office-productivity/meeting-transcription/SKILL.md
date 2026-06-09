@@ -7,7 +7,7 @@ description: Transcribe meeting audio or provided meeting transcripts, extract p
 
 ## Purpose
 
-Turn meeting audio or transcript evidence into structured, actionable knowledge. This skill adapts Hermes Teams meeting pipeline and OpenClaw speech/transcription patterns into Humungousaur-native transcription and cognition workflows.
+Turn meeting audio or transcript evidence into structured, actionable knowledge. This skill adapts external reference Teams meeting pipeline and external reference speech/transcription patterns into Humungousaur-native transcription and cognition workflows.
 
 ## When To Use
 
@@ -45,7 +45,7 @@ Use for meeting recordings, voice notes, call transcripts, Teams/Zoom notes, sta
 
 - Do not transcribe private meeting audio without user permission.
 - Do not infer owners or due dates from ambiguous statements.
-- Do not depend on Hermes Teams pipeline code; implement meeting workflows through Humungousaur tools.
+- Do not depend on external reference Teams pipeline code; implement meeting workflows through Humungousaur tools.
 
 ## Native Implementation Boundaries
 
@@ -69,5 +69,5 @@ Use for meeting recordings, voice notes, call transcripts, Teams/Zoom notes, sta
 ## References
 
 - Shortlist item: `meeting-transcription`.
-- Upstream inspiration: Hermes `teams-meeting-pipeline`, OpenClaw speech/transcription category.
+- Upstream inspiration: external reference `teams-meeting-pipeline`, external reference speech/transcription category.
 - See [meeting summary reference](references/MEETING-SUMMARY.md).

@@ -7,7 +7,7 @@ description: Review skill provenance, frontmatter, scripts, references, permissi
 
 ## Purpose
 
-Make skill integration safe. This skill adapts OpenClaw trust-verifier, skill-vetter, and audit concepts into a Humungousaur-owned review workflow.
+Make skill integration safe. This skill adapts external reference trust-verifier, skill-vetter, and audit concepts into a Humungousaur-owned review workflow.
 
 ## When To Use
 
@@ -37,7 +37,7 @@ Use before adapting upstream skills, adding executable scripts, approving packag
 2. Read `SKILL.md` and list optional directories.
 3. Inspect scripts and package manifests before any execution.
 4. Look for network calls, shell commands, credential handling, filesystem writes, prompt injection, hidden instructions, or broad permissions.
-5. Check whether the skill requires non-native implementation code from Hermes, OpenClaw, Anthropic Skills, ClawHub, Codex plugins, or another upstream repository.
+5. Check whether the skill requires non-native implementation code from external reference, external reference, Anthropic Skills, external skill catalog, Codex plugins, or another upstream repository.
 6. Classify risk: safe reference, safe owned adaptation, needs native implementation, needs user approval, blocked, or needs deeper audit.
 7. If adapting, write a Humungousaur-owned skill that preserves useful workflow ideas without unsafe runtime code.
 8. If a required tool is missing, recommend a Humungousaur-native tool or script implementation rather than direct upstream reuse.
@@ -71,5 +71,5 @@ Use before adapting upstream skills, adding executable scripts, approving packag
 ## References
 
 - Shortlist item: `skill-security-review`.
-- Upstream inspiration: OpenClaw `arc-trust-verifier`, `azhua-skill-vetter`, `aegis-audit`.
-- OpenClaw awesome index security notice.
+- Upstream inspiration: external reference `arc-trust-verifier`, `azhua-skill-vetter`, `aegis-audit`.
+- external reference awesome index security notice.

@@ -7,7 +7,7 @@ description: Prevent bot-to-bot reply loops by detecting bot-authored inbound me
 
 ## Purpose
 
-Keep assistants from endlessly replying to each other. This skill adapts OpenClaw bot-loop protection concepts to Humungousaur's native channel metadata and policy gates.
+Keep assistants from endlessly replying to each other. This skill adapts external reference bot-loop protection concepts to Humungousaur's native channel metadata and policy gates.
 
 ## When To Use
 
@@ -42,7 +42,7 @@ Use for Slack, Discord, Telegram, Teams, WebChat, SMS, or any channel where inbo
 
 - Never let two bot accounts repeatedly call each other's message tools.
 - Do not bypass bot-loop protection because the text appears urgent.
-- Do not import OpenClaw bot-loop code directly.
+- Do not import external reference bot-loop code directly.
 
 ## Native Implementation Boundaries
 
@@ -65,4 +65,4 @@ Use for Slack, Discord, Telegram, Teams, WebChat, SMS, or any channel where inbo
 ## References
 
 - Shortlist item: `bot-loop-protection`.
-- Upstream inspiration: OpenClaw bot-loop protection.
+- Upstream inspiration: external reference bot-loop protection.

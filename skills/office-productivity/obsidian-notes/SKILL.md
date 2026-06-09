@@ -39,7 +39,7 @@ Use for markdown notes, vault search, daily notes, backlinks/plans, knowledge ca
 ## Native Implementation Boundaries
 
 - Use Humungousaur file/note tools.
-- Do not import Hermes Obsidian scripts.
+- Do not import external reference Obsidian scripts.
 - Do not depend on Obsidian app plugins unless a native adapter exists.
 
 ## Safety And Approval

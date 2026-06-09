@@ -7,7 +7,7 @@ description: Curate assistant memory by retaining useful knowledge, summarizing 
 
 ## Purpose
 
-Keep durable memory useful over time. This skill adapts OpenClaw active-maintenance and memory metabolism ideas into Humungousaur's model-led memory curation path.
+Keep durable memory useful over time. This skill adapts external reference active-maintenance and memory metabolism ideas into Humungousaur's model-led memory curation path.
 
 ## When To Use
 
@@ -56,7 +56,7 @@ Use when the user asks to clean memory, summarize past work, forget outdated det
 ## Native Implementation Boundaries
 
 - Use Humungousaur memory summary/search/write/profile and cognitive memory curation tools.
-- OpenClaw memory-metabolism ideas are reference patterns; retention, summarization, and forgetting decisions must be model-led through native curation.
+- external reference memory-metabolism ideas are reference patterns; retention, summarization, and forgetting decisions must be model-led through native curation.
 - Deterministic code validates records and stores evidence, but must not infer semantic staleness or user preferences without the model or explicit user instruction.
 
 ## Verification
@@ -74,5 +74,5 @@ Use when the user asks to clean memory, summarize past work, forget outdated det
 ## References
 
 - Shortlist item: `memory-metabolism`.
-- Upstream inspiration: OpenClaw `active-maintenance`.
+- Upstream inspiration: external reference `active-maintenance`.
 - Humungousaur cognition: memory curation and event store.

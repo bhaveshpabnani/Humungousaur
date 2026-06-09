@@ -37,7 +37,7 @@ Use when clone, fetch, push, gh, SSH, HTTPS token, credential manager, or permis
 ## Native Implementation Boundaries
 
 - Use native Git/gh/ssh commands through approved shell tooling.
-- Do not import Hermes auth scripts.
+- Do not import external reference auth scripts.
 - Do not store tokens in files managed by skills.
 
 ## Safety And Approval

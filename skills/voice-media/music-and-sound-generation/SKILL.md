@@ -7,7 +7,7 @@ description: Plan and draft prompts for music, sound, and audio-generation workf
 
 ## Purpose
 
-Help the user create music or sound concepts through prompt craft, structure, lyrics, style constraints, and provider planning. Hermes AudioCraft, HeartMuLa, and songwriting skills are reference inspiration only; Humungousaur must use native or explicitly configured adapters for execution.
+Help the user create music or sound concepts through prompt craft, structure, lyrics, style constraints, and provider planning. external reference AudioCraft, HeartMuLa, and songwriting skills are reference inspiration only; Humungousaur must use native or explicitly configured adapters for execution.
 
 ## When To Use
 
@@ -42,7 +42,7 @@ Use when the user asks to write a song, generate a music prompt, create sound ef
 ## Safety
 
 - Do not imitate living artists' voices or copyrighted songs too closely.
-- Do not execute third-party generation scripts from Hermes or OpenClaw directly.
+- Do not execute third-party generation scripts from external reference or external reference directly.
 - Do not claim audio was generated unless a native tool actually produced an artifact.
 
 ## Native Implementation Boundaries
@@ -67,4 +67,4 @@ Use when the user asks to write a song, generate a music prompt, create sound ef
 ## References
 
 - Shortlist item: `music-and-sound-generation`.
-- Upstream inspiration: Hermes AudioCraft, HeartMuLa, songwriting-and-ai-music.
+- Upstream inspiration: external reference AudioCraft, HeartMuLa, songwriting-and-ai-music.

@@ -7,6 +7,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from humungousaur.api import run_api_server
+from humungousaur.client_protocol import run_client_protocol_stdio
 from humungousaur.config import AgentConfig
 from humungousaur.cognition.loop import AutonomousLoopRunner, autonomous_loop_result_to_dict, autonomous_status
 from humungousaur.env import load_workspace_environment
@@ -234,6 +235,11 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8765)
     _add_planner_args(serve)
+
+    client_protocol = subparsers.add_parser("client-protocol-stdio", help="Run the native JSONL client protocol over stdio")
+    client_protocol.add_argument("--workspace", type=Path, default=Path.cwd())
+    client_protocol.add_argument("--data-dir", type=Path, default=Path("artifacts"))
+    _add_planner_args(client_protocol)
 
     return parser
 
@@ -556,7 +562,18 @@ def main() -> None:
         return
 
     if args.command == "serve":
-        run_api_server(config, host=args.host, port=args.port)
+        try:
+            run_api_server(config, host=args.host, port=args.port)
+        except OSError as exc:
+            if exc.errno in {48, 98}:
+                raise SystemExit(
+                    f"Humungousaur API could not bind to {args.host}:{args.port}; the address is already in use."
+                ) from exc
+            raise
+        return
+
+    if args.command == "client-protocol-stdio":
+        run_client_protocol_stdio(config)
         return
 
     raise ValueError(f"Unknown command: {args.command}")

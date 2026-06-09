@@ -39,7 +39,7 @@ Use for long code inspections, implementation sub-tasks, review, CI debugging, o
 ## Native Implementation Boundaries
 
 - Use Humungousaur `codex_cli_*` tools.
-- Do not import Hermes Codex wrappers or external delegation scripts.
+- Do not import external reference Codex wrappers or external delegation scripts.
 - Do not pass secrets or unrelated private context.
 
 ## Safety And Approval

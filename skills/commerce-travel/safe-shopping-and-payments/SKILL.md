@@ -43,7 +43,7 @@ Use for purchases, subscriptions, checkout pages, invoices, payment links, carts
 ## Native Implementation Boundaries
 
 - Use Humungousaur browser and approval tools.
-- Do not import OpenClaw AgentPay or shopping plugins.
+- Do not import external reference AgentPay or shopping plugins.
 - Payment integrations require native, audited tools.
 - `purchase_intent_prepare` never stores payment credentials and never executes purchase/payment actions.
 

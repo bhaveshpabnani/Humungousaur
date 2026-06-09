@@ -44,7 +44,7 @@ Use for reading PDFs, summarizing document sets, extracting key points, saving b
 ## Native Implementation Boundaries
 
 - Use Humungousaur PDF/browser tools.
-- Do not import Anthropic PDF or Hermes nano-pdf scripts directly.
+- Do not import Anthropic PDF or external reference nano-pdf scripts directly.
 - Add future fill/OCR extraction operations as native tools with tests before claiming support.
 
 ## Safety And Approval

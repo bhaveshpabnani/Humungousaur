@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -76,6 +79,16 @@ def _resolve_workspace_path(config: AgentConfig, raw_path: str | None) -> Path:
     if not raw_path:
         return config.workspace
     path = Path(raw_path).expanduser()
+    if not path.is_absolute():
+        path = config.workspace / path
+    return path.resolve()
+
+
+def _resolve_write_path(config: AgentConfig, raw_path: str | None) -> Path:
+    if not raw_path or not str(raw_path).strip():
+        raise ValueError("Write path is required.")
+    text = str(raw_path).strip()
+    path = Path(text).expanduser()
     if not path.is_absolute():
         path = config.workspace / path
     return path.resolve()
@@ -360,6 +373,50 @@ class SearchWorkspaceTool(Tool):
             f"Found {len(matches)} matches.",
             {"matches": matches, "source": "scan"},
         )
+
+
+class SearchFilesTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="search_files",
+            description="native search over allowed text files, optionally scoped to a path.",
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema(
+                {
+                    "query": {"type": "string", "description": "Case-insensitive text to search for."},
+                    "path": {"type": "string", "description": "Optional workspace-relative or allowed absolute path."},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+                },
+                required=["query"],
+            ),
+            capability_group="files",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        query = str(tool_input.get("query", "")).strip().lower()
+        if not query:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Search query is empty.")
+        limit = max(1, min(int(tool_input.get("limit") or config.max_search_results), 100))
+        raw_path = tool_input.get("path")
+        if _is_default_scan_path(raw_path):
+            files = _iter_allowed_text_files(config)
+        else:
+            root = _resolve_read_path(config, str(raw_path))
+            if not _is_within(root, config.allowed_read_roots):
+                return ToolResult(self.name, ActionStatus.BLOCKED, self.risk_level, "Search path is outside allowed roots.")
+            files = _iter_text_files(root, config) if root.is_dir() else [root]
+        matches: list[dict[str, Any]] = []
+        for path in files:
+            if not path.exists() or not path.is_file() or not _is_within(path, config.allowed_read_roots):
+                continue
+            if path.stat().st_size > config.max_file_bytes:
+                continue
+            for line_number, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), start=1):
+                if query in line.lower():
+                    matches.append({"path": _relative(path, config), "line": line_number, "text": line.strip(), "source": "search_files"})
+                    if len(matches) >= limit:
+                        return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Found {len(matches)} matches.", {"matches": matches})
+        return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Found {len(matches)} matches.", {"matches": matches})
 
 
 def _exact_text_search(query: str, config: AgentConfig) -> list[dict[str, Any]]:
@@ -798,6 +855,125 @@ class WriteNoteTool(Tool):
         )
 
 
+class WriteFileTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="write_file",
+            description="native bounded text-file writer for allowed write roots.",
+            risk_level=RiskLevel.HIGH,
+            requires_approval=True,
+            input_schema=object_input_schema(
+                {
+                    "path": {"type": "string", "description": "Workspace-relative or allowed absolute output path."},
+                    "content": {"type": "string", "description": "UTF-8 text content to write."},
+                    "mode": {"type": "string", "enum": ["create", "overwrite", "append"], "description": "Write mode."},
+                    "reason": {"type": "string", "description": "Why this file write is needed."},
+                },
+                required=["path", "content", "reason"],
+            ),
+            capability_group="files",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        normalized = config.normalized()
+        try:
+            path = _resolve_write_path(normalized, str(tool_input.get("path") or ""))
+        except ValueError as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, str(exc))
+        if not _is_within(path, normalized.allowed_write_roots):
+            return ToolResult(self.name, ActionStatus.BLOCKED, self.risk_level, "Write path is outside allowed roots.")
+        content = str(tool_input.get("content") or "")
+        if len(content.encode("utf-8")) > normalized.max_file_bytes:
+            return ToolResult(self.name, ActionStatus.BLOCKED, self.risk_level, "Content exceeds configured file size limit.")
+        mode = str(tool_input.get("mode") or "create")
+        if mode not in {"create", "overwrite", "append"}:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, f"Unsupported write mode: {mode}.")
+        if mode == "create" and path.exists():
+            return ToolResult(self.name, ActionStatus.BLOCKED, self.risk_level, "File already exists; use overwrite or append explicitly.")
+        if normalized.dry_run:
+            return ToolResult(self.name, ActionStatus.SKIPPED, self.risk_level, "Dry run: would write file.", {"path": str(path), "mode": mode})
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if mode == "append":
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(content)
+        else:
+            path.write_text(content, encoding="utf-8")
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Wrote {_relative(path, normalized)}.",
+            {"path": _relative(path, normalized), "bytes": len(content.encode("utf-8")), "mode": mode},
+        )
+
+
+class PatchTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="patch",
+            description="native safe exact text replacement for one allowed file.",
+            risk_level=RiskLevel.HIGH,
+            requires_approval=True,
+            input_schema=object_input_schema(
+                {
+                    "path": {"type": "string", "description": "Workspace-relative or allowed absolute text file path."},
+                    "search": {"type": "string", "description": "Exact text to replace."},
+                    "replace": {"type": "string", "description": "Replacement text."},
+                    "expected_replacements": {"type": "integer", "minimum": 1, "maximum": 100},
+                    "reason": {"type": "string", "description": "Why this patch is needed."},
+                },
+                required=["path", "search", "replace", "reason"],
+            ),
+            capability_group="files",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        normalized = config.normalized()
+        path = _resolve_workspace_path(normalized, str(tool_input.get("path") or ""))
+        if not _is_within(path, normalized.allowed_read_roots) or not _is_within(path, normalized.allowed_write_roots):
+            return ToolResult(self.name, ActionStatus.BLOCKED, self.risk_level, "Patch path must be inside both allowed read and write roots.")
+        if not path.exists() or not path.is_file():
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, f"File does not exist: {path}")
+        if path.stat().st_size > normalized.max_file_bytes:
+            return ToolResult(self.name, ActionStatus.BLOCKED, self.risk_level, "File exceeds configured patch limit.")
+        search = str(tool_input.get("search") or "")
+        replace = str(tool_input.get("replace") or "")
+        if not search:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Patch search text is required.")
+        text = path.read_text(encoding="utf-8", errors="replace")
+        count = text.count(search)
+        expected = tool_input.get("expected_replacements")
+        if count == 0:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Search text was not found.", {"path": _relative(path, normalized)})
+        if expected is not None and count != int(expected):
+            return ToolResult(
+                self.name,
+                ActionStatus.BLOCKED,
+                self.risk_level,
+                f"Expected {expected} replacement(s), found {count}.",
+                {"path": _relative(path, normalized), "found_replacements": count},
+            )
+        new_text = text.replace(search, replace)
+        if len(new_text.encode("utf-8")) > normalized.max_file_bytes:
+            return ToolResult(self.name, ActionStatus.BLOCKED, self.risk_level, "Patched content exceeds configured file size limit.")
+        if normalized.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                f"Dry run: would apply {count} replacement(s).",
+                {"path": _relative(path, normalized), "replacements": count},
+            )
+        path.write_text(new_text, encoding="utf-8")
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Applied {count} replacement(s) to {_relative(path, normalized)}.",
+            {"path": _relative(path, normalized), "replacements": count},
+        )
+
+
 class ShellCommandTool(Tool):
     def __init__(self) -> None:
         super().__init__(
@@ -915,6 +1091,178 @@ class ShellCommandTool(Tool):
         )
 
 
+class ProcessTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="process",
+            description="native background process manager for approved local commands.",
+            risk_level=RiskLevel.HIGH,
+            requires_approval=True,
+            input_schema=object_input_schema(
+                {
+                    "action": {"type": "string", "enum": ["start", "list", "read", "terminate"], "description": "Process action."},
+                    "argv": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+                    "process_id": {"type": "string", "description": "Managed process id for read/terminate."},
+                    "command_profile": {"type": "string", "enum": list(SHELL_COMMAND_PROFILES)},
+                },
+                required=["action"],
+            ),
+            capability_group="shell",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        normalized = config.normalized()
+        action = str(tool_input.get("action") or "").strip().lower()
+        if action == "list":
+            return self._list(normalized)
+        if action == "read":
+            return self._read(normalized, str(tool_input.get("process_id") or ""))
+        if action == "terminate":
+            return self._terminate(normalized, str(tool_input.get("process_id") or ""))
+        if action == "start":
+            return self._start(normalized, tool_input)
+        return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, f"Unsupported process action: {action}.")
+
+    def _start(self, config: AgentConfig, tool_input: dict[str, Any]) -> ToolResult:
+        argv = tool_input.get("argv", [])
+        if not isinstance(argv, list) or not argv or not all(isinstance(item, str) for item in argv):
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Process argv must be a non-empty string list.")
+        command_profile = str(tool_input.get("command_profile") or "workspace_write")
+        if command_profile not in SHELL_COMMAND_PROFILES or command_profile == "blocked":
+            return ToolResult(self.name, ActionStatus.BLOCKED, self.risk_level, "Process command profile blocks execution.")
+        if argv[0].lower() not in ALLOWED_SHELL_COMMANDS:
+            return ToolResult(self.name, ActionStatus.BLOCKED, self.risk_level, "Only explicitly allowlisted commands can run.")
+        if command_profile != "trusted_dev" and any(token in BLOCKED_INLINE_SHELL_TOKENS for token in argv[1:]):
+            return ToolResult(self.name, ActionStatus.BLOCKED, self.risk_level, "Inline shell/code execution is blocked by policy.")
+        process_id = f"proc-{int(time.time() * 1000)}"
+        process_dir = _process_dir(config)
+        process_dir.mkdir(parents=True, exist_ok=True)
+        stdout_path = process_dir / f"{process_id}.stdout.log"
+        stderr_path = process_dir / f"{process_id}.stderr.log"
+        if config.dry_run:
+            return ToolResult(self.name, ActionStatus.SKIPPED, self.risk_level, "Dry run: would start process.", {"process_id": process_id, "argv": argv})
+        stdout_handle = stdout_path.open("w", encoding="utf-8")
+        stderr_handle = stderr_path.open("w", encoding="utf-8")
+        try:
+            popen = subprocess.Popen(
+                _resolve_shell_argv(argv),
+                cwd=config.workspace,
+                stdout=stdout_handle,
+                stderr=stderr_handle,
+                text=True,
+                shell=False,
+                start_new_session=True,
+            )
+        except Exception as exc:
+            stdout_handle.close()
+            stderr_handle.close()
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Process start failed.", error=str(exc))
+        finally:
+            stdout_handle.close()
+            stderr_handle.close()
+        records = _load_process_records(config)
+        records[process_id] = {
+            "process_id": process_id,
+            "pid": popen.pid,
+            "argv": argv,
+            "cwd": str(config.workspace),
+            "stdout_path": str(stdout_path),
+            "stderr_path": str(stderr_path),
+            "started_at": time.time(),
+            "command_profile": command_profile,
+        }
+        _save_process_records(config, records)
+        return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Started process {process_id}.", records[process_id])
+
+    def _list(self, config: AgentConfig) -> ToolResult:
+        records = _load_process_records(config)
+        items = []
+        changed = False
+        for _process_id, record in records.items():
+            status = _pid_status(int(record.get("pid") or 0))
+            if record.get("status") != status:
+                record["status"] = status
+                changed = True
+            items.append(record)
+        if changed:
+            _save_process_records(config, records)
+        return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Found {len(items)} managed process(es).", {"processes": items})
+
+    def _read(self, config: AgentConfig, process_id: str) -> ToolResult:
+        record = _load_process_records(config).get(process_id)
+        if not record:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, f"Unknown process id: {process_id}")
+        stdout = _tail_text(Path(str(record.get("stdout_path") or "")))
+        stderr = _tail_text(Path(str(record.get("stderr_path") or "")))
+        record = dict(record)
+        record["status"] = _pid_status(int(record.get("pid") or 0))
+        return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Read process {process_id}.", {"process": record, "stdout": stdout, "stderr": stderr})
+
+    def _terminate(self, config: AgentConfig, process_id: str) -> ToolResult:
+        records = _load_process_records(config)
+        record = records.get(process_id)
+        if not record:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, f"Unknown process id: {process_id}")
+        pid = int(record.get("pid") or 0)
+        if pid <= 0:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Process record has no valid pid.")
+        try:
+            os.killpg(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            record["status"] = "exited"
+        except Exception as exc:
+            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Process termination failed.", error=str(exc))
+        else:
+            record["status"] = "terminated"
+        records[process_id] = record
+        _save_process_records(config, records)
+        return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Terminated process {process_id}.", {"process": record})
+
+
+def _process_dir(config: AgentConfig) -> Path:
+    return (config.data_dir / "processes").resolve()
+
+
+def _process_registry_path(config: AgentConfig) -> Path:
+    return _process_dir(config) / "processes.json"
+
+
+def _load_process_records(config: AgentConfig) -> dict[str, dict[str, Any]]:
+    path = _process_registry_path(config)
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _save_process_records(config: AgentConfig, records: dict[str, dict[str, Any]]) -> None:
+    path = _process_registry_path(config)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(records, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _pid_status(pid: int) -> str:
+    if pid <= 0:
+        return "unknown"
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return "exited"
+    except PermissionError:
+        return "unknown"
+    return "running"
+
+
+def _tail_text(path: Path, limit: int = 4000) -> str:
+    if not path.exists() or not path.is_file():
+        return ""
+    text = path.read_text(encoding="utf-8", errors="replace")
+    return text[-limit:]
+
+
 def _read_only_shell_argv(argv: list[str]) -> bool:
     normalized = [argv[0].lower(), *argv[1:]]
     return tuple(normalized) in READ_ONLY_SHELL_ARGV
@@ -931,6 +1279,7 @@ def default_tools() -> dict[str, Tool]:
         ListFilesTool(),
         ReadFileTool(),
         SearchWorkspaceTool(),
+        SearchFilesTool(),
         ListPDFsTool(),
         ReadPDFTool(),
         SummarizePDFsTool(),
@@ -938,6 +1287,9 @@ def default_tools() -> dict[str, Tool]:
         ExtractPDFPagesTool(),
         OCRProviderStatusTool(),
         WriteNoteTool(),
+        WriteFileTool(),
+        PatchTool(),
         ShellCommandTool(),
+        ProcessTool(),
     ]
     return {tool.name: tool for tool in tools}

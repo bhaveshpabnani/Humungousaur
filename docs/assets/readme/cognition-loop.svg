@@ -1,0 +1,99 @@
+<svg width="1400" height="520" viewBox="0 0 1400 520" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Humungousaur cognition loop</title>
+  <desc id="desc">A clean loop diagram showing stimuli flowing through attention, planning, approval, tools, audit, memory, and response.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1400" y2="520" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF7F3"/>
+      <stop offset="0.46" stop-color="#F8FAFC"/>
+      <stop offset="1" stop-color="#EEFDF8"/>
+    </linearGradient>
+    <linearGradient id="rail" x1="178" y1="72" x2="1222" y2="456" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D63D36"/>
+      <stop offset="0.5" stop-color="#246BFE"/>
+      <stop offset="1" stop-color="#10A37F"/>
+    </linearGradient>
+    <filter id="cardShadow" x="-20%" y="-25%" width="140%" height="150%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#0F172A" flood-opacity="0.12"/>
+    </filter>
+    <filter id="softGlow" x="-10%" y="-20%" width="120%" height="140%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+    <marker id="arrow" markerWidth="13" markerHeight="13" refX="10" refY="6.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M2 2.25L10.5 6.5L2 10.75V2.25Z" fill="#475569"/>
+    </marker>
+    <style>
+      .title { fill: #111827; font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 25px; font-weight: 800; }
+      .copy { fill: #536783; font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 17px; font-weight: 500; }
+      .arrow { stroke: #475569; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; marker-end: url(#arrow); }
+      .card { fill: #FFFFFF; stroke: rgba(226,232,240,0.82); stroke-width: 1; }
+    </style>
+  </defs>
+
+  <rect width="1400" height="520" rx="38" fill="url(#bg)"/>
+  <path d="M194 262C194 144 286 54 404 54H996C1114 54 1206 144 1206 262C1206 380 1114 466 996 466H404C286 466 194 380 194 262Z" stroke="url(#rail)" stroke-width="28" stroke-opacity="0.12" filter="url(#softGlow)"/>
+  <path d="M194 262C194 144 286 54 404 54H996C1114 54 1206 144 1206 262C1206 380 1114 466 996 466H404C286 466 194 380 194 262Z" stroke="url(#rail)" stroke-width="9" stroke-linecap="round" stroke-dasharray="1 22"/>
+
+  <path class="arrow" d="M318 230C334 204 340 177 348 154"/>
+  <path class="arrow" d="M584 138H620"/>
+  <path class="arrow" d="M860 138H896"/>
+  <path class="arrow" d="M1023 214C1061 220 1091 227 1112 238"/>
+  <path class="arrow" d="M1202 362C1189 394 1165 411 1138 416"/>
+  <path class="arrow" d="M896 424H860"/>
+  <path class="arrow" d="M620 424H584"/>
+  <path class="arrow" d="M344 410C324 393 310 367 314 340"/>
+
+  <g filter="url(#cardShadow)">
+    <rect class="card" x="88" y="204" width="220" height="136" rx="24"/>
+    <text class="title" x="128" y="254">Stimulus</text>
+    <text class="copy" x="128" y="288">voice, chat, files,</text>
+    <text class="copy" x="128" y="313">browser, desktop</text>
+  </g>
+
+  <g filter="url(#cardShadow)">
+    <rect class="card" x="354" y="72" width="220" height="132" rx="24"/>
+    <text class="title" x="394" y="124">Attention</text>
+    <text class="copy" x="394" y="158">respond, observe,</text>
+    <text class="copy" x="394" y="183">monitor, ignore</text>
+  </g>
+
+  <g filter="url(#cardShadow)">
+    <rect class="card" x="630" y="72" width="220" height="132" rx="24"/>
+    <text class="title" x="674" y="124">Planning</text>
+    <text class="copy" x="674" y="158">model-led, schema</text>
+    <text class="copy" x="674" y="183">validated calls</text>
+  </g>
+
+  <g filter="url(#cardShadow)">
+    <rect class="card" x="906" y="72" width="232" height="132" rx="24"/>
+    <text class="title" x="950" y="124">Approval</text>
+    <text class="copy" x="950" y="158">human gates for</text>
+    <text class="copy" x="950" y="183">risky actions</text>
+  </g>
+
+  <g filter="url(#cardShadow)">
+    <rect class="card" x="1092" y="222" width="220" height="132" rx="24"/>
+    <text class="title" x="1140" y="272">Tools</text>
+    <text class="copy" x="1140" y="306">browser, OS, files,</text>
+    <text class="copy" x="1140" y="331">voice, channels</text>
+  </g>
+
+  <g filter="url(#cardShadow)">
+    <rect class="card" x="906" y="358" width="220" height="132" rx="24"/>
+    <text class="title" x="954" y="410">Audit</text>
+    <text class="copy" x="954" y="444">timeline, evidence,</text>
+    <text class="copy" x="954" y="469">cancellation</text>
+  </g>
+
+  <g filter="url(#cardShadow)">
+    <rect class="card" x="630" y="358" width="220" height="132" rx="24"/>
+    <text class="title" x="676" y="410">Memory</text>
+    <text class="copy" x="676" y="444">lessons, goals,</text>
+    <text class="copy" x="676" y="469">commitments</text>
+  </g>
+
+  <g filter="url(#cardShadow)">
+    <rect class="card" x="354" y="358" width="220" height="132" rx="24"/>
+    <text class="title" x="400" y="410">Response</text>
+    <text class="copy" x="400" y="444">text, voice, draft</text>
+  </g>
+</svg>

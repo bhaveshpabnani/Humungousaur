@@ -7,7 +7,7 @@ description: Plan a day or work session by reviewing goals, commitments, memory,
 
 ## Purpose
 
-Create a realistic plan for the user from current evidence instead of inventing a generic schedule. This skill adapts patterns from OpenClaw daily planner and founder planner workflows into Humungousaur's cognition, commitment, memory, and wakeup tools.
+Create a realistic plan for the user from current evidence instead of inventing a generic schedule. This skill adapts patterns from external reference daily planner and founder planner workflows into Humungousaur's cognition, commitment, memory, and wakeup tools.
 
 ## When To Use
 
@@ -72,5 +72,5 @@ Use when the user asks to plan a day, morning, evening, sprint, work block, or p
 ## References
 
 - Shortlist item: `daily-planning`.
-- Upstream inspiration: OpenClaw `agent-daily-planner`, `adhd-founder-planner`.
+- Upstream inspiration: external reference `agent-daily-planner`, `adhd-founder-planner`.
 - Humungousaur standard: `docs/AGENT_SKILL_AUTHORING_STANDARD.md`.

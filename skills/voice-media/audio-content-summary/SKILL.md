@@ -7,7 +7,7 @@ description: Summarize audio, video transcripts, voice notes, and spoken content
 
 ## Purpose
 
-Turn spoken media into usable knowledge. This adapts Hermes YouTube content and audio analysis inspirations into Humungousaur-native transcription, reading, summarization, memory, and note tools.
+Turn spoken media into usable knowledge. This adapts external reference YouTube content and audio analysis inspirations into Humungousaur-native transcription, reading, summarization, memory, and note tools.
 
 ## When To Use
 
@@ -68,4 +68,4 @@ Use for podcast notes, voice memos, recorded calls, YouTube transcripts, trainin
 ## References
 
 - Shortlist item: `audio-content-summary`.
-- Upstream inspiration: Hermes `youtube-content`, `songsee`.
+- Upstream inspiration: external reference `youtube-content`, `songsee`.
