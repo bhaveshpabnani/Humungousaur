@@ -27,7 +27,11 @@
             <Setter Property="Padding" Value="16" />
         </Style>
 
-        <Style x:Key="CompactCardBorderStyle" TargetType="Border" BasedOn="{StaticResource CardBorderStyle}">
+        <Style x:Key="CompactCardBorderStyle" TargetType="Border">
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Background" Value="{StaticResource AppCardBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource AppStrokeBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Padding" Value="12" />
         </Style>
 
@@ -227,7 +231,7 @@
                                                     <TextBlock Text="{Binding Speaker}" FontWeight="SemiBold" />
                                                     <TextBlock Text="{Binding TimeText}" Opacity="0.58" FontSize="12" />
                                                 </StackPanel>
-                                                <local:MarkdownTextBlock Grid.Row="1" Markdown="{Binding Text}" Margin="0,5,0,0" />
+                                                <TextBlock Grid.Row="1" Text="{Binding Text}" TextWrapping="WrapWholeWords" Margin="0,5,0,0" />
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
