@@ -48,7 +48,7 @@ This bridge reads OpenAI/Codex `SKILL.md`, plugin metadata, and documented Codex
 1. Event bus
    - Normalizes user text, voice, activity, screen, browser, app, file, schedule, and system stimuli into durable events.
    - Supports priorities so interrupts and approvals can preempt background work.
-   - Continuous collectors feed active window, browser context, filesystem, clipboard, screenshot/OCR keyframe, video keyframe, and audio activity stimuli into this bus through local privacy filters, dwell gates, dedupe, batching, and rate budgets.
+   - Continuous collectors feed active window, browser context, filesystem, clipboard, screenshot/OCR keyframe, video keyframe, audio activity, lifecycle, and bridge-fed input/browser events into this bus through local privacy filters, dwell gates, dedupe, batching, and rate budgets. See `docs/COLLECTOR_ARCHITECTURE.md` for the collector catalog and implementation contract.
 
 2. Perception and context
    - Converts raw signals into compact observations.
