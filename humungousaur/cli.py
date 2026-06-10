@@ -207,11 +207,18 @@ def build_parser() -> argparse.ArgumentParser:
     collector_configure.add_argument("--data-dir", type=Path, default=Path("artifacts"))
     collector_configure.add_argument("--enabled", action="store_true")
     collector_configure.add_argument("--disabled", action="store_true")
+    collector_configure.add_argument("--privacy-mode", choices=("privacy_first",))
     collector_configure.add_argument("--poll-seconds", type=float)
+    collector_configure.add_argument("--dwell-seconds", type=float)
+    collector_configure.add_argument("--batch-seconds", type=float)
+    collector_configure.add_argument("--llm-attention-interval-seconds", type=float)
     collector_configure.add_argument("--response-mode", choices=("silent", "text", "voice_prepare", "voice_speak"))
     collector_configure.add_argument("--no-submit-to-harness", action="store_true")
     collector_configure.add_argument("--run-autonomous-cycle", action="store_true")
     collector_configure.add_argument("--max-events-per-tick", type=int)
+    collector_configure.add_argument("--collector-rate-limit", action="append", default=[], help="Per-minute budget as collector=limit")
+    collector_configure.add_argument("--rich-capture-opt-in", action="append", default=[], help="Opt in a rich collector such as clipboard, screen_ocr, screenshot, video_frame, or audio_activity")
+    collector_configure.add_argument("--rich-capture-opt-out", action="append", default=[])
     collector_configure.add_argument("--watch-path", action="append", default=[])
     collector_configure.add_argument("--enable-collector", action="append", default=[])
     collector_configure.add_argument("--disable-collector", action="append", default=[])
@@ -564,8 +571,16 @@ def main() -> None:
             payload["enabled"] = True
         if args.disabled:
             payload["enabled"] = False
+        if args.privacy_mode is not None:
+            payload["privacy_mode"] = args.privacy_mode
         if args.poll_seconds is not None:
             payload["poll_seconds"] = args.poll_seconds
+        if args.dwell_seconds is not None:
+            payload["dwell_seconds"] = args.dwell_seconds
+        if args.batch_seconds is not None:
+            payload["batch_seconds"] = args.batch_seconds
+        if args.llm_attention_interval_seconds is not None:
+            payload["llm_attention_interval_seconds"] = args.llm_attention_interval_seconds
         if args.response_mode is not None:
             payload["response_mode"] = args.response_mode
         if args.no_submit_to_harness:
@@ -583,6 +598,23 @@ def main() -> None:
             collectors[name] = False
         if collectors:
             payload["collectors"] = collectors
+        rich_capture_opt_in: dict[str, bool] = {}
+        for name in args.rich_capture_opt_in:
+            rich_capture_opt_in[name] = True
+        for name in args.rich_capture_opt_out:
+            rich_capture_opt_in[name] = False
+        if rich_capture_opt_in:
+            payload["rich_capture_opt_in"] = rich_capture_opt_in
+        rate_limits: dict[str, int] = {}
+        for item in args.collector_rate_limit:
+            if "=" in item:
+                name, value = item.split("=", 1)
+                try:
+                    rate_limits[name.strip()] = int(value.strip())
+                except ValueError:
+                    pass
+        if rate_limits:
+            payload["collector_rate_limits_per_minute"] = rate_limits
         if args.note:
             payload["note"] = args.note
         profile = save_collector_profile(config, payload)

@@ -1,7 +1,9 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+import humungousaur.collectors.manager as collector_manager
 from humungousaur.collectors import (
     collector_status,
     run_collector_tick,
@@ -32,6 +34,8 @@ class CollectorTests(unittest.TestCase):
         self.assertTrue(profile.enabled)
         self.assertTrue(status["profile"]["collectors"]["clipboard"])
         self.assertFalse(status["profile"]["collectors"]["screenshot"])
+        self.assertEqual(status["profile"]["privacy_mode"], "privacy_first")
+        self.assertFalse(status["profile"]["rich_capture_opt_in"]["clipboard"])
         self.assertIn("audio_activity", status["capabilities"]["collectors"])
 
     def test_filesystem_collector_records_and_dedupes_events(self) -> None:
@@ -192,6 +196,180 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(result.collected, [])
         self.assertTrue(any("source disabled" in item["reason"] for item in result.skipped))
         self.assertEqual(events, [])
+
+    def test_file_burst_coalesces_into_attention_batch_for_llm(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            workspace = root / "workspace"
+            watched = root / "watched"
+            workspace.mkdir()
+            watched.mkdir()
+            (watched / "one.txt").write_text("one", encoding="utf-8")
+            (watched / "two.txt").write_text("two", encoding="utf-8")
+            config = AgentConfig(workspace=workspace, data_dir=root / "data", planner_provider="explicit").normalized()
+            save_collector_profile(
+                config,
+                {
+                    "enabled": True,
+                    "submit_to_harness": True,
+                    "collectors": {
+                        "active_window": False,
+                        "browser": False,
+                        "clipboard": False,
+                        "filesystem": True,
+                        "screenshot": False,
+                        "screen_ocr": False,
+                        "video_frame": False,
+                        "audio_activity": False,
+                    },
+                    "watch_paths": [str(watched)],
+                    "max_file_events": 2,
+                    "max_events_per_tick": 5,
+                },
+            )
+
+            result = run_collector_tick(config, force=True)
+            memory = EventStore(config.memory_db_path).tail(limit=20)
+
+        self.assertEqual(len(result.collected), 2)
+        self.assertEqual(len(result.attention_batches), 1)
+        self.assertEqual(len(result.submitted), 1)
+        self.assertEqual(result.submitted[0]["collector"], "attention_batch")
+        self.assertEqual(result.attention_batches[0]["collector_counts"]["filesystem"], 2)
+        self.assertIn("Filesystem changes: 2 file(s)", result.attention_batches[0]["text"])
+        self.assertEqual(len([event for event in memory if event["event_type"] == "attention_batch"]), 1)
+
+    def test_rich_capture_collector_requires_explicit_opt_in(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            config = AgentConfig(workspace=workspace, data_dir=root / "data", planner_provider="explicit").normalized()
+            save_collector_profile(
+                config,
+                {
+                    "enabled": True,
+                    "submit_to_harness": False,
+                    "collectors": {
+                        "active_window": False,
+                        "browser": False,
+                        "clipboard": True,
+                        "filesystem": False,
+                        "screenshot": False,
+                        "screen_ocr": False,
+                        "video_frame": False,
+                        "audio_activity": False,
+                    },
+                },
+            )
+
+            with patch.object(collector_manager, "_clipboard_text", return_value="very secret clipboard"):
+                result = run_collector_tick(config, force=True)
+
+        self.assertEqual(result.collected, [])
+        self.assertTrue(any(item["reason"] == "rich capture collector is not opted in" for item in result.skipped))
+
+    def test_clipboard_attention_batch_omits_clipboard_content(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            config = AgentConfig(workspace=workspace, data_dir=root / "data", planner_provider="explicit").normalized()
+            save_collector_profile(
+                config,
+                {
+                    "enabled": True,
+                    "submit_to_harness": True,
+                    "collectors": {
+                        "active_window": False,
+                        "browser": False,
+                        "clipboard": True,
+                        "filesystem": False,
+                        "screenshot": False,
+                        "screen_ocr": False,
+                        "video_frame": False,
+                        "audio_activity": False,
+                    },
+                    "rich_capture_opt_in": {"clipboard": True},
+                },
+            )
+
+            with patch.object(collector_manager, "_clipboard_text", return_value="super secret clipboard"):
+                result = run_collector_tick(config, force=True)
+
+        self.assertEqual(len(result.attention_batches), 1)
+        batch = result.attention_batches[0]
+        self.assertIn("Clipboard changed", batch["text"])
+        self.assertNotIn("super secret", batch["text"])
+        self.assertNotIn("super secret", str(batch["events"]))
+
+    def test_ambient_voice_activity_does_not_submit_to_llm(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            config = AgentConfig(workspace=workspace, data_dir=root / "data", planner_provider="explicit").normalized()
+            save_collector_profile(
+                config,
+                {
+                    "enabled": True,
+                    "submit_to_harness": True,
+                    "collectors": {
+                        "active_window": False,
+                        "browser": False,
+                        "clipboard": False,
+                        "filesystem": False,
+                        "screenshot": False,
+                        "screen_ocr": False,
+                        "video_frame": False,
+                        "audio_activity": True,
+                    },
+                    "rich_capture_opt_in": {"audio_activity": True},
+                },
+            )
+
+            with patch.object(collector_manager, "_audio_rms_sample", return_value={"rms": 0.2, "sample_rate": 16000, "sample_seconds": 1.5}):
+                result = run_collector_tick(config, force=True)
+
+        self.assertEqual(len(result.collected), 1)
+        self.assertEqual(result.attention_batches, [])
+        self.assertEqual(result.submitted, [])
+
+    def test_collector_rate_limit_caps_event_floods(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            workspace = root / "workspace"
+            watched = root / "watched"
+            workspace.mkdir()
+            watched.mkdir()
+            for index in range(3):
+                (watched / f"{index}.txt").write_text(str(index), encoding="utf-8")
+            config = AgentConfig(workspace=workspace, data_dir=root / "data", planner_provider="explicit").normalized()
+            save_collector_profile(
+                config,
+                {
+                    "enabled": True,
+                    "submit_to_harness": False,
+                    "collectors": {
+                        "active_window": False,
+                        "browser": False,
+                        "clipboard": False,
+                        "filesystem": True,
+                        "screenshot": False,
+                        "screen_ocr": False,
+                        "video_frame": False,
+                        "audio_activity": False,
+                    },
+                    "watch_paths": [str(watched)],
+                    "max_file_events": 3,
+                    "collector_rate_limits_per_minute": {"filesystem": 1},
+                },
+            )
+
+            result = run_collector_tick(config)
+
+        self.assertEqual(len(result.collected), 1)
+        self.assertEqual(len([item for item in result.skipped if "minute budget exceeded" in item["reason"]]), 2)
 
 
 if __name__ == "__main__":

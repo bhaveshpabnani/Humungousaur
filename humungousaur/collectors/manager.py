@@ -37,6 +37,17 @@ DEFAULT_COLLECTORS = {
     "audio_activity": False,
 }
 SENSITIVE_COLLECTORS = {"clipboard", "screenshot", "screen_ocr", "video_frame", "audio_activity"}
+DEFAULT_RICH_CAPTURE_OPT_IN = {name: False for name in SENSITIVE_COLLECTORS}
+DEFAULT_COLLECTOR_RATE_LIMITS_PER_MINUTE = {
+    "active_window": 6,
+    "browser": 6,
+    "clipboard": 3,
+    "filesystem": 10,
+    "screenshot": 2,
+    "screen_ocr": 2,
+    "video_frame": 1,
+    "audio_activity": 12,
+}
 COLLECTOR_SOURCES = {
     "active_window": "activity",
     "browser": "browser",
@@ -56,15 +67,21 @@ def _utc_now() -> str:
 @dataclass(slots=True)
 class CollectorProfile:
     enabled: bool = False
+    privacy_mode: str = "privacy_first"
     poll_seconds: float = 5.0
     response_mode: str = "silent"
     submit_to_harness: bool = True
     run_autonomous_cycle: bool = False
     max_events_per_tick: int = 8
     collectors: dict[str, bool] = field(default_factory=lambda: dict(DEFAULT_COLLECTORS))
+    rich_capture_opt_in: dict[str, bool] = field(default_factory=lambda: dict(DEFAULT_RICH_CAPTURE_OPT_IN))
+    collector_rate_limits_per_minute: dict[str, int] = field(default_factory=lambda: dict(DEFAULT_COLLECTOR_RATE_LIMITS_PER_MINUTE))
     watch_paths: list[str] = field(default_factory=list)
     max_file_events: int = 5
     max_text_chars: int = 2000
+    dwell_seconds: float = 8.0
+    batch_seconds: float = 20.0
+    llm_attention_interval_seconds: float = 60.0
     screenshot_min_interval_seconds: float = 60.0
     ocr_min_interval_seconds: float = 90.0
     video_frame_min_interval_seconds: float = 120.0
@@ -124,6 +141,7 @@ class CollectorTickResult:
     collected: list[dict[str, Any]]
     submitted: list[dict[str, Any]]
     skipped: list[dict[str, Any]]
+    attention_batches: list[dict[str, Any]] = field(default_factory=list)
     loop: dict[str, Any] | None = None
     started_at: str = field(default_factory=_utc_now)
     finished_at: str = ""
@@ -159,6 +177,18 @@ def save_collector_profile(config: AgentConfig, payload: dict[str, Any]) -> Coll
                 if name in DEFAULT_COLLECTORS:
                     next_collectors[name] = bool(enabled)
             merged["collectors"] = next_collectors
+        elif key == "rich_capture_opt_in" and isinstance(value, dict):
+            next_rich = dict(merged.get("rich_capture_opt_in", {}))
+            for name, enabled in value.items():
+                if name in SENSITIVE_COLLECTORS:
+                    next_rich[name] = bool(enabled)
+            merged["rich_capture_opt_in"] = next_rich
+        elif key == "collector_rate_limits_per_minute" and isinstance(value, dict):
+            next_limits = dict(merged.get("collector_rate_limits_per_minute", {}))
+            for name, limit in value.items():
+                if name in DEFAULT_COLLECTORS:
+                    next_limits[name] = limit
+            merged["collector_rate_limits_per_minute"] = next_limits
         elif key in merged:
             merged[key] = value
     profile = _profile_from_payload(merged)
@@ -206,6 +236,9 @@ def run_collector_tick(
     state = _load_state(normalized)
     state.setdefault("signatures", {})
     state.setdefault("last_capture_at", {})
+    state.setdefault("dwell_candidates", {})
+    state.setdefault("rate_limits", {})
+    state.setdefault("pending_attention_events", [])
     policy = ActivityPolicyStore(activity_policy_path(normalized)).load()
     events: list[CollectorEvent] = []
     errors: list[dict[str, Any]] = []
@@ -230,9 +263,21 @@ def run_collector_tick(
             continue
         event_payload = _event_payload(event)
         signature = event.stable_signature()
+        sensitivity_reason = _sensitive_event_reason(active, event)
+        if sensitivity_reason is not None:
+            result.skipped.append({"collector": event.collector, "stimulus_type": event.stimulus_type, "reason": sensitivity_reason})
+            continue
         collector_signatures = state["signatures"].setdefault(event.collector, {})
         if _signature_seen(collector_signatures, event.stimulus_type, signature):
             result.skipped.append({"collector": event.collector, "stimulus_type": event.stimulus_type, "reason": "duplicate"})
+            continue
+        dwell_reason = _dwell_filter_reason(state, active, event, signature, force=force)
+        if dwell_reason is not None:
+            result.skipped.append({"collector": event.collector, "stimulus_type": event.stimulus_type, "reason": dwell_reason})
+            continue
+        rate_reason = _rate_limit_reason(state, active, event, force=force)
+        if rate_reason is not None:
+            result.skipped.append({"collector": event.collector, "stimulus_type": event.stimulus_type, "reason": rate_reason})
             continue
         policy_payload = _activity_payload(event)
         policy_match = _activity_policy_match(policy_payload, policy)
@@ -242,21 +287,29 @@ def run_collector_tick(
         result.collected.append(event_payload)
         if not dry_run:
             _record_collector_event(normalized, event)
-            if active.submit_to_harness:
-                harness = InteractionHarness(normalized).handle(event.stimulus(), response_mode=active.response_mode)
-                result.submitted.append(
-                    {
-                        "collector": event.collector,
-                        "stimulus_type": event.stimulus_type,
-                        "decision": harness_result_to_dict(harness).get("decision", {}),
-                        "run_id": harness.run.run_id if harness.run is not None else "",
-                    }
-                )
+            if active.submit_to_harness and _llm_eligible_event(active, event):
+                _queue_attention_event(state, event)
             _remember_signature(collector_signatures, event.stimulus_type, signature)
+            _remember_rate_limit_event(state, event)
             submitted_count += 1
     state["last_tick_at"] = _utc_now()
     state["tick_count"] = int(state.get("tick_count", 0)) + 1
     state["last_collected_count"] = len(result.collected)
+    if active.submit_to_harness and not dry_run:
+        attention_batch = _maybe_build_attention_batch(state, active, force=force)
+        if attention_batch is not None:
+            result.attention_batches.append(attention_batch)
+            EventStore(normalized.memory_db_path).append("attention_batch", attention_batch)
+            harness = InteractionHarness(normalized).handle(_attention_stimulus(attention_batch), response_mode=active.response_mode)
+            result.submitted.append(
+                {
+                    "collector": "attention_batch",
+                    "stimulus_type": "attention_batch",
+                    "decision": harness_result_to_dict(harness).get("decision", {}),
+                    "run_id": harness.run.run_id if harness.run is not None else "",
+                    "batch_id": attention_batch["batch_id"],
+                }
+            )
     if not dry_run:
         _save_state(normalized, state)
     if active.run_autonomous_cycle and not dry_run:
@@ -313,10 +366,14 @@ def collector_capabilities() -> dict[str, Any]:
             },
         },
         "contract": {
-            "raw_capture_default": "off",
+            "default_privacy_mode": "privacy_first",
+            "raw_capture_default": "off for rich collectors",
+            "dwell": "active window and browser context require dwell before recording",
+            "batching": "LLM receives attention_batch summaries, not individual raw collector events",
             "dedupe": "per collector and stimulus_type stable signatures",
+            "rate_limits": "per collector minute budgets before local recording or harness submission",
             "privacy_policy": "activity_policy exclusions are applied before recording or harness submission",
-            "llm_boundary": "events are compacted and passed through InteractionHarness, not raw 24/7 streams",
+            "llm_boundary": "raw collector events stay local; compact attention batches pass through InteractionHarness",
         },
     }
 
@@ -513,23 +570,44 @@ def _profile_from_payload(payload: dict[str, Any]) -> CollectorProfile:
         for name, enabled in raw_collectors.items():
             if name in collectors:
                 collectors[name] = bool(enabled)
+    rich_capture_opt_in = dict(DEFAULT_RICH_CAPTURE_OPT_IN)
+    raw_rich = payload.get("rich_capture_opt_in", {})
+    if isinstance(raw_rich, dict):
+        for name, enabled in raw_rich.items():
+            if name in rich_capture_opt_in:
+                rich_capture_opt_in[name] = bool(enabled)
+    collector_rate_limits = dict(DEFAULT_COLLECTOR_RATE_LIMITS_PER_MINUTE)
+    raw_limits = payload.get("collector_rate_limits_per_minute", {})
+    if isinstance(raw_limits, dict):
+        for name, limit in raw_limits.items():
+            if name in collector_rate_limits:
+                collector_rate_limits[name] = max(0, min(int(limit or 0), 600))
     response_mode = str(payload.get("response_mode") or "silent").strip() or "silent"
     if response_mode not in {"silent", "text", "voice_prepare", "voice_speak"}:
         response_mode = "silent"
+    privacy_mode = str(payload.get("privacy_mode") or "privacy_first").strip().lower()
+    if privacy_mode not in {"privacy_first"}:
+        privacy_mode = "privacy_first"
     watch_paths = payload.get("watch_paths", [])
     if not isinstance(watch_paths, list):
         watch_paths = []
     return CollectorProfile(
         enabled=bool(payload.get("enabled", False)),
+        privacy_mode=privacy_mode,
         poll_seconds=max(0.5, min(float(payload.get("poll_seconds") or 5.0), 3600.0)),
         response_mode=response_mode,
         submit_to_harness=bool(payload.get("submit_to_harness", True)),
         run_autonomous_cycle=bool(payload.get("run_autonomous_cycle", False)),
         max_events_per_tick=max(1, min(int(payload.get("max_events_per_tick") or 8), 50)),
         collectors=collectors,
+        rich_capture_opt_in=rich_capture_opt_in,
+        collector_rate_limits_per_minute=collector_rate_limits,
         watch_paths=[str(item) for item in watch_paths if str(item).strip()][:20],
         max_file_events=max(1, min(int(payload.get("max_file_events") or 5), 50)),
         max_text_chars=max(160, min(int(payload.get("max_text_chars") or 2000), 20_000)),
+        dwell_seconds=max(0.5, min(float(payload.get("dwell_seconds") or 8.0), 120.0)),
+        batch_seconds=max(1.0, min(float(payload.get("batch_seconds") or 20.0), 900.0)),
+        llm_attention_interval_seconds=max(1.0, min(float(payload.get("llm_attention_interval_seconds") or 60.0), 3600.0)),
         screenshot_min_interval_seconds=max(5.0, min(float(payload.get("screenshot_min_interval_seconds") or 60.0), 3600.0)),
         ocr_min_interval_seconds=max(5.0, min(float(payload.get("ocr_min_interval_seconds") or 90.0), 3600.0)),
         video_frame_min_interval_seconds=max(5.0, min(float(payload.get("video_frame_min_interval_seconds") or 120.0), 3600.0)),
@@ -563,6 +641,209 @@ def _activity_payload(event: CollectorEvent) -> dict[str, Any]:
         "url": str(event.metadata.get("url", "")),
         "metadata": {key: str(value) for key, value in event.metadata.items()},
     }
+
+
+def _sensitive_event_reason(profile: CollectorProfile, event: CollectorEvent) -> str | None:
+    if event.collector in SENSITIVE_COLLECTORS and not profile.rich_capture_opt_in.get(event.collector, False):
+        return "rich capture collector is not opted in"
+    if event.collector in {"active_window", "browser", "screen_ocr", "screenshot", "video_frame"}:
+        text = " ".join(
+            [
+                str(event.metadata.get("app_name", "")),
+                str(event.metadata.get("window_title", "")),
+                str(event.metadata.get("url", "")),
+            ]
+        ).lower()
+        if any(term in text for term in ("private browsing", "incognito", "password", "1password", "keychain")):
+            return "sensitive private or credential context"
+    return None
+
+
+def _dwell_filter_reason(state: dict[str, Any], profile: CollectorProfile, event: CollectorEvent, signature: str, *, force: bool) -> str | None:
+    if force or event.collector not in {"active_window", "browser"}:
+        return None
+    now = time.time()
+    candidates = state.setdefault("dwell_candidates", {})
+    key = f"{event.collector}:{event.stimulus_type}"
+    candidate = candidates.get(key)
+    if not isinstance(candidate, dict) or candidate.get("signature") != signature:
+        candidates[key] = {"signature": signature, "first_seen_at": now, "last_seen_at": now}
+        return f"dwell pending for {profile.dwell_seconds:g}s"
+    candidate["last_seen_at"] = now
+    first_seen = float(candidate.get("first_seen_at", now) or now)
+    if now - first_seen < profile.dwell_seconds:
+        return f"dwell pending for {profile.dwell_seconds:g}s"
+    candidates.pop(key, None)
+    return None
+
+
+def _rate_limit_reason(state: dict[str, Any], profile: CollectorProfile, event: CollectorEvent, *, force: bool) -> str | None:
+    if force:
+        return None
+    limit = int(profile.collector_rate_limits_per_minute.get(event.collector, 0) or 0)
+    if limit <= 0:
+        return "collector minute budget disabled"
+    now = time.time()
+    timestamps = _recent_rate_limit_timestamps(state, event.collector, now=now)
+    if len(timestamps) >= limit:
+        return f"collector minute budget exceeded ({limit}/min)"
+    return None
+
+
+def _remember_rate_limit_event(state: dict[str, Any], event: CollectorEvent) -> None:
+    now = time.time()
+    timestamps = _recent_rate_limit_timestamps(state, event.collector, now=now)
+    timestamps.append(now)
+    state.setdefault("rate_limits", {})[event.collector] = timestamps[-600:]
+
+
+def _recent_rate_limit_timestamps(state: dict[str, Any], collector: str, *, now: float) -> list[float]:
+    raw = state.setdefault("rate_limits", {}).get(collector, [])
+    if not isinstance(raw, list):
+        raw = []
+    return [float(item) for item in raw if isinstance(item, (int, float)) and now - float(item) < 60.0]
+
+
+def _llm_eligible_event(profile: CollectorProfile, event: CollectorEvent) -> bool:
+    del profile
+    if event.collector == "audio_activity":
+        return False
+    if event.source == "audio_transcript" and event.stimulus_type == "voice_activity_detected":
+        return False
+    return True
+
+
+def _queue_attention_event(state: dict[str, Any], event: CollectorEvent) -> None:
+    queued = state.setdefault("pending_attention_events", [])
+    if not isinstance(queued, list):
+        queued = []
+    queued.append(_compact_attention_event(event))
+    state["pending_attention_events"] = queued[-500:]
+
+
+def _compact_attention_event(event: CollectorEvent) -> dict[str, Any]:
+    compact: dict[str, Any] = {
+        "collector": event.collector,
+        "source": event.source,
+        "stimulus_type": event.stimulus_type,
+        "occurred_at": event.occurred_at,
+        "signature": event.stable_signature(),
+    }
+    if event.collector == "filesystem":
+        compact["path"] = str(event.payload.get("relative_path") or event.metadata.get("path") or "")
+        compact["size_bytes"] = int(event.metadata.get("size_bytes") or 0)
+    elif event.collector == "browser":
+        compact["app_name"] = str(event.metadata.get("app_name", ""))
+        compact["window_title"] = str(event.metadata.get("window_title", ""))
+        compact["url"] = str(event.metadata.get("url", ""))
+    elif event.collector == "active_window":
+        compact["app_name"] = str(event.metadata.get("app_name", ""))
+        compact["window_title"] = str(event.metadata.get("window_title", ""))
+    elif event.collector == "clipboard":
+        compact["text_length"] = int(event.metadata.get("text_length") or 0)
+        compact["truncated"] = bool(event.metadata.get("truncated", False))
+    elif event.collector == "screen_ocr":
+        compact["text_length"] = int(event.metadata.get("text_length") or 0)
+        compact["truncated"] = bool(event.metadata.get("truncated", False))
+    elif event.collector in {"screenshot", "video_frame"}:
+        compact["filename"] = str(event.metadata.get("filename", ""))
+        compact["width"] = event.metadata.get("width")
+        compact["height"] = event.metadata.get("height")
+    else:
+        compact["summary"] = event.text[:240]
+    return compact
+
+
+def _maybe_build_attention_batch(state: dict[str, Any], profile: CollectorProfile, *, force: bool) -> dict[str, Any] | None:
+    pending = state.get("pending_attention_events", [])
+    if not isinstance(pending, list) or not pending:
+        return None
+    now = time.time()
+    first_at = _parse_time(pending[0].get("occurred_at")) or now
+    last_attention_at = float(state.get("last_attention_batch_at", 0.0) or 0.0)
+    if not force and now - first_at < profile.batch_seconds:
+        return None
+    if not force and last_attention_at > 0.0 and now - last_attention_at < profile.llm_attention_interval_seconds:
+        return None
+    batch = _attention_batch_payload(pending, profile)
+    state["pending_attention_events"] = []
+    state["last_attention_batch_at"] = now
+    return batch
+
+
+def _attention_batch_payload(events: list[dict[str, Any]], profile: CollectorProfile) -> dict[str, Any]:
+    batch_id = f"attention-{hashlib.sha256(json.dumps(events, sort_keys=True, default=str).encode('utf-8')).hexdigest()[:12]}"
+    counts: dict[str, int] = {}
+    for event in events:
+        collector = str(event.get("collector", "unknown"))
+        counts[collector] = counts.get(collector, 0) + 1
+    text = _attention_batch_text(events, counts)
+    return {
+        "batch_id": batch_id,
+        "event_type": "attention_batch",
+        "source": "activity",
+        "stimulus_type": "attention_batch",
+        "text": text,
+        "event_count": len(events),
+        "collector_counts": counts,
+        "events": events[-50:],
+        "privacy_mode": profile.privacy_mode,
+        "occurred_at": _utc_now(),
+        "safety_note": "Compact local attention summary; raw screenshots, audio, video, and clipboard contents are not included.",
+    }
+
+
+def _attention_batch_text(events: list[dict[str, Any]], counts: dict[str, int]) -> str:
+    lines = [f"Attention batch: {len(events)} filtered local event(s)."]
+    filesystem_paths = [str(event.get("path", "")) for event in events if event.get("collector") == "filesystem" and event.get("path")]
+    if filesystem_paths:
+        lines.append(f"Filesystem changes: {len(filesystem_paths)} file(s): {', '.join(filesystem_paths[:5])}.")
+    for collector in ("active_window", "browser"):
+        latest = next((event for event in reversed(events) if event.get("collector") == collector), None)
+        if latest:
+            label = "Active window" if collector == "active_window" else "Browser context"
+            title = str(latest.get("window_title") or latest.get("url") or "unknown")
+            app = str(latest.get("app_name") or collector)
+            lines.append(f"{label}: {app} - {title}.")
+    if counts.get("clipboard"):
+        latest_clipboard = next((event for event in reversed(events) if event.get("collector") == "clipboard"), {})
+        lines.append(f"Clipboard changed ({latest_clipboard.get('text_length', 0)} chars); content omitted.")
+    if counts.get("screen_ocr"):
+        latest_ocr = next((event for event in reversed(events) if event.get("collector") == "screen_ocr"), {})
+        lines.append(f"Screen OCR changed ({latest_ocr.get('text_length', 0)} chars); raw text omitted.")
+    if counts.get("screenshot"):
+        lines.append(f"Screenshot capture event(s): {counts['screenshot']}; image omitted.")
+    if counts.get("video_frame"):
+        lines.append(f"Video keyframe event(s): {counts['video_frame']}; frame omitted.")
+    return " ".join(lines)
+
+
+def _attention_stimulus(batch: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "text": str(batch.get("text", "")),
+        "source": "activity",
+        "metadata": {
+            "collector": "attention_batch",
+            "stimulus_type": "attention_batch",
+            "privacy_mode": str(batch.get("privacy_mode", "privacy_first")),
+            "event_count": int(batch.get("event_count") or 0),
+            "collector_counts": batch.get("collector_counts", {}),
+            "events": batch.get("events", []),
+            "payload": {key: value for key, value in batch.items() if key != "events"},
+        },
+        "stimulus_id": str(batch.get("batch_id", "")) or f"attention-{hashlib.sha256(str(batch).encode('utf-8')).hexdigest()[:12]}",
+        "occurred_at": str(batch.get("occurred_at", "")) or _utc_now(),
+    }
+
+
+def _parse_time(value: Any) -> float | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
 
 
 def _signature_seen(signatures: dict[str, Any], stimulus_type: str, signature: str) -> bool:
