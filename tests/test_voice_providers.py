@@ -41,6 +41,16 @@ class VoiceProviderTests(unittest.TestCase):
         self.assertNotIn("dg-runtime", json.dumps(result.output))
         self.assertNotIn("el-runtime", json.dumps(result.output))
 
+    def test_voice_provider_status_reports_macos_system_voice(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
+            with patch("platform.system", return_value="Darwin"):
+                result = VoiceProviderStatusTool().execute({}, config)
+
+        self.assertEqual(result.status, ActionStatus.SUCCEEDED)
+        self.assertTrue(result.output["tts"]["system"]["configured"])
+        self.assertEqual(result.output["tts"]["system"]["provider"], "macos_say")
+
     def test_voice_transcribe_deepgram_parses_transcript(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)
@@ -226,16 +236,19 @@ class VoiceProviderTests(unittest.TestCase):
             audio.write_bytes(b"RIFF....WAVEfmt ")
             config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts").normalized()
 
-            with patch(
-                "humungousaur.tools.voice.implementation.windows_sapi_synthesize_to_file",
-                return_value=SpeechSynthesis(
-                    provider="windows_sapi",
-                    audio_path=audio,
-                    voice_id="windows_sapi",
-                    model="windows_sapi",
-                    output_format="wav",
-                    mime_type="audio/wav",
-                    byte_count=audio.stat().st_size,
+            with (
+                patch("platform.system", return_value="Windows"),
+                patch(
+                    "humungousaur.tools.voice.implementation.windows_sapi_synthesize_to_file",
+                    return_value=SpeechSynthesis(
+                        provider="windows_sapi",
+                        audio_path=audio,
+                        voice_id="windows_sapi",
+                        model="windows_sapi",
+                        output_format="wav",
+                        mime_type="audio/wav",
+                        byte_count=audio.stat().st_size,
+                    ),
                 ),
             ):
                 result = VoiceResponsePrepareTool().execute(
@@ -251,6 +264,61 @@ class VoiceProviderTests(unittest.TestCase):
         self.assertEqual(result.status, ActionStatus.SUCCEEDED)
         self.assertEqual(result.output["audio"]["provider"], "windows_sapi")
         self.assertTrue(artifact_path_exists)
+
+    def test_voice_response_prepare_system_writes_macos_audio_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            audio = workspace / "system.aiff"
+            audio.write_bytes(b"FORM....AIFF")
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts").normalized()
+
+            with (
+                patch("platform.system", return_value="Darwin"),
+                patch(
+                    "humungousaur.tools.voice.implementation.macos_say_synthesize_to_file",
+                    return_value=SpeechSynthesis(
+                        provider="macos_say",
+                        audio_path=audio,
+                        voice_id="macos_say",
+                        model="macos_say",
+                        output_format="aiff",
+                        mime_type="audio/aiff",
+                        byte_count=audio.stat().st_size,
+                    ),
+                ),
+            ):
+                result = VoiceResponsePrepareTool().execute(
+                    {
+                        "text": "hello from mac system voice",
+                        "reason": "test",
+                        "tts_provider": "system",
+                    },
+                    config,
+                )
+            artifact_path_exists = Path(result.output["path"]).exists()
+
+        self.assertEqual(result.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(result.output["audio"]["provider"], "macos_say")
+        self.assertTrue(artifact_path_exists)
+
+    def test_voice_speak_system_uses_macos_say(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
+            with (
+                patch("platform.system", return_value="Darwin"),
+                patch("humungousaur.tools.voice.implementation.macos_say_speak_text", return_value={"status": "ok"}),
+            ):
+                result = VoiceSpeakTool().execute(
+                    {
+                        "text": "hello from mac",
+                        "reason": "test",
+                        "provider": "system",
+                    },
+                    config,
+                )
+
+        self.assertEqual(result.status, ActionStatus.SUCCEEDED)
+        self.assertEqual(result.output["source"], "macos_say")
 
 
 class _FakeResponse:

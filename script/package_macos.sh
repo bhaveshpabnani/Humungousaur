@@ -63,6 +63,10 @@ cat >"$INFO_PLIST" <<PLIST
   <string>$MIN_SYSTEM_VERSION</string>
   <key>NSPrincipalClass</key>
   <string>NSApplication</string>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Humungousaur uses the microphone only when voice wake-up is enabled so it can hear your wake phrase and spoken tasks.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>Humungousaur uses speech recognition only when voice wake-up is enabled to turn your spoken tasks into local agent stimuli.</string>
 </dict>
 </plist>
 PLIST
@@ -83,6 +87,7 @@ Version: $PROJECT_VERSION
    - provider/model: openai, groq, ollama, grok, or local-openai
    - model keys: OPENAI_API_KEY, GROQ_API_KEY, XAI_API_KEY, OLLAMA_API_KEY, or LOCAL_LLM_API_KEY
    - voice keys: DEEPGRAM_API_KEY, ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID, ELEVENLABS_MODEL_ID
+   - voice wake-up: enable it in the Voice tab, approve microphone and speech-recognition permissions, then say "Humungousaur" followed by a task
    - channel keys required by your enabled channel setup
 5. Use the toolbar status menu to verify API, model, tools, runs, channels, voice, autonomy, and approvals before sending a task.
 

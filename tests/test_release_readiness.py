@@ -801,6 +801,28 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn('rm -rf "$STAGE_DIR"', macos_package_text)
         self.assertIn("Remove-Item -Path $PublishDir -Recurse -Force", windows_package_text)
 
+    def test_macos_package_declares_voice_wakeup_permissions(self) -> None:
+        package_text = MACOS_PACKAGE_PATH.read_text(encoding="utf-8")
+        run_text = (ROOT / "script" / "build_and_run.sh").read_text(encoding="utf-8")
+
+        for text in [package_text, run_text]:
+            self.assertIn("NSMicrophoneUsageDescription", text)
+            self.assertIn("NSSpeechRecognitionUsageDescription", text)
+            self.assertIn("voice wake-up", text)
+        self.assertIn("approve microphone and speech-recognition permissions", package_text)
+
+    def test_portability_check_rejects_developer_home_paths(self) -> None:
+        module = load_release_readiness_module()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            developer_path = "/" + "Users/example/Documents/" + "bhaveshpabnani/Umang"
+            (root / "app.py").write_text(f'WORKSPACE = "{developer_path}"\n', encoding="utf-8")
+
+            preflight = module.Preflight()
+            module.check_portability(preflight, root)
+
+        self.assertTrue(any("developer-specific checkout path" in error for error in preflight.errors), preflight.errors)
+
     def test_github_release_check_downloads_checksums_and_validates_rows(self) -> None:
         module = load_release_readiness_module()
         windows_bytes = b"windows zip"
@@ -846,6 +868,23 @@ class ReleaseReadinessTests(unittest.TestCase):
         self.assertIn("GitHub v0.1.0 checksums.txt includes both desktop zip rows", preflight.passed)
         self.assertIn("GitHub v0.1.0 Humungousaur-Windows.zip hash matches checksums.txt", preflight.passed)
         self.assertIn("GitHub v0.1.0 Humungousaur-macOS.zip hash matches checksums.txt", preflight.passed)
+
+    def test_github_release_check_uses_configurable_repo_slug(self) -> None:
+        module = load_release_readiness_module()
+        repos: list[str] = []
+
+        def fake_run(command, **_kwargs):
+            if command[:3] == ["gh", "release", "view"]:
+                repos.append(command[command.index("--repo") + 1])
+                return subprocess.CompletedProcess(command, 1, stdout="", stderr="not found")
+            raise AssertionError(f"unexpected command: {command}")
+
+        preflight = module.Preflight()
+        with patch.object(module.subprocess, "run", side_effect=fake_run):
+            module.check_github_release(preflight, require_release=False, release_tag=None, repo="example/Humungousaur")
+
+        self.assertEqual(["example/Humungousaur"], repos)
+        self.assertEqual([], preflight.errors)
 
     def test_github_release_check_fails_when_checksums_miss_desktop_zip(self) -> None:
         module = load_release_readiness_module()

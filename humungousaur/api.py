@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import os
 import threading
@@ -70,7 +72,7 @@ from humungousaur.tools.cognition_tools import (
 from humungousaur.tools.os_tools import list_screenshot_captures
 from humungousaur.tools.plugin_tools import discover_plugin_manifests, load_plugin_catalog
 from humungousaur.tools.system_tools import collect_system_status
-from humungousaur.tools.voice_tools import VoiceProviderStatusTool
+from humungousaur.tools.voice_tools import VoiceProviderStatusTool, VoiceTranscribeTool
 from humungousaur.tools.workflow_tools import (
     CanvasA2uiCreateTool,
     CanvasA2uiRenderTool,
@@ -426,6 +428,23 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                     run_config = request_config(effective_config(), payload)
                     result = VoiceProviderStatusTool().execute({}, run_config)
                     self._send_json({"status": result.status.value, "summary": result.summary, **result.output}, HTTPStatus.CREATED)
+                    return
+                if path == "/voice/transcribe":
+                    if not str(payload.get("audio_path", "")).strip() and not str(payload.get("audio_base64", "")).strip():
+                        self._send_error(HTTPStatus.BAD_REQUEST, "Field 'audio_path' or 'audio_base64' is required.")
+                        return
+                    run_config = request_config(effective_config(), payload)
+                    transcribe_payload = dict(payload)
+                    if str(transcribe_payload.get("audio_base64", "")).strip():
+                        try:
+                            transcribe_payload["audio_path"] = str(_store_uploaded_voice_audio(run_config, transcribe_payload))
+                        except ValueError as exc:
+                            self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                            return
+                        transcribe_payload.pop("audio_base64", None)
+                    result = VoiceTranscribeTool().execute(transcribe_payload, run_config)
+                    status = HTTPStatus.CREATED if result.status == ActionStatus.SUCCEEDED else HTTPStatus.ACCEPTED
+                    self._send_json({"status": result.status.value, "summary": result.summary, **result.output}, status)
                     return
                 if path == "/channels/status":
                     run_config = request_config(effective_config(), payload)
@@ -928,6 +947,50 @@ def _payload_summary(payload: dict[str, Any]) -> dict[str, Any]:
     if isinstance(runtime_secrets, dict):
         summary["runtime_secret_names"] = sorted(str(key) for key in runtime_secrets.keys())
     return summary
+
+
+def _store_uploaded_voice_audio(config: AgentConfig, payload: dict[str, Any]) -> Path:
+    raw_audio = str(payload.get("audio_base64") or "").strip()
+    if not raw_audio:
+        raise ValueError("Field 'audio_base64' is empty.")
+    if "," in raw_audio and raw_audio.lower().startswith("data:"):
+        raw_audio = raw_audio.split(",", 1)[1]
+    try:
+        audio_bytes = base64.b64decode(raw_audio, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError("Field 'audio_base64' is not valid base64 audio data.") from exc
+    if not audio_bytes:
+        raise ValueError("Uploaded audio is empty.")
+    if len(audio_bytes) > 25 * 1024 * 1024:
+        raise ValueError("Uploaded audio is too large.")
+
+    directory = config.normalized().data_dir / "voice_captures"
+    directory.mkdir(parents=True, exist_ok=True)
+    extension = _voice_audio_extension(
+        mime_type=str(payload.get("mime_type") or ""),
+        filename=str(payload.get("filename") or payload.get("original_filename") or ""),
+    )
+    path = directory / f"voice-capture-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}{extension}"
+    path.write_bytes(audio_bytes)
+    return path
+
+
+def _voice_audio_extension(mime_type: str, filename: str) -> str:
+    suffix = Path(filename).suffix.lower()
+    if suffix in {".m4a", ".mp3", ".wav", ".aac", ".flac", ".ogg", ".webm"}:
+        return suffix
+    normalized_mime = mime_type.lower().split(";", 1)[0].strip()
+    return {
+        "audio/mp4": ".m4a",
+        "audio/m4a": ".m4a",
+        "audio/aac": ".aac",
+        "audio/mpeg": ".mp3",
+        "audio/wav": ".wav",
+        "audio/x-wav": ".wav",
+        "audio/flac": ".flac",
+        "audio/ogg": ".ogg",
+        "audio/webm": ".webm",
+    }.get(normalized_mime, ".m4a")
 
 
 def _query_keys(path: str) -> list[str]:

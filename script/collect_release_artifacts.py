@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -14,7 +15,10 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_REPO = "bhaveshpabnani/Humungousaur"
+DEFAULT_REPO = (
+    f"{os.environ.get('HUMUNGOUSAUR_RELEASE_OWNER', 'bhaveshpabnani')}/"
+    f"{os.environ.get('HUMUNGOUSAUR_RELEASE_REPO', 'Humungousaur')}"
+)
 DEFAULT_WORKFLOW = "Release Desktop Apps"
 WINDOWS_ASSET = "Humungousaur-Windows.zip"
 MACOS_ASSET = "Humungousaur-macOS.zip"

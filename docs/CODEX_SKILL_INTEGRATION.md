@@ -11,7 +11,7 @@ This is not an intent router. The synced skills are reusable guidance records. T
 
 ## Local Codex Sources Checked
 
-The current machine has user/session Codex skills and plugins under `C:\Users\bhave\.codex`, plus bundled Codex app resources under the installed Codex Desktop app `app\resources` tree.
+Humungousaur checks user/session Codex skills and plugins under the configured `HUMUNGOUSAUR_CODEX_HOME` or `CODEX_HOME`, then falls back to the current user's standard Codex home such as `%USERPROFILE%\.codex` on Windows or `$HOME/.codex` on macOS/Linux. It also checks bundled Codex app resources under the installed Codex Desktop app `app\resources` tree.
 
 Relevant sources inspected:
 
@@ -62,14 +62,15 @@ The sync tool can also receive literal catalog filters such as `source`, `query`
 ## Example Commands
 
 ```powershell
-python -m humungousaur run "codex_capability_status {\"codex_home\":\"C:\\Users\\bhave\\.codex\"}" --workspace . --planner explicit
+$env:CODEX_HOME = "$env:USERPROFILE\.codex"
+python -m humungousaur run "codex_capability_status {\"codex_home\":\"$env:CODEX_HOME\"}" --workspace . --planner explicit
 python -m humungousaur run "codex_cli_status {\"probe_help\":false}" --workspace . --planner explicit
 python -m humungousaur run "codex_cli_plan {\"objective\":\"Use Codex CLI to inspect the repo and propose the next implementation step\",\"preferred_sandbox\":\"read-only\"}" --workspace . --planner explicit
 python -m humungousaur run "codex_cli_run {\"task\":\"summarize this repository structure\",\"sandbox\":\"read-only\",\"dry_run\":true}" --workspace . --planner explicit
-python -m humungousaur run "codex_plugin_catalog {\"query\":\"browser\",\"codex_home\":\"C:\\Users\\bhave\\.codex\"}" --workspace . --planner explicit
+python -m humungousaur run "codex_plugin_catalog {\"query\":\"browser\",\"codex_home\":\"$env:CODEX_HOME\"}" --workspace . --planner explicit
 python -m humungousaur run "codex_skill_catalog {\"query\":\"computer-use\",\"source\":\"app\"}" --workspace . --planner explicit
-python -m humungousaur run "codex_skill_catalog {\"query\":\"playwright\",\"codex_home\":\"C:\\Users\\bhave\\.codex\"}" --workspace . --planner explicit
-python -m humungousaur run "codex_skill_sync {\"profile\":\"core_assistant\",\"codex_home\":\"C:\\Users\\bhave\\.codex\",\"reason\":\"sync useful local Codex skills into the agent\"}" --workspace . --planner explicit
+python -m humungousaur run "codex_skill_catalog {\"query\":\"playwright\",\"codex_home\":\"$env:CODEX_HOME\"}" --workspace . --planner explicit
+python -m humungousaur run "codex_skill_sync {\"profile\":\"core_assistant\",\"codex_home\":\"$env:CODEX_HOME\",\"reason\":\"sync useful local Codex skills into the agent\"}" --workspace . --planner explicit
 ```
 
 After sync, `cognitive_state {}` exposes the created reusable skills to planner context.

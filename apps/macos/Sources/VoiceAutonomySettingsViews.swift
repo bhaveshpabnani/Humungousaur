@@ -9,11 +9,35 @@ struct VoiceView: View {
             VStack(alignment: .leading, spacing: 18) {
                 SectionHeader(eyebrow: "Voice", title: "Voice", subtitle: "Set up listening and spoken replies for hands-free work.")
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                    MetricTile(title: "Listening", value: model.secrets.deepgramAPIKey.isEmpty ? "Needs key" : "Ready", symbol: "waveform.badge.mic")
+                    MetricTile(title: "Wake-up", value: model.settings.voiceWakeEnabled ? (model.voiceWakeIsAwake ? "Awake" : "Listening") : "Off", symbol: "waveform.badge.mic")
                     MetricTile(title: "Speaking", value: model.secrets.elevenLabsAPIKey.isEmpty ? "System voice" : "ElevenLabs", symbol: "speaker.wave.2")
                     MetricTile(title: "Voice engine", value: model.settings.ttsProvider.humanizedIdentifier, symbol: "slider.horizontal.3")
                 }
                 Form {
+                    Section("Wake-up") {
+                        Toggle(
+                            "Listen for wake phrase",
+                            isOn: Binding(
+                                get: { model.settings.voiceWakeEnabled },
+                                set: { enabled in
+                                    Task { await model.setVoiceWakeEnabled(enabled) }
+                                }
+                            )
+                        )
+                        .toggleStyle(.switch)
+                        TextField("Wake phrases", text: $model.settings.voiceWakePhrases)
+                        TextField("Stop phrases", text: $model.settings.voiceStopPhrases)
+                        Toggle("Keep accepting voice tasks after wake-up", isOn: $model.settings.voiceContinuousAfterWake)
+                            .toggleStyle(.switch)
+                        Text(model.voiceWakeStatusText)
+                            .foregroundStyle(.secondary)
+                        if !model.voiceWakeLastTranscript.isEmpty {
+                            Text(model.voiceWakeLastTranscript)
+                                .font(.callout)
+                                .textSelection(.enabled)
+                        }
+                    }
+                    Section("Speech") {
                     Picker("Speaking voice", selection: $model.settings.ttsProvider) {
                         Text("System voice").tag("system")
                         Text("ElevenLabs").tag("elevenlabs")
@@ -25,12 +49,12 @@ struct VoiceView: View {
                     TextField("Test phrase", text: $testPhrase)
                     HStack {
                         Button("Save") {
-                            model.saveSettings()
-                            Task { await model.refreshVoice() }
+                            Task { await model.saveVoiceSettings() }
                         }
                         Button("Test Voice") {
                             Task { await model.send(testPhrase, source: "voice_transcript", responseMode: "voice_speak") }
                         }
+                    }
                     }
                 }
                 .formStyle(.grouped)

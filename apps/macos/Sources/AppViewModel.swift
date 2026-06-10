@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import SwiftUI
 
@@ -30,6 +31,9 @@ final class AppViewModel: ObservableObject {
     @Published var channelDoctorText = "Run a connection check after saving setup or entering credentials."
     @Published var channelSmokeText = "Run a trial to validate drafting, sending, and incoming message readiness."
     @Published var channelListenLoopText = "Automatic checking is off."
+    @Published var voiceWakeStatusText = "Voice wake-up is off."
+    @Published var voiceWakeLastTranscript = ""
+    @Published var voiceWakeIsAwake = false
     @Published var selectedToolGroup = "all"
     @Published var searchText = ""
     @Published var isRefreshing = false
@@ -53,8 +57,15 @@ final class AppViewModel: ObservableObject {
     private let settingsStore = SettingsStore()
     private let keychain = KeychainStore()
     private var api: AgentAPIClient
+    private let voiceWakeService = VoiceWakeService()
     private var channelListenerTask: Task<Void, Never>?
     private var channelListenerTickRunning = false
+    private var lastHandledVoiceTranscript = ""
+    private var isCapturingVoiceTask = false
+    private var voiceWakePausedForResponse = false
+    private var activeVoiceResponseTask: Task<Void, Never>?
+    private var voiceAcknowledgementIndex = 0
+    private let wakeAcknowledgementSpeaker = AVSpeechSynthesizer()
 
     init() {
         let loaded = settingsStore.load()
@@ -65,10 +76,14 @@ final class AppViewModel: ObservableObject {
             elevenLabsAPIKey: keychain.read("elevenlabs_api_key")
         )
         api = AgentAPIClient(baseURL: loaded.apiBaseURL)
+        configureVoiceWakeCallbacks()
     }
 
     func bootstrap() async {
         await refreshAll()
+        if settings.voiceWakeEnabled {
+            await setVoiceWakeEnabled(true, persist: false)
+        }
     }
 
     func refreshAll() async {
@@ -187,6 +202,9 @@ final class AppViewModel: ObservableObject {
                 secrets: secrets
             )
             for try await event in stream {
+                if Task.isCancelled {
+                    throw CancellationError()
+                }
                 applyStreamEvent(event, to: assistantID)
             }
             updateMessage(assistantID) { message in
@@ -202,6 +220,14 @@ final class AppViewModel: ObservableObject {
             await refreshApprovals()
             await refreshAutonomy()
         } catch {
+            if error is CancellationError {
+                updateMessage(assistantID) { message in
+                    message.text = message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Stopped." : message.text
+                    message.activities = []
+                    message.isStreaming = false
+                }
+                return
+            }
             if isLegacyStreamError(error) {
                 await sendLegacyStimulus(
                     trimmed,
@@ -237,6 +263,58 @@ final class AppViewModel: ObservableObject {
         keychain.write(secrets.elevenLabsAPIKey, account: "elevenlabs_api_key")
         api.setBaseURL(settings.apiBaseURL)
         notice = "Settings saved."
+    }
+
+    func saveVoiceSettings() async {
+        saveSettings()
+        if settings.voiceWakeEnabled {
+            await restartVoiceWakeListener()
+        }
+        await refreshVoice()
+    }
+
+    func setVoiceWakeEnabled(_ enabled: Bool, persist: Bool = true) async {
+        settings.voiceWakeEnabled = enabled
+        if persist {
+            saveSettings()
+        }
+        lastHandledVoiceTranscript = ""
+        voiceWakeIsAwake = false
+        if enabled {
+            do {
+                try await voiceWakeService.start(commands: wakeCommandList())
+                voiceWakeStatusText = "Listening for \(wakePhraseList().joined(separator: ", "))."
+                notice = "Voice wake-up is listening."
+            } catch {
+                settings.voiceWakeEnabled = false
+                voiceWakeStatusText = error.localizedDescription
+                notice = "Voice wake-up failed."
+                voiceWakeService.stop()
+                if persist {
+                    saveSettings()
+                }
+            }
+        } else {
+            voiceWakeService.stop()
+            voiceWakeStatusText = "Voice wake-up is off."
+            notice = "Voice wake-up stopped."
+        }
+    }
+
+    private func restartVoiceWakeListener() async {
+        voiceWakeService.stop()
+        lastHandledVoiceTranscript = ""
+        voiceWakeIsAwake = false
+        do {
+            try await voiceWakeService.start(commands: wakeCommandList())
+            voiceWakeStatusText = "Listening for \(wakePhraseList().joined(separator: ", "))."
+            notice = "Voice settings saved and listener restarted."
+        } catch {
+            settings.voiceWakeEnabled = false
+            voiceWakeStatusText = error.localizedDescription
+            notice = "Voice wake-up failed."
+            saveSettings()
+        }
     }
 
     func checkForUpdates() async {
@@ -321,6 +399,289 @@ final class AppViewModel: ObservableObject {
         } catch {
             notice = error.localizedDescription
         }
+    }
+
+    private func configureVoiceWakeCallbacks() {
+        voiceWakeService.onUpdate = { [weak self] update in
+            Task { @MainActor in
+                self?.handleVoiceRecognitionUpdate(update)
+            }
+        }
+        voiceWakeService.onFailure = { [weak self] error in
+            Task { @MainActor in
+                guard let self else { return }
+                self.voiceWakeStatusText = "Voice listener restarted after: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func handleVoiceRecognitionUpdate(_ update: VoiceRecognitionUpdate) {
+        let transcript = update.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !transcript.isEmpty else { return }
+        voiceWakeLastTranscript = transcript
+
+        if voiceWakePausedForResponse {
+            if isStopPhrase(transcript) {
+                stopCurrentVoiceResponse()
+            }
+            return
+        }
+
+        if let command = commandAfterWakePhrase(in: transcript) {
+            voiceWakeIsAwake = true
+            if command.isEmpty {
+                startVoiceTaskCapture(acknowledge: true)
+                return
+            }
+            if update.isFinal {
+                submitVoiceCommand(command)
+            } else {
+                voiceWakeStatusText = "Awake: \(command)"
+            }
+            return
+        }
+
+        guard voiceWakeIsAwake else {
+            voiceWakeStatusText = "Heard background speech; waiting for wake phrase."
+            return
+        }
+        if update.isFinal {
+            submitVoiceCommand(transcript)
+        } else {
+            voiceWakeStatusText = "Awake: \(transcript)"
+        }
+    }
+
+    private func startVoiceTaskCapture(acknowledge: Bool) {
+        guard !voiceWakePausedForResponse else { return }
+        guard !isCapturingVoiceTask else {
+            voiceWakeStatusText = "Listening for your task..."
+            return
+        }
+        voiceWakeService.stopWakeRecognition()
+        isCapturingVoiceTask = true
+        voiceWakeIsAwake = true
+        let acknowledgement = nextVoiceAcknowledgement()
+        voiceWakeStatusText = "\(acknowledge ? acknowledgement + ". " : "")Listening for your task..."
+        if acknowledge {
+            wakeAcknowledgementSpeaker.speak(AVSpeechUtterance(string: acknowledgement))
+        }
+        Task {
+            if acknowledge {
+                try? await Task.sleep(nanoseconds: 900_000_000)
+            }
+            do {
+                let transcript = try await transcribeLiveVoiceTask()
+                voiceWakeLastTranscript = transcript
+                voiceWakeStatusText = "Heard: \(transcript)"
+                submitVoiceCommand(transcript, keepListening: true)
+            } catch {
+                voiceWakeStatusText = "I did not catch that. \(error.localizedDescription)"
+                voiceWakeIsAwake = false
+                await resumeWakeDetection()
+            }
+            isCapturingVoiceTask = false
+        }
+    }
+
+    private func transcribeVoiceTask(_ audioURL: URL) async throws -> String {
+        do {
+            let transcript = try await voiceWakeService.transcribeRecordedAudio(audioURL)
+            let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                return trimmed
+            }
+        } catch {
+            voiceWakeStatusText = "macOS speech did not catch that. Trying voice provider..."
+        }
+        return try await api.transcribeAudio(
+            audioURL,
+            settings: settingsWithChannelSecrets(),
+            secrets: secrets
+        )
+    }
+
+    private func transcribeLiveVoiceTask() async throws -> String {
+        do {
+            return try await voiceWakeService.transcribeLiveAudio { [weak self] partial in
+                self?.voiceWakeLastTranscript = partial
+                self?.voiceWakeStatusText = "Hearing: \(partial)"
+            }
+        } catch {
+            voiceWakeStatusText = "macOS live speech did not catch that. Trying recorded fallback..."
+            let audioURL = try await voiceWakeService.recordTaskAudio()
+            voiceWakeStatusText = "Transcribing your task..."
+            return try await transcribeVoiceTask(audioURL)
+        }
+    }
+
+    private func submitVoiceCommand(_ command: String, keepListening: Bool = false) {
+        let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let normalized = Self.normalizedSpeech(trimmed)
+        guard normalized != lastHandledVoiceTranscript else { return }
+        lastHandledVoiceTranscript = normalized
+        selectedSection = .chat
+        voiceWakeStatusText = "Voice task sent."
+        if !settings.voiceContinuousAfterWake {
+            voiceWakeIsAwake = false
+        }
+        let responseTask = Task { [weak self] in
+            guard let self else { return }
+            pauseVoiceListeningForResponse()
+            await send(trimmed, source: "voice_transcript", responseMode: "voice_speak", displayText: "Voice: \(trimmed)")
+            if Task.isCancelled { return }
+            voiceWakePausedForResponse = false
+            if keepListening && settings.voiceContinuousAfterWake {
+                scheduleNextVoiceCapture()
+            } else {
+                voiceWakeIsAwake = false
+                await resumeWakeDetection()
+            }
+            activeVoiceResponseTask = nil
+        }
+        activeVoiceResponseTask = responseTask
+    }
+
+    private func scheduleNextVoiceCapture() {
+        guard settings.voiceWakeEnabled, settings.voiceContinuousAfterWake, voiceWakeIsAwake, !voiceWakePausedForResponse else { return }
+        Task {
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            startVoiceTaskCapture(acknowledge: false)
+        }
+    }
+
+    private func pauseVoiceListeningForResponse() {
+        voiceWakePausedForResponse = true
+        isCapturingVoiceTask = false
+        voiceWakeService.stop()
+        Task {
+            do {
+                try await voiceWakeService.start(commands: stopCommandList())
+                voiceWakeStatusText = "Responding. Say \(stopPhraseList().first ?? "stop humungousaur") to stop."
+            } catch {
+                voiceWakeStatusText = "Responding. Stop phrase unavailable: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func stopCurrentVoiceResponse() {
+        activeVoiceResponseTask?.cancel()
+        activeVoiceResponseTask = nil
+        stopLocalSpeechPlayback()
+        voiceWakePausedForResponse = false
+        voiceWakeIsAwake = false
+        voiceWakeStatusText = "Response stopped."
+        Task {
+            await resumeWakeDetection()
+        }
+    }
+
+    private func stopLocalSpeechPlayback() {
+        wakeAcknowledgementSpeaker.stopSpeaking(at: .immediate)
+        for processName in ["say", "afplay"] {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
+            process.arguments = ["-x", processName]
+            try? process.run()
+        }
+    }
+
+    private func resumeWakeDetection() async {
+        guard settings.voiceWakeEnabled else {
+            voiceWakePausedForResponse = false
+            voiceWakeStatusText = "Voice wake-up is off."
+            return
+        }
+        do {
+            try await voiceWakeService.start(commands: wakeCommandList())
+            voiceWakePausedForResponse = false
+            voiceWakeStatusText = "Listening for \(wakePhraseList().joined(separator: ", "))."
+        } catch {
+            voiceWakePausedForResponse = false
+            settings.voiceWakeEnabled = false
+            voiceWakeStatusText = error.localizedDescription
+            notice = "Voice wake-up failed."
+            saveSettings()
+        }
+    }
+
+    private func nextVoiceAcknowledgement() -> String {
+        let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let options = [
+            "Hey buddy",
+            "Hey champ",
+            name.isEmpty ? "Hey there" : "Hey \(name)",
+            "I'm listening"
+        ]
+        let value = options[voiceAcknowledgementIndex % options.count]
+        voiceAcknowledgementIndex += 1
+        return value
+    }
+
+    private func commandAfterWakePhrase(in transcript: String) -> String? {
+        let normalized = Self.normalizedSpeech(transcript)
+        for phrase in wakePhraseList() {
+            let cleanPhrase = Self.normalizedSpeech(phrase)
+            guard !cleanPhrase.isEmpty, let range = normalized.range(of: cleanPhrase) else {
+                continue
+            }
+            let suffix = normalized[range.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
+            return suffix
+        }
+        return nil
+    }
+
+    private func wakePhraseList() -> [String] {
+        settings.voiceWakePhrases
+            .split(separator: ",")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private func stopPhraseList() -> [String] {
+        settings.voiceStopPhrases
+            .split(separator: ",")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private func wakeCommandList() -> [String] {
+        let phrases = wakePhraseList()
+        let smokeCommands = [
+            "system status",
+            "what is your system status",
+            "are you online",
+            "say you are online"
+        ]
+        var commands = phrases
+        for phrase in phrases {
+            for command in smokeCommands {
+                commands.append("\(phrase) \(command)")
+            }
+        }
+        return Array(Set(commands))
+    }
+
+    private func stopCommandList() -> [String] {
+        let phrases = stopPhraseList()
+        return phrases.isEmpty ? ["stop humungousaur"] : Array(Set(phrases))
+    }
+
+    private func isStopPhrase(_ transcript: String) -> Bool {
+        let normalized = Self.normalizedSpeech(transcript)
+        return stopCommandList().contains { phrase in
+            let cleanPhrase = Self.normalizedSpeech(phrase)
+            return !cleanPhrase.isEmpty && normalized.contains(cleanPhrase)
+        }
+    }
+
+    private static func normalizedSpeech(_ value: String) -> String {
+        value
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
     }
 
     var selectedChannel: ChannelInfo? {

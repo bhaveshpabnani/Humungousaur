@@ -12,6 +12,10 @@ struct AppSettings: Codable, Equatable {
     var ttsProvider = "system"
     var voiceId = ""
     var elevenLabsModel = ""
+    var voiceWakeEnabled = false
+    var voiceWakePhrases = "hey humungousaur"
+    var voiceStopPhrases = "stop humungousaur"
+    var voiceContinuousAfterWake = true
     var approveHighRisk = false
     var allowInitiative = false
     var maxCycles = 1
@@ -25,7 +29,23 @@ struct AppSettings: Codable, Equatable {
             }
             directory.deleteLastPathComponent()
         }
-        return FileManager.default.currentDirectoryPath
+        let fileManager = FileManager.default
+        let home = fileManager.homeDirectoryForCurrentUser
+        var candidates: [URL] = []
+        if let configured = ProcessInfo.processInfo.environment["HUMUNGOUSAUR_WORKSPACE"], !configured.isEmpty {
+            candidates.append(URL(fileURLWithPath: configured).standardizedFileURL)
+        }
+        candidates.append(contentsOf: [
+            home.appendingPathComponent("Documents").appendingPathComponent("Humungousaur"),
+            home.appendingPathComponent("Developer").appendingPathComponent("Humungousaur"),
+            home.appendingPathComponent("Projects").appendingPathComponent("Humungousaur"),
+        ])
+        for candidate in candidates {
+            if fileManager.fileExists(atPath: candidate.appending(path: "pyproject.toml").path) {
+                return candidate.path
+            }
+        }
+        return home.path
     }
 }
 
@@ -37,12 +57,36 @@ final class SettingsStore {
         guard let data = defaults.data(forKey: key) else {
             return AppSettings()
         }
-        return (try? JSONDecoder().decode(AppSettings.self, from: data)) ?? AppSettings()
+        var settings = (try? JSONDecoder().decode(AppSettings.self, from: data)) ?? AppSettings()
+        var shouldSave = false
+        if settings.workspacePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || settings.workspacePath == "/" {
+            settings.workspacePath = AppSettings.defaultWorkspacePath()
+            shouldSave = true
+        }
+        let wakePhrases = settings.voiceWakePhrases
+            .split(separator: ",")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+        if settings.voiceWakePhrases.localizedCaseInsensitiveContains("jarvis")
+            || wakePhrases == ["humungousaur", "hey humungousaur"] {
+            settings.voiceWakePhrases = "hey humungousaur"
+            shouldSave = true
+        }
+        if settings.voiceStopPhrases.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || settings.voiceStopPhrases.localizedCaseInsensitiveContains("jarvis") {
+            settings.voiceStopPhrases = "stop humungousaur"
+            shouldSave = true
+        }
+        if shouldSave {
+            save(settings)
+        }
+        return settings
     }
 
     func save(_ settings: AppSettings) {
         if let data = try? JSONEncoder().encode(settings) {
             defaults.set(data, forKey: key)
+            defaults.synchronize()
         }
     }
 }

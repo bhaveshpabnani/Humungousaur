@@ -20,6 +20,8 @@ from humungousaur.tools.voice.providers import (
     elevenlabs_synthesize_to_file,
     local_whisper_status,
     local_whisper_transcribe_file,
+    macos_say_speak_text,
+    macos_say_synthesize_to_file,
     play_audio_file,
     windows_sapi_synthesize_to_file,
 )
@@ -63,8 +65,8 @@ class VoiceProviderStatusTool(Tool):
                     "model_env_configured": bool(_secret(config, "ELEVENLABS_MODEL_ID")),
                 },
                 "system": {
-                    "configured": platform.system().lower() == "windows",
-                    "provider": "windows_sapi" if platform.system().lower() == "windows" else "unsupported",
+                    "configured": platform.system().lower() in {"darwin", "windows"},
+                    "provider": _system_tts_provider_name(),
                 },
             },
             "preferred_tts_provider": _env_tts_provider(),
@@ -136,17 +138,29 @@ class VoiceTranscribeTool(Tool):
                 "Dry run: would transcribe audio through the configured STT provider.",
                 {**output, "transcription_not_requested": True},
             )
+        provider_errors: list[dict[str, str]] = []
         try:
             if provider == "deepgram":
-                transcription = deepgram_transcribe_file(
-                    audio_path,
-                    api_key=_secret(config, "DEEPGRAM_API_KEY"),
-                    model=str(tool_input.get("model") or config.secret_value("DEEPGRAM_MODEL") or ""),
-                    language=str(tool_input.get("language") or ""),
-                    smart_format=bool(tool_input.get("smart_format", True)),
-                    mime_type=str(tool_input.get("mime_type") or ""),
-                    timeout_seconds=float(config.model_timeout_seconds or 60.0),
-                )
+                try:
+                    transcription = deepgram_transcribe_file(
+                        audio_path,
+                        api_key=_secret(config, "DEEPGRAM_API_KEY"),
+                        model=str(tool_input.get("model") or config.secret_value("DEEPGRAM_MODEL") or ""),
+                        language=str(tool_input.get("language") or ""),
+                        smart_format=bool(tool_input.get("smart_format", True)),
+                        mime_type=str(tool_input.get("mime_type") or ""),
+                        timeout_seconds=float(config.model_timeout_seconds or 60.0),
+                    )
+                except SpeechProviderError as exc:
+                    provider_errors.append({"provider": "deepgram", "error": str(exc), "class": classify_provider_error(str(exc))})
+                    transcription = local_whisper_transcribe_file(
+                        audio_path,
+                        model=str(tool_input.get("fallback_model") or ""),
+                        language=str(tool_input.get("language") or ""),
+                        timeout_seconds=float(config.model_timeout_seconds or 120.0),
+                    )
+                    output["provider"] = "local-whisper"
+                    output["fallback_from_provider"] = "deepgram"
             else:
                 transcription = local_whisper_transcribe_file(
                     audio_path,
@@ -155,8 +169,19 @@ class VoiceTranscribeTool(Tool):
                     timeout_seconds=float(config.model_timeout_seconds or 120.0),
                 )
         except SpeechProviderError as exc:
-            output["provider_error"] = classify_provider_error(str(exc))
-            return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Speech-to-text provider failed.", output, str(exc))
+            provider_errors.append({"provider": output["provider"], "error": str(exc), "class": classify_provider_error(str(exc))})
+            output["provider_errors"] = provider_errors
+            output["provider_error"] = provider_errors[-1]["class"]
+            return ToolResult(
+                self.name,
+                ActionStatus.FAILED,
+                self.risk_level,
+                f"Speech-to-text provider failed: {provider_errors[-1]['error']}",
+                output,
+                provider_errors[-1]["error"],
+            )
+        if provider_errors:
+            output["provider_errors"] = provider_errors
         payload = {**output, **transcription.as_dict(), "transcript_length": len(transcription.transcript)}
         if not transcription.transcript:
             return ToolResult(
@@ -280,9 +305,9 @@ class VoiceResponsePrepareTool(Tool):
                 payload["audio"] = synthesis.as_dict()
         if provider == "system":
             try:
-                synthesis = windows_sapi_synthesize_to_file(
-                    text,
-                    _voice_audio_dir(config),
+                synthesis = _system_synthesize_to_file(
+                    text=text,
+                    output_dir=_voice_audio_dir(config),
                     response_id=payload["response_id"],
                     rate=max(-10, min(int(tool_input.get("rate") or 0), 10)),
                     volume=max(0, min(int(tool_input.get("volume") or 100), 100)),
@@ -385,16 +410,21 @@ class VoiceSpeakTool(Tool):
                 "Synthesized and played speech through ElevenLabs.",
                 {**payload, "speech_played": True},
             )
-        if platform.system().lower() != "windows":
+        if platform.system().lower() == "darwin":
+            result = macos_say_speak_text(text, timeout_seconds=float(config.model_timeout_seconds or 60.0))
+            source = "macos_say"
+        elif platform.system().lower() == "windows":
+            result = _run_powershell_tts(_sapi_speak_script(text=text, rate=rate, volume=volume))
+            source = "windows_sapi"
+        else:
             return ToolResult(
                 self.name,
                 ActionStatus.FAILED,
                 self.risk_level,
-                "Local OS speech is currently implemented for Windows only.",
+                "Local OS speech is currently implemented for Windows and macOS only.",
                 output,
-                "Local OS speech is currently implemented for Windows only.",
+                "Local OS speech is currently implemented for Windows and macOS only.",
             )
-        result = _run_powershell_tts(_sapi_speak_script(text=text, rate=rate, volume=volume))
         if result.get("status") != "ok":
             return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, "Local OS speech failed.", {**output, **result}, result.get("error"))
         return ToolResult(
@@ -402,7 +432,7 @@ class VoiceSpeakTool(Tool):
             ActionStatus.SUCCEEDED,
             self.risk_level,
             "Spoke response through the local OS TTS engine.",
-            {**output, "source": "windows_sapi"},
+            {**output, "source": source},
         )
 
 
@@ -514,6 +544,41 @@ def _voice_prepare_fallback_provider(tool_input: dict[str, Any], primary_provide
 def _voice_speak_provider(tool_input: dict[str, Any]) -> str:
     provider = str(tool_input.get("provider") or tool_input.get("tts_provider") or _env_tts_provider() or "system").strip().lower()
     return provider if provider in VOICE_SPEAK_PROVIDERS else "system"
+
+
+def _system_tts_provider_name() -> str:
+    system = platform.system().lower()
+    if system == "darwin":
+        return "macos_say"
+    if system == "windows":
+        return "windows_sapi"
+    return "unsupported"
+
+
+def _system_synthesize_to_file(
+    *,
+    text: str,
+    output_dir: Path,
+    response_id: str,
+    rate: int,
+    volume: int,
+    timeout_seconds: float,
+):
+    if platform.system().lower() == "darwin":
+        return macos_say_synthesize_to_file(
+            text,
+            output_dir,
+            response_id=response_id,
+            timeout_seconds=timeout_seconds,
+        )
+    return windows_sapi_synthesize_to_file(
+        text,
+        output_dir,
+        response_id=response_id,
+        rate=rate,
+        volume=volume,
+        timeout_seconds=timeout_seconds,
+    )
 
 
 def _env_tts_provider() -> str:

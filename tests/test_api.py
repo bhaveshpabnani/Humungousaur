@@ -1,3 +1,4 @@
+import base64
 import json
 import socket
 import tempfile
@@ -129,6 +130,23 @@ class APITests(unittest.TestCase):
                 self.assertTrue(voice_status_with_app_secret["stt"]["deepgram"]["configured"])
                 self.assertTrue(voice_status_with_app_secret["tts"]["elevenlabs"]["configured"])
                 self.assertNotIn("dg-runtime", json.dumps(voice_status_with_app_secret))
+                voice_sample = workspace / "voice-sample.m4a"
+                voice_sample.write_bytes(b"fake audio bytes")
+                voice_transcribe = api_post(
+                    base_url,
+                    "/voice/transcribe",
+                    {
+                        "audio_base64": base64.b64encode(voice_sample.read_bytes()).decode("ascii"),
+                        "filename": "voice-sample.m4a",
+                        "provider": "deepgram",
+                        "reason": "api dry-run voice capture smoke",
+                        "dry_run": True,
+                        "runtime_secrets": {"DEEPGRAM_API_KEY": "dg-runtime"},
+                    },
+                )
+                self.assertEqual(voice_transcribe["status"], "skipped")
+                self.assertTrue(voice_transcribe["transcription_not_requested"])
+                self.assertNotIn("dg-runtime", json.dumps(voice_transcribe))
                 screen_captures = api_get(base_url, "/screen/captures")
                 self.assertFalse(screen_captures["image_bytes_served"])
                 self.assertEqual(screen_captures["captures"], [])

@@ -20,7 +20,63 @@ DEFAULT_WEBSITE_ROOT = ROOT.parent / "Humungousaur-Website"
 WINDOWS_ASSET = "Humungousaur-Windows.zip"
 MACOS_ASSET = "Humungousaur-macOS.zip"
 CHECKSUMS_ASSET = "checksums.txt"
-EXPECTED_REPO = "https://github.com/bhaveshpabnani/Humungousaur"
+DEFAULT_RELEASE_OWNER = os.environ.get("HUMUNGOUSAUR_RELEASE_OWNER", "bhaveshpabnani")
+DEFAULT_RELEASE_REPO = os.environ.get("HUMUNGOUSAUR_RELEASE_REPO", "Humungousaur")
+DEFAULT_RELEASE_SLUG = os.environ.get("HUMUNGOUSAUR_RELEASE_SLUG", f"{DEFAULT_RELEASE_OWNER}/{DEFAULT_RELEASE_REPO}")
+EXPECTED_REPO = f"https://github.com/{DEFAULT_RELEASE_SLUG}"
+PORTABILITY_FORBIDDEN_PATTERNS = [
+    ("/" + "Users/", "absolute macOS user home path"),
+    ("C:\\" + "Users\\", "absolute Windows user home path"),
+    ("/" + "home/", "absolute Linux user home path"),
+    ("Documents/" + "bhaveshpabnani", "developer-specific checkout path"),
+    ("Documents\\" + "bhaveshpabnani", "developer-specific checkout path"),
+    ("C:\\" + "Users\\" + "bhave", "developer-specific Windows profile path"),
+    ("lakshyanaresh" + "pabnani", "developer-specific account name"),
+]
+PORTABILITY_SKIP_DIRS = {
+    ".git",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".build",
+    "bin",
+    "obj",
+    "dist",
+    "build",
+    "artifacts",
+    "external_repos",
+}
+PORTABILITY_TEXT_SUFFIXES = {
+    "",
+    ".cs",
+    ".css",
+    ".html",
+    ".json",
+    ".md",
+    ".mjs",
+    ".ps1",
+    ".py",
+    ".sh",
+    ".swift",
+    ".toml",
+    ".ts",
+    ".tsx",
+    ".txt",
+    ".xaml",
+    ".xml",
+    ".yaml",
+    ".yml",
+}
+
+
+def release_slug(value: str | None = None) -> str:
+    slug = (value or os.environ.get("HUMUNGOUSAUR_RELEASE_SLUG") or DEFAULT_RELEASE_SLUG).strip()
+    if "/" not in slug or slug.startswith("/") or slug.endswith("/"):
+        raise ValueError("release repository must use owner/name form, for example bhaveshpabnani/Humungousaur")
+    return slug
 
 
 class Preflight:
@@ -231,6 +287,38 @@ def check_package_metadata(preflight: Preflight) -> None:
             preflight.ok(f"pyproject project.{key} metadata is present")
         else:
             preflight.fail(f"pyproject project.{key} metadata is missing")
+
+
+def portability_text_files(root: Path) -> list[Path]:
+    paths: list[Path] = []
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        if any(part in PORTABILITY_SKIP_DIRS for part in path.relative_to(root).parts):
+            continue
+        if path.suffix.lower() in PORTABILITY_TEXT_SUFFIXES:
+            paths.append(path)
+    return sorted(paths)
+
+
+def check_portability(preflight: Preflight, root: Path) -> None:
+    findings: list[str] = []
+    for path in portability_text_files(root):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        relative = path.relative_to(root).as_posix()
+        for needle, label in PORTABILITY_FORBIDDEN_PATTERNS:
+            if needle in text:
+                findings.append(f"{relative}: contains {label} ({needle})")
+    if findings:
+        for finding in findings[:25]:
+            preflight.fail(f"portable source paths: {finding}")
+        if len(findings) > 25:
+            preflight.fail(f"portable source paths: {len(findings) - 25} additional findings")
+    else:
+        preflight.ok("source tree has no developer-specific absolute home paths")
 
 
 def check_source_tree(preflight: Preflight) -> None:
@@ -862,6 +950,7 @@ def check_source_tree(preflight: Preflight) -> None:
         ],
         "publication state verifier checks tracked release files and clean working tree",
     )
+    check_portability(preflight, ROOT)
 
 
 def check_artifacts(preflight: Preflight, release_dir: Path, require_assets: bool) -> None:
@@ -1002,7 +1091,16 @@ def check_website(preflight: Preflight, website_root: Path, require_website: boo
     site_data = website_root / "src/data/siteData.ts"
     preflight.require_text(
         site_data,
-        [EXPECTED_REPO, f"/download/{WINDOWS_ASSET}", f"/download/{MACOS_ASSET}", f"/download/{CHECKSUMS_ASSET}", "desktopDownloads"],
+        [
+            "VITE_HUMUNGOUSAUR_RELEASE_OWNER",
+            "VITE_HUMUNGOUSAUR_RELEASE_REPO",
+            "repositoryUrl",
+            "releaseBase",
+            f"/download/{WINDOWS_ASSET}",
+            f"/download/{MACOS_ASSET}",
+            f"/download/{CHECKSUMS_ASSET}",
+            "desktopDownloads",
+        ],
         "website desktop download URLs",
     )
     preflight.require_text(
@@ -1012,7 +1110,7 @@ def check_website(preflight: Preflight, website_root: Path, require_website: boo
     )
     preflight.require_text(
         website_root / "scripts/check-download-links.mjs",
-        ["desktopDownloadsMatch", "Expected desktop download platforms", "releaseBase", "/download/${asset}", "/download/checksums", "DownloadSection is missing required render wiring"],
+        ["desktopDownloadsMatch", "Expected desktop download platforms", "VITE_HUMUNGOUSAUR_RELEASE_OWNER", "releaseBase", "/download/${asset}", "/download/checksums", "DownloadSection is missing required render wiring"],
         "website download source checker validates desktop entries and render wiring",
     )
     preflight.require_text(
@@ -1080,8 +1178,18 @@ def check_website(preflight: Preflight, website_root: Path, require_website: boo
     )
 
 
-def check_github_release(preflight: Preflight, require_release: bool, release_tag: str | None) -> None:
+def check_github_release(
+    preflight: Preflight,
+    require_release: bool,
+    release_tag: str | None,
+    repo: str | None = None,
+) -> None:
     release_label = release_tag or "latest"
+    try:
+        github_repo = release_slug(repo)
+    except ValueError as exc:
+        preflight.fail(str(exc))
+        return
     command = [
         "gh",
         "release",
@@ -1092,7 +1200,7 @@ def check_github_release(preflight: Preflight, require_release: bool, release_ta
     command.extend(
         [
             "--repo",
-            "bhaveshpabnani/Humungousaur",
+            github_repo,
             "--json",
             "assets,url,tagName",
         ]
@@ -1155,7 +1263,7 @@ def check_github_release(preflight: Preflight, require_release: bool, release_ta
             download_command.extend(
                 [
                     "--repo",
-                    "bhaveshpabnani/Humungousaur",
+                    github_repo,
                     "--pattern",
                     asset_name,
                     "--dir",
@@ -1227,6 +1335,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--check-github-release", action="store_true")
     parser.add_argument("--require-github-release", action="store_true")
     parser.add_argument("--github-release-tag")
+    parser.add_argument("--github-repo", default=None, help="GitHub repository in owner/name form. Defaults to HUMUNGOUSAUR_RELEASE_SLUG or HUMUNGOUSAUR_RELEASE_OWNER/HUMUNGOUSAUR_RELEASE_REPO.")
     parser.add_argument("--release-tag")
     return parser.parse_args()
 
@@ -1240,7 +1349,12 @@ def main() -> int:
     if not args.skip_website:
         check_website(preflight, args.website_root.resolve(), require_website=args.require_website)
     if args.check_github_release or args.require_github_release:
-        check_github_release(preflight, require_release=args.require_github_release, release_tag=args.github_release_tag)
+        check_github_release(
+            preflight,
+            require_release=args.require_github_release,
+            release_tag=args.github_release_tag,
+            repo=args.github_repo,
+        )
     return preflight.summary()
 
 

@@ -162,6 +162,28 @@ final class AgentAPIClient {
         try await post("voice/status", body: runtimePayload(settings: settings, secrets: secrets))
     }
 
+    func transcribeAudio(_ audioURL: URL, settings: AppSettings, secrets: RuntimeSecrets) async throws -> String {
+        let audioData = try Data(contentsOf: audioURL)
+        var payload = runtimePayload(settings: settings, secrets: secrets)
+        payload["audio_base64"] = audioData.base64EncodedString()
+        payload["filename"] = audioURL.lastPathComponent
+        payload["provider"] = secrets.deepgramAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "local-whisper" : "deepgram"
+        payload["smart_format"] = true
+        payload["mime_type"] = "audio/mp4"
+        payload["reason"] = "macOS wake listener captured the user's post-wake task."
+        let result: JSONValue = try await post("voice/transcribe", body: payload)
+        let transcript = result["transcript"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !transcript.isEmpty else {
+            let summary = result["summary"]?.stringValue ?? "No transcript was returned."
+            let providerErrors = result["provider_errors"]?.arrayValue?.compactMap { item in
+                item["error"]?.stringValue
+            }.joined(separator: " ")
+            let detail = providerErrors?.isEmpty == false ? "\(summary) \(providerErrors ?? "")" : summary
+            throw AgentAPIError.requestFailed(detail)
+        }
+        return transcript
+    }
+
     func autonomousStatus() async throws -> JSONValue {
         try await get("autonomous/status?limit=10")
     }
@@ -210,7 +232,7 @@ final class AgentAPIClient {
         request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
 
         return AsyncThrowingStream { continuation in
-            Task {
+            let streamTask = Task {
                 do {
                     let (bytes, response) = try await URLSession.shared.bytes(for: request)
                     if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
@@ -218,9 +240,14 @@ final class AgentAPIClient {
                     }
                     var parser = ServerSentEventParser()
                     for try await line in bytes.lines {
+                        if Task.isCancelled { break }
                         if let event = try parser.consume(line) {
                             continuation.yield(event)
                         }
+                    }
+                    if Task.isCancelled {
+                        continuation.finish(throwing: CancellationError())
+                        return
                     }
                     if let event = try parser.finish() {
                         continuation.yield(event)
@@ -229,6 +256,9 @@ final class AgentAPIClient {
                 } catch {
                     continuation.finish(throwing: error)
                 }
+            }
+            continuation.onTermination = { _ in
+                streamTask.cancel()
             }
         }
     }

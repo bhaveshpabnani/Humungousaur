@@ -57,6 +57,10 @@ cat >"$INFO_PLIST" <<PLIST
   <string>$MIN_SYSTEM_VERSION</string>
   <key>NSPrincipalClass</key>
   <string>NSApplication</string>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Humungousaur uses the microphone only when voice wake-up is enabled so it can hear your wake phrase and spoken tasks.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>Humungousaur uses speech recognition only when voice wake-up is enabled to turn your spoken tasks into local agent stimuli.</string>
 </dict>
 </plist>
 PLIST

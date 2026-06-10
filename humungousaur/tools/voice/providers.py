@@ -345,6 +345,39 @@ def windows_sapi_synthesize_to_file(
     )
 
 
+def macos_say_synthesize_to_file(
+    text: str,
+    output_dir: Path,
+    *,
+    response_id: str,
+    timeout_seconds: float = 60.0,
+) -> SpeechSynthesis:
+    if platform.system().lower() != "darwin":
+        raise SpeechProviderError("macOS say synthesis is available on macOS only.")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    audio_path = output_dir / f"{_safe_file_stem(response_id)}.aiff"
+    result = _run_macos_say(["/usr/bin/say", "-o", str(audio_path), text], timeout_seconds=timeout_seconds)
+    if result.get("status") != "ok":
+        raise SpeechProviderError(result.get("error") or "macOS say synthesis failed.")
+    if not audio_path.exists() or audio_path.stat().st_size <= 0:
+        raise SpeechProviderError("macOS say synthesis produced no audio file.")
+    return SpeechSynthesis(
+        provider="macos_say",
+        audio_path=audio_path,
+        voice_id="macos_say",
+        model="macos_say",
+        output_format="aiff",
+        mime_type="audio/aiff",
+        byte_count=audio_path.stat().st_size,
+    )
+
+
+def macos_say_speak_text(text: str, *, timeout_seconds: float = 60.0) -> dict[str, str]:
+    if platform.system().lower() != "darwin":
+        return {"status": "failed", "error": "macOS say playback is available on macOS only."}
+    return _run_macos_say(["/usr/bin/say", text], timeout_seconds=timeout_seconds)
+
+
 def elevenlabs_first_voice_id(
     *,
     api_key: str,
@@ -428,8 +461,10 @@ def play_audio_file(path: Path, *, timeout_seconds: float = 60.0) -> dict[str, s
     resolved = path.expanduser().resolve()
     if not resolved.exists() or not resolved.is_file():
         return {"status": "failed", "error": f"Audio file does not exist: {resolved}"}
+    if platform.system().lower() == "darwin":
+        return _run_macos_say(["/usr/bin/afplay", str(resolved)], timeout_seconds=timeout_seconds)
     if platform.system().lower() != "windows":
-        return {"status": "failed", "error": "Audio playback is currently implemented for Windows only."}
+        return {"status": "failed", "error": "Audio playback is currently implemented for Windows and macOS only."}
     return _run_powershell_audio(_windows_media_play_script(resolved), timeout_seconds=timeout_seconds)
 
 
@@ -531,6 +566,21 @@ def _run_powershell_audio(script: str, *, timeout_seconds: float) -> dict[str, s
         return {"status": "failed", "error": str(exc)}
     if completed.returncode != 0:
         return {"status": "failed", "error": (completed.stderr or completed.stdout or "PowerShell audio playback failed.").strip()}
+    return {"status": "ok", "stdout": completed.stdout.strip(), "stderr": completed.stderr.strip()}
+
+
+def _run_macos_say(command: list[str], *, timeout_seconds: float) -> dict[str, str]:
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+        )
+    except Exception as exc:
+        return {"status": "failed", "error": str(exc)}
+    if completed.returncode != 0:
+        return {"status": "failed", "error": (completed.stderr or completed.stdout or "macOS speech command failed.").strip()}
     return {"status": "ok", "stdout": completed.stdout.strip(), "stderr": completed.stderr.strip()}
 
 
