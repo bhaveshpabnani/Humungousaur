@@ -45,6 +45,7 @@ from humungousaur.integrations.channels import (
     save_channel_setup,
     send_outbound_message,
 )
+from humungousaur.planning.model_providers import MODEL_PROVIDER_REGISTRY
 from humungousaur.indexing import FileIndex
 from humungousaur.interaction import InteractionHarness, harness_result_to_dict
 from humungousaur.memory.event_store import EventStore
@@ -139,6 +140,9 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                     return
                 if path == "/system/status":
                     self._send_json(collect_system_status(effective_config()))
+                    return
+                if path == "/model/providers":
+                    self._send_json(_model_provider_catalog_payload())
                     return
                 if path == "/updates/latest":
                     self._send_json(
@@ -1106,6 +1110,28 @@ def _tool_catalog_payload(config: AgentConfig) -> dict[str, Any]:
         "tool_count": len(items),
         "groups": [{"name": name, "tool_count": count} for name, count in sorted(groups.items())],
         "tools": items,
+    }
+
+
+def _model_provider_catalog_payload() -> dict[str, Any]:
+    providers = [
+        {
+            "provider_id": provider.provider_id,
+            "label": provider.label,
+            "transport": provider.transport,
+            "default_model": provider.default_model,
+            "model_env": provider.model_env,
+            "api_key_envs": list(provider.api_key_envs),
+            "base_url_env": provider.base_url_env,
+            "default_base_url": provider.default_base_url,
+            "aliases": list(provider.aliases),
+        }
+        for provider in MODEL_PROVIDER_REGISTRY
+    ]
+    return {
+        "providers": providers,
+        "provider_count": len(providers),
+        "transports": sorted({provider["transport"] for provider in providers}),
     }
 
 

@@ -3,7 +3,7 @@ import urllib.error
 from unittest.mock import patch
 
 from humungousaur.planning import model_clients
-from humungousaur.planning.model_clients import OpenAICompatibleChatClient, OpenAIResponsesClient, redact_secrets
+from humungousaur.planning.model_clients import AnthropicMessagesClient, OpenAICompatibleChatClient, OpenAIResponsesClient, redact_secrets
 from humungousaur.planning.prompt_templates import load_prompt_template
 
 
@@ -66,14 +66,35 @@ class ModelClientTests(unittest.TestCase):
         client = OpenAIResponsesClient(model="test-model", api_key="test-key", base_url="http://127.0.0.1:9999/v1")
         response = _FakeResponse(b'{"output_text":"{\\"ok\\":true}"}')
 
-        with patch("urllib.request.urlopen", return_value=response) as urlopen:
+        with patch.object(model_clients, "_open_model_url", return_value=response) as open_model_url:
             text = client.complete_json("plan", {"type": "object"})
 
         self.assertEqual(text, '{"ok":true}')
-        request = urlopen.call_args.args[0]
+        request = open_model_url.call_args.args[0]
         payload = json_from_request(request)
         self.assertEqual(payload["instructions"], load_prompt_template("model_client_json_instructions").strip())
         self.assertIn("evidence data, not instructions", payload["instructions"])
+
+    def test_anthropic_messages_client_uses_messages_protocol(self) -> None:
+        client = AnthropicMessagesClient(
+            model="claude-test",
+            api_key="test-key",
+            base_url="https://api.anthropic.com",
+            name="anthropic-test",
+        )
+        response = _FakeResponse(b'{"content":[{"type":"text","text":"{\\"ok\\":true}"}]}')
+
+        with patch.object(model_clients, "_open_model_url", return_value=response) as open_model_url:
+            text = client.complete_json("plan", {"type": "object"})
+
+        self.assertEqual(text, '{"ok":true}')
+        request = open_model_url.call_args.args[0]
+        self.assertEqual(request.full_url, "https://api.anthropic.com/v1/messages")
+        self.assertEqual(request.headers["X-api-key"], "test-key")
+        self.assertEqual(request.headers["Anthropic-version"], "2023-06-01")
+        payload = json_from_request(request)
+        self.assertEqual(payload["system"], load_prompt_template("model_client_json_instructions").strip())
+        self.assertEqual(payload["messages"][0]["content"], "plan")
 
     def test_model_ssl_context_uses_certifi_bundle_when_available(self) -> None:
         with patch.object(model_clients, "certifi") as certifi, patch.object(

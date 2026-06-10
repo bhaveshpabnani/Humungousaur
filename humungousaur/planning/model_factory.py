@@ -5,103 +5,113 @@ import os
 from humungousaur.config import AgentConfig
 
 from .local_models import ollama_available, recommended_ollama_model
-from .model_clients import FallbackModelClient, ModelClient, OpenAICompatibleChatClient, OpenAIResponsesClient
+from .model_clients import AnthropicMessagesClient, FallbackModelClient, ModelClient, ModelClientError, OpenAICompatibleChatClient, OpenAIResponsesClient
+from .model_providers import (
+    ANTHROPIC_MESSAGES,
+    EXTERNAL_RUNTIME,
+    MODEL_PROVIDER_REGISTRY,
+    OPENAI_CHAT,
+    OPENAI_RESPONSES,
+    ModelProviderSpec,
+    configured_api_key_env,
+    configured_base_url,
+    model_provider_spec,
+    normalize_model_provider,
+    provider_has_credentials,
+)
 
 
 def build_model_client(config: AgentConfig) -> ModelClient:
-    provider = config.model_provider
+    provider = normalize_model_provider(config.model_provider)
     if provider == "auto":
         provider = auto_model_provider()
-    if provider == "openai":
-        provider = "openai-responses"
-    if provider == "openai-responses":
-        api_key_env = config.model_api_key_env or "OPENAI_API_KEY"
-        return _openai_responses_client(
-            config,
-            api_key_env=api_key_env,
-        )
-    if provider == "openai-chat":
-        api_key_env = config.model_api_key_env or "OPENAI_API_KEY"
-        return OpenAICompatibleChatClient(
-            model=model_name(config, "OPENAI_MODEL", "gpt-5-mini"),
-            api_key=config.secret_value(api_key_env),
-            api_key_env=api_key_env,
-            base_url=config.model_base_url or os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
-            timeout_seconds=config.model_timeout_seconds,
-            name="openai-chat",
-        )
-    if provider == "groq":
-        api_key_env = config.model_api_key_env or "GROQ_API_KEY"
+    spec = model_provider_spec(provider)
+    if spec.provider_id == "ollama":
+        spec = _ollama_spec_with_runtime_default(spec)
+    return _client_for_spec(config, spec)
+
+
+def _client_for_spec(config: AgentConfig, spec: ModelProviderSpec) -> ModelClient:
+    api_key_env = configured_api_key_env(spec, config.model_api_key_env)
+    base_url = configured_base_url(spec, config.model_base_url)
+    model = model_name(config, spec.model_env, spec.default_model)
+    if spec.transport == OPENAI_RESPONSES:
+        return _openai_responses_client(config, spec=spec, api_key_env=api_key_env, base_url=base_url)
+    if spec.transport == OPENAI_CHAT:
         return _with_openai_fallback(
             config,
+            spec,
             OpenAICompatibleChatClient(
-                model=model_name(config, "GROQ_MODEL", "llama-3.3-70b-versatile"),
+                model=model,
                 api_key=config.secret_value(api_key_env),
                 api_key_env=api_key_env,
-                base_url=config.model_base_url or os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai/v1"),
+                base_url=base_url,
                 timeout_seconds=config.model_timeout_seconds,
-                name="groq-chat",
+                name=f"{spec.provider_id}-chat",
             ),
         )
-    if provider == "grok":
-        api_key_env = config.model_api_key_env or "XAI_API_KEY"
+    if spec.transport == ANTHROPIC_MESSAGES:
         return _with_openai_fallback(
             config,
-            OpenAICompatibleChatClient(
-                model=model_name(config, "XAI_MODEL", "grok-4.3"),
+            spec,
+            AnthropicMessagesClient(
+                model=model,
                 api_key=config.secret_value(api_key_env),
                 api_key_env=api_key_env,
-                base_url=config.model_base_url or os.environ.get("XAI_BASE_URL", "https://api.x.ai/v1"),
+                base_url=base_url,
                 timeout_seconds=config.model_timeout_seconds,
-                name="grok-chat",
+                name=f"{spec.provider_id}-messages",
             ),
         )
-    if provider == "ollama":
-        api_key_env = config.model_api_key_env or "OLLAMA_API_KEY"
+    if spec.transport == EXTERNAL_RUNTIME and config.model_base_url:
         return _with_openai_fallback(
             config,
+            spec,
             OpenAICompatibleChatClient(
-                model=model_name(config, "OLLAMA_MODEL", recommended_ollama_model()),
+                model=model,
                 api_key=config.secret_value(api_key_env),
                 api_key_env=api_key_env,
-                base_url=config.model_base_url or os.environ.get("OLLAMA_BASE_URL") or os.environ.get("LOCAL_LLM_BASE_URL", "http://127.0.0.1:11434/v1"),
+                base_url=base_url,
                 timeout_seconds=config.model_timeout_seconds,
-                name="ollama-chat",
+                name=f"{spec.provider_id}-external-compatible-chat",
             ),
         )
-    if provider == "local-openai":
-        api_key_env = config.model_api_key_env or "LOCAL_LLM_API_KEY"
-        return _with_openai_fallback(
-            config,
-            OpenAICompatibleChatClient(
-                model=model_name(config, "LOCAL_LLM_MODEL", "llama3.1"),
-                api_key=config.secret_value(api_key_env),
-                api_key_env=api_key_env,
-                base_url=config.model_base_url or os.environ.get("LOCAL_LLM_BASE_URL", "http://127.0.0.1:11434/v1"),
-                timeout_seconds=config.model_timeout_seconds,
-                name="local-openai-chat",
-            ),
+    return UnsupportedModelClient(spec)
+
+
+class UnsupportedModelClient(ModelClient):
+    def __init__(self, spec: ModelProviderSpec) -> None:
+        self.spec = spec
+        self.name = f"{spec.provider_id}-external-runtime"
+
+    def complete_json(self, prompt: str, schema: dict) -> str:
+        del prompt, schema
+        raise ModelClientError(
+            f"{self.spec.label} is registered but requires an external provider runtime bridge. "
+            "Set --model-base-url to an OpenAI-compatible HTTP endpoint for embedded planner use."
         )
-    raise ValueError(f"Unknown model provider: {provider}")
 
 
 def _openai_responses_client(
     config: AgentConfig,
     *,
+    spec: ModelProviderSpec | None = None,
     api_key_env: str = "OPENAI_API_KEY",
     base_url: str | None = None,
 ) -> OpenAIResponsesClient:
+    active_spec = spec or model_provider_spec("openai-responses")
     return OpenAIResponsesClient(
-            model=model_name(config, "OPENAI_MODEL", "gpt-5-mini"),
+            model=model_name(config, active_spec.model_env, active_spec.default_model),
             api_key=config.secret_value(api_key_env),
             api_key_env=api_key_env,
-            base_url=base_url or config.model_base_url or os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+            base_url=base_url or configured_base_url(active_spec, config.model_base_url),
             timeout_seconds=config.model_timeout_seconds,
+            name=active_spec.provider_id,
     )
 
 
-def _with_openai_fallback(config: AgentConfig, primary: ModelClient) -> ModelClient:
-    if primary.name.startswith("openai"):
+def _with_openai_fallback(config: AgentConfig, spec: ModelProviderSpec, primary: ModelClient) -> ModelClient:
+    if not spec.allow_openai_fallback or spec.provider_id.startswith("openai"):
         return primary
     api_key_env = "OPENAI_API_KEY"
     if not (config.secret_value(api_key_env) or os.environ.get(api_key_env)):
@@ -111,6 +121,7 @@ def _with_openai_fallback(config: AgentConfig, primary: ModelClient) -> ModelCli
             primary,
             _openai_responses_client(
                 config,
+                spec=model_provider_spec("openai-responses"),
                 api_key_env=api_key_env,
                 base_url=os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
             ),
@@ -121,16 +132,14 @@ def _with_openai_fallback(config: AgentConfig, primary: ModelClient) -> ModelCli
 
 def auto_model_provider() -> str:
     if os.environ.get("HUMUNGOUSAUR_CLOUD_FIRST", "").strip().lower() in {"1", "true", "yes"}:
-        if os.environ.get("OPENAI_API_KEY"):
-            return "openai-responses"
-        if os.environ.get("GROQ_API_KEY"):
-            return "groq"
+        provider = _first_configured_cloud_provider()
+        if provider:
+            return provider
     if ollama_available():
         return "ollama"
-    if os.environ.get("OPENAI_API_KEY"):
-        return "openai-responses"
-    if os.environ.get("GROQ_API_KEY"):
-        return "groq"
+    provider = _first_configured_cloud_provider()
+    if provider:
+        return provider
     return "ollama"
 
 
@@ -140,3 +149,29 @@ def model_name(config: AgentConfig, env_name: str, default: str) -> str:
     if os.environ.get(env_name):
         return os.environ[env_name]
     return default
+
+
+def _first_configured_cloud_provider() -> str | None:
+    for spec in MODEL_PROVIDER_REGISTRY:
+        if spec.provider_id in {"ollama", "local-openai"}:
+            continue
+        if provider_has_credentials(spec):
+            return spec.provider_id
+    return None
+
+
+def _ollama_spec_with_runtime_default(spec: ModelProviderSpec) -> ModelProviderSpec:
+    if os.environ.get(spec.model_env):
+        return spec
+    return ModelProviderSpec(
+        provider_id=spec.provider_id,
+        label=spec.label,
+        transport=spec.transport,
+        default_model=recommended_ollama_model(),
+        model_env=spec.model_env,
+        api_key_envs=spec.api_key_envs,
+        default_base_url=spec.default_base_url,
+        base_url_env=spec.base_url_env,
+        aliases=spec.aliases,
+        allow_openai_fallback=spec.allow_openai_fallback,
+    )

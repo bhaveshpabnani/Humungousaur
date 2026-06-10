@@ -154,17 +154,32 @@ Common environment variables:
 ```text
 OPENAI_API_KEY=
 OPENAI_BASE_URL=https://api.openai.com/v1
+OPENROUTER_API_KEY=
+NOUS_API_KEY=
+ANTHROPIC_API_KEY=
+DASHSCOPE_API_KEY=
 GROQ_API_KEY=
 GROQ_BASE_URL=https://api.groq.com/openai/v1
+GOOGLE_API_KEY=
+DEEPSEEK_API_KEY=
+MISTRAL_API_KEY=
+CEREBRAS_API_KEY=
 OLLAMA_BASE_URL=http://127.0.0.1:11434/v1
 OLLAMA_MODEL=llama3.1
 XAI_API_KEY=
 XAI_BASE_URL=https://api.x.ai/v1
+NVIDIA_API_KEY=
+HF_TOKEN=
+MINIMAX_API_KEY=
+AZURE_OPENAI_API_KEY=
+AZURE_OPENAI_ENDPOINT=
 LOCAL_LLM_BASE_URL=http://127.0.0.1:11434/v1
 LOCAL_LLM_API_KEY=local
 DEEPGRAM_API_KEY=
 ELEVENLABS_API_KEY=
 ```
+
+The `--model-provider` flag and desktop settings include OpenAI, OpenRouter, Nous, Anthropic, Groq, xAI/Grok, Gemini, DeepSeek, Mistral, Cerebras, Ollama, local OpenAI-compatible runtimes, Vercel AI Gateway, LiteLLM, NVIDIA, Hugging Face, Z.AI/GLM, Kimi/Moonshot, StepFun, MiniMax, Arcee, GMI, Xiaomi, Tencent TokenHub, OpenCode, Kilo Code, Azure, Copilot, Bedrock, Browser Use Cloud, OCI, and the external OAuth/runtime identities mirrored from OpenFlow/OpenClaw and Hermes. Native HTTP transports run directly; external process/OAuth-only runtimes are recognized and can be bridged with `--model-base-url` when an OpenAI-compatible endpoint is available.
 
 The dashboard and desktop clients pass secret references or runtime secrets to the local daemon; they should not require raw keys in public source files.
 

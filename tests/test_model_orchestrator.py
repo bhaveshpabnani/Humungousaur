@@ -9,7 +9,8 @@ from humungousaur.orchestrator import AgentOrchestrator, MODEL_PLANNING_MAX_TURN
 from humungousaur.planning.prompt_templates import load_prompt_template, load_prompt_templates
 from humungousaur.planning.providers import ModelPlanProvider
 from humungousaur.planning.model_factory import auto_model_provider
-from humungousaur.planning.model_clients import FallbackModelClient, ModelClient, OpenAICompatibleChatClient
+from humungousaur.planning.model_clients import AnthropicMessagesClient, FallbackModelClient, ModelClient, OpenAICompatibleChatClient
+from humungousaur.planning.model_providers import MODEL_PROVIDER_REGISTRY, model_provider_spec, normalize_model_provider
 from humungousaur.planner import Planner
 from humungousaur.schemas import ActionStatus, PlanResult, PlannedStep
 from humungousaur.tools.conversation.implementation import ConversationResponsePrepareTool
@@ -97,6 +98,103 @@ class ModelOrchestratorTests(unittest.TestCase):
             self.assertEqual(client.base_url, "https://api.groq.com/openai/v1")
             self.assertEqual(client.api_key_env, "GROQ_API_KEY")
             self.assertEqual(client.model, "llama-3.3-70b-versatile")
+
+    def test_provider_registry_includes_openflow_and_hermes_provider_families(self) -> None:
+        provider_ids = {provider.provider_id for provider in MODEL_PROVIDER_REGISTRY}
+
+        for provider_id in {
+            "openrouter",
+            "nous",
+            "anthropic",
+            "gemini",
+            "deepseek",
+            "mistral",
+            "cerebras",
+            "vercel",
+            "litellm",
+            "nvidia",
+            "huggingface",
+            "zai",
+            "kimi-coding",
+            "stepfun",
+            "minimax",
+            "azure-openai",
+            "azure-foundry",
+            "copilot",
+            "bedrock",
+            "browser-use-cloud",
+            "openai-codex",
+            "google-gemini-cli",
+            "copilot-acp",
+        }:
+            self.assertIn(provider_id, provider_ids)
+
+    def test_provider_aliases_normalize_to_runtime_providers(self) -> None:
+        self.assertEqual(normalize_model_provider("grok"), "xai")
+        self.assertEqual(normalize_model_provider("openai"), "openai-responses")
+        self.assertEqual(normalize_model_provider("qwen"), "alibaba")
+        self.assertEqual(model_provider_spec("moonshot").provider_id, "kimi-coding")
+
+    def test_anthropic_provider_uses_messages_endpoint_client(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(
+                workspace=workspace,
+                data_dir=workspace / "artifacts",
+                planner_provider="model",
+                model_provider="anthropic",
+            )
+
+            with patch.dict("os.environ", {}, clear=True):
+                client = AgentOrchestrator(config)._build_model_client()
+
+            self.assertIsInstance(client, AnthropicMessagesClient)
+            assert isinstance(client, AnthropicMessagesClient)
+            self.assertEqual(client.base_url, "https://api.anthropic.com")
+            self.assertEqual(client.api_key_env, "ANTHROPIC_API_KEY")
+            self.assertEqual(client.model, "claude-sonnet-4-6")
+
+    def test_openrouter_provider_defaults_to_openai_compatible_endpoint(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(
+                workspace=workspace,
+                data_dir=workspace / "artifacts",
+                planner_provider="model",
+                model_provider="openrouter",
+            )
+
+            with patch.dict("os.environ", {}, clear=True):
+                client = AgentOrchestrator(config)._build_model_client()
+
+            self.assertIsInstance(client, OpenAICompatibleChatClient)
+            assert isinstance(client, OpenAICompatibleChatClient)
+            self.assertEqual(client.base_url, "https://openrouter.ai/api/v1")
+            self.assertEqual(client.api_key_env, "OPENROUTER_API_KEY")
+            self.assertEqual(client.model, "anthropic/claude-sonnet-4.6")
+
+    def test_external_runtime_provider_can_use_explicit_openai_compatible_bridge(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(
+                workspace=workspace,
+                data_dir=workspace / "artifacts",
+                planner_provider="model",
+                model_provider="bedrock",
+                model_name="bridge-model",
+                model_base_url="http://127.0.0.1:9999/v1",
+                model_api_key_env="BEDROCK_BRIDGE_API_KEY",
+            )
+
+            with patch.dict("os.environ", {}, clear=True):
+                client = AgentOrchestrator(config)._build_model_client()
+
+            self.assertIsInstance(client, OpenAICompatibleChatClient)
+            assert isinstance(client, OpenAICompatibleChatClient)
+            self.assertEqual(client.name, "bedrock-external-compatible-chat")
+            self.assertEqual(client.base_url, "http://127.0.0.1:9999/v1")
+            self.assertEqual(client.api_key_env, "BEDROCK_BRIDGE_API_KEY")
+            self.assertEqual(client.model, "bridge-model")
 
     def test_model_provider_uses_runtime_secret_and_desktop_model_override(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

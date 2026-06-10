@@ -689,10 +689,44 @@
                             </ComboBox>
                             <ComboBox x:Name="ModelProviderBox" Grid.Row="3" Header="Model provider" SelectedIndex="0">
                                 <ComboBoxItem Content="OpenAI" Tag="openai" />
+                                <ComboBoxItem Content="OpenAI Chat" Tag="openai-chat" />
+                                <ComboBoxItem Content="OpenRouter" Tag="openrouter" />
+                                <ComboBoxItem Content="Nous Portal" Tag="nous" />
+                                <ComboBoxItem Content="NovitaAI" Tag="novita" />
+                                <ComboBoxItem Content="LM Studio" Tag="lmstudio" />
+                                <ComboBoxItem Content="Anthropic" Tag="anthropic" />
+                                <ComboBoxItem Content="Qwen Cloud" Tag="alibaba" />
                                 <ComboBoxItem Content="Groq" Tag="groq" />
-                                <ComboBoxItem Content="Grok" Tag="grok" />
+                                <ComboBoxItem Content="xAI Grok" Tag="xai" />
+                                <ComboBoxItem Content="Google Gemini" Tag="gemini" />
+                                <ComboBoxItem Content="DeepSeek" Tag="deepseek" />
+                                <ComboBoxItem Content="Mistral" Tag="mistral" />
+                                <ComboBoxItem Content="Cerebras" Tag="cerebras" />
                                 <ComboBoxItem Content="Ollama" Tag="ollama" />
+                                <ComboBoxItem Content="Ollama Cloud" Tag="ollama-cloud" />
                                 <ComboBoxItem Content="Local OpenAI" Tag="local-openai" />
+                                <ComboBoxItem Content="Vercel AI Gateway" Tag="vercel" />
+                                <ComboBoxItem Content="LiteLLM" Tag="litellm" />
+                                <ComboBoxItem Content="NVIDIA NIM" Tag="nvidia" />
+                                <ComboBoxItem Content="Hugging Face" Tag="huggingface" />
+                                <ComboBoxItem Content="Z.AI / GLM" Tag="zai" />
+                                <ComboBoxItem Content="Kimi / Moonshot" Tag="kimi-coding" />
+                                <ComboBoxItem Content="Kimi China" Tag="kimi-coding-cn" />
+                                <ComboBoxItem Content="StepFun" Tag="stepfun" />
+                                <ComboBoxItem Content="MiniMax" Tag="minimax" />
+                                <ComboBoxItem Content="MiniMax China" Tag="minimax-cn" />
+                                <ComboBoxItem Content="Arcee AI" Tag="arcee" />
+                                <ComboBoxItem Content="GMI Cloud" Tag="gmi" />
+                                <ComboBoxItem Content="Xiaomi MiMo" Tag="xiaomi" />
+                                <ComboBoxItem Content="Tencent TokenHub" Tag="tencent-tokenhub" />
+                                <ComboBoxItem Content="OpenCode Zen" Tag="opencode-zen" />
+                                <ComboBoxItem Content="OpenCode Go" Tag="opencode-go" />
+                                <ComboBoxItem Content="Kilo Code" Tag="kilocode" />
+                                <ComboBoxItem Content="Azure OpenAI" Tag="azure-openai" />
+                                <ComboBoxItem Content="Azure Foundry" Tag="azure-foundry" />
+                                <ComboBoxItem Content="GitHub Copilot" Tag="copilot" />
+                                <ComboBoxItem Content="AWS Bedrock" Tag="bedrock" />
+                                <ComboBoxItem Content="Browser Use Cloud" Tag="browser-use-cloud" />
                             </ComboBox>
                             <TextBox x:Name="ModelNameBox" Grid.Row="3" Grid.Column="1" Header="Model override" />
                             <TextBox x:Name="ModelBaseUrlBox" Grid.Row="4" Header="Model base URL" PlaceholderText="https://api.groq.com/openai/v1" />

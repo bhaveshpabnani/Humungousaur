@@ -25,6 +25,7 @@ from humungousaur.memory.event_store import EventStore
 from humungousaur.memory.profile import build_user_profile
 from humungousaur.memory.summary import SUMMARY_PERIODS, summarize_memory
 from humungousaur.orchestrator import AgentOrchestrator
+from humungousaur.planning.model_providers import MODEL_PROVIDER_CHOICES
 from humungousaur.performance import run_benchmarks
 from humungousaur.runtime import (
     approval_record_to_dict,
@@ -779,7 +780,7 @@ def _add_planner_args(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--model-provider",
-        choices=("auto", "openai-responses", "openai-chat", "groq", "ollama", "local-openai", "grok"),
+        choices=MODEL_PROVIDER_CHOICES,
         default="auto",
         help="Model provider used when --planner model",
     )
