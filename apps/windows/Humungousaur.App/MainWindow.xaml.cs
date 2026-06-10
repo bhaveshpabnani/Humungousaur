@@ -15,6 +15,7 @@ public sealed partial class MainWindow : Window
     private readonly AppSettingsStore _settingsStore = new();
     private readonly AgentApiClient _api = new();
     private readonly LocalAgentProcess _agentProcess = new();
+    private readonly VoiceWakeService _voiceWakeService = new();
     private readonly DispatcherTimer _autonomyTimer = new();
     private readonly DispatcherTimer _channelListenerTimer = new();
     private readonly ObservableCollection<ChatLogItem> _chat = [];
@@ -25,8 +26,16 @@ public sealed partial class MainWindow : Window
     private List<RuntimeRunItem> _runs = [];
     private List<ApprovalItem> _approvals = [];
     private string _latestDownloadUrl = "";
+    private string _lastHandledVoiceTranscript = "";
+    private string _activeVoiceRunId = "";
     private bool _autonomyCycleRunning;
     private bool _channelListenerTickRunning;
+    private bool _voiceWakeIsAwake;
+    private bool _voiceWakePausedForResponse;
+    private bool _isCapturingVoiceTask;
+    private bool _applyingSettingsToUi;
+    private int _voiceAcknowledgementIndex;
+    private CancellationTokenSource? _activeVoiceResponseCts;
 
     public MainWindow()
     {
@@ -42,6 +51,8 @@ public sealed partial class MainWindow : Window
         _agentProcess.OutputReceived += line => DispatcherQueue.TryEnqueue(() => AddProcessLine(line));
         _autonomyTimer.Tick += AutonomyTimer_Tick;
         _channelListenerTimer.Tick += ChannelListenerTimer_Tick;
+        _voiceWakeService.RecognitionUpdated += VoiceWakeService_RecognitionUpdated;
+        _voiceWakeService.RecognitionFailed += VoiceWakeService_RecognitionFailed;
     }
 
     private async void RootGrid_Loaded(object sender, RoutedEventArgs e)
@@ -52,6 +63,10 @@ public sealed partial class MainWindow : Window
         ShowPage("assistant");
         AddChat("Humungousaur", "Native shell ready. Connect to the local agent or start it from Runtime.", "assistant");
         await RefreshAllAsync();
+        if (_settings.VoiceWakeEnabled)
+        {
+            await SetVoiceWakeEnabledAsync(true, persist: false);
+        }
     }
 
     private async void RefreshButton_Click(object sender, RoutedEventArgs e) => await RefreshAllAsync();
@@ -598,10 +613,14 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void SaveVoiceButton_Click(object sender, RoutedEventArgs e)
+    private async void SaveVoiceButton_Click(object sender, RoutedEventArgs e)
     {
         ReadSettingsFromUi();
         _settingsStore.Save(_settings);
+        if (_settings.VoiceWakeEnabled)
+        {
+            await RestartVoiceWakeListenerAsync();
+        }
         ShowNotice("Voice settings saved.", InfoBarSeverity.Success);
     }
 
@@ -619,6 +638,399 @@ public sealed partial class MainWindow : Window
         {
             ShowNotice(exc.Message, InfoBarSeverity.Error);
         }
+    }
+
+    private async void StopVoiceButton_Click(object sender, RoutedEventArgs e)
+    {
+        await StopCurrentVoiceResponseAsync();
+    }
+
+    private async void VoiceWakeSwitch_Toggled(object sender, RoutedEventArgs e)
+    {
+        if (_settings is null)
+        {
+            return;
+        }
+        if (_applyingSettingsToUi)
+        {
+            return;
+        }
+        ReadSettingsFromUi();
+        await SetVoiceWakeEnabledAsync(VoiceWakeSwitch.IsOn, persist: true);
+    }
+
+    private void VoiceWakeService_RecognitionUpdated(object? sender, VoiceRecognitionUpdate update)
+    {
+        DispatcherQueue.TryEnqueue(() => HandleVoiceRecognitionUpdate(update));
+    }
+
+    private void VoiceWakeService_RecognitionFailed(object? sender, Exception exc)
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            VoiceWakeStatusText.Text = $"Voice listener issue: {exc.Message}";
+            AddProcessLine(exc.Message);
+        });
+    }
+
+    private async Task SetVoiceWakeEnabledAsync(bool enabled, bool persist)
+    {
+        _settings.VoiceWakeEnabled = enabled;
+        VoiceWakeSwitch.IsOn = enabled;
+        _lastHandledVoiceTranscript = "";
+        _voiceWakeIsAwake = false;
+        if (persist)
+        {
+            _settingsStore.Save(_settings);
+        }
+
+        if (!enabled)
+        {
+            await _voiceWakeService.StopAllAsync();
+            VoiceWakeStatusText.Text = "Voice wake-up is off.";
+            ShowNotice("Voice wake-up stopped.", InfoBarSeverity.Informational);
+            return;
+        }
+
+        try
+        {
+            await _voiceWakeService.StartCommandsAsync(WakeCommandList());
+            VoiceWakeStatusText.Text = $"Listening for {string.Join(", ", WakePhraseList())}.";
+            ShowNotice("Voice wake-up is listening.", InfoBarSeverity.Success);
+        }
+        catch (Exception exc)
+        {
+            _settings.VoiceWakeEnabled = false;
+            VoiceWakeSwitch.IsOn = false;
+            VoiceWakeStatusText.Text = exc.Message;
+            ShowNotice("Voice wake-up failed.", InfoBarSeverity.Error);
+            if (persist)
+            {
+                _settingsStore.Save(_settings);
+            }
+        }
+    }
+
+    private async Task RestartVoiceWakeListenerAsync()
+    {
+        await _voiceWakeService.StopAllAsync();
+        _lastHandledVoiceTranscript = "";
+        _voiceWakeIsAwake = false;
+        if (!_settings.VoiceWakeEnabled)
+        {
+            VoiceWakeStatusText.Text = "Voice wake-up is off.";
+            return;
+        }
+        try
+        {
+            await _voiceWakeService.StartCommandsAsync(WakeCommandList());
+            VoiceWakeStatusText.Text = $"Listening for {string.Join(", ", WakePhraseList())}.";
+        }
+        catch (Exception exc)
+        {
+            _settings.VoiceWakeEnabled = false;
+            VoiceWakeSwitch.IsOn = false;
+            VoiceWakeStatusText.Text = exc.Message;
+            _settingsStore.Save(_settings);
+        }
+    }
+
+    private void HandleVoiceRecognitionUpdate(VoiceRecognitionUpdate update)
+    {
+        var transcript = update.Transcript.Trim();
+        if (string.IsNullOrWhiteSpace(transcript))
+        {
+            return;
+        }
+        VoiceWakeTranscriptText.Text = transcript;
+
+        if (_voiceWakePausedForResponse)
+        {
+            if (IsStopPhrase(transcript))
+            {
+                _ = StopCurrentVoiceResponseAsync();
+            }
+            return;
+        }
+
+        var command = CommandAfterWakePhrase(transcript);
+        if (command is not null)
+        {
+            _voiceWakeIsAwake = true;
+            if (string.IsNullOrWhiteSpace(command))
+            {
+                StartVoiceTaskCapture(acknowledge: true);
+                return;
+            }
+            _ = SubmitVoiceCommandAsync(command, keepListening: true);
+            return;
+        }
+
+        if (!_voiceWakeIsAwake)
+        {
+            VoiceWakeStatusText.Text = "Heard background speech; waiting for wake phrase.";
+            return;
+        }
+
+        _ = SubmitVoiceCommandAsync(transcript, keepListening: true);
+    }
+
+    private void StartVoiceTaskCapture(bool acknowledge)
+    {
+        if (_voiceWakePausedForResponse)
+        {
+            return;
+        }
+        if (_isCapturingVoiceTask)
+        {
+            VoiceWakeStatusText.Text = "Listening for your task...";
+            return;
+        }
+
+        _isCapturingVoiceTask = true;
+        _voiceWakeIsAwake = true;
+        var acknowledgement = NextVoiceAcknowledgement();
+        VoiceWakeStatusText.Text = $"{(acknowledge ? acknowledgement + ". " : "")}Listening for your task...";
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _voiceWakeService.StopCommandsAsync();
+                if (acknowledge)
+                {
+                    _voiceWakeService.SpeakAcknowledgement(acknowledgement);
+                    await Task.Delay(900);
+                }
+                var transcript = await _voiceWakeService.TranscribeTaskAsync(
+                    new VoiceActivityOptions(),
+                    partial => DispatcherQueue.TryEnqueue(() =>
+                    {
+                        VoiceWakeTranscriptText.Text = partial;
+                        VoiceWakeStatusText.Text = $"Hearing: {partial}";
+                    }));
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    VoiceWakeTranscriptText.Text = transcript;
+                    VoiceWakeStatusText.Text = $"Heard: {transcript}";
+                    _ = SubmitVoiceCommandAsync(transcript, keepListening: true);
+                });
+            }
+            catch (Exception exc)
+            {
+                DispatcherQueue.TryEnqueue(async () =>
+                {
+                    VoiceWakeStatusText.Text = $"I did not catch that. {exc.Message}";
+                    _voiceWakeIsAwake = false;
+                    await ResumeWakeDetectionAsync();
+                });
+            }
+            finally
+            {
+                DispatcherQueue.TryEnqueue(() => _isCapturingVoiceTask = false);
+            }
+        });
+    }
+
+    private async Task SubmitVoiceCommandAsync(string command, bool keepListening)
+    {
+        var trimmed = command.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            return;
+        }
+        var normalized = NormalizeSpeech(trimmed);
+        if (normalized == _lastHandledVoiceTranscript)
+        {
+            return;
+        }
+        _lastHandledVoiceTranscript = normalized;
+        ShowPage("assistant");
+        AddChat("Voice", trimmed, "user");
+        VoiceWakeStatusText.Text = "Voice task sent.";
+        await PauseVoiceListeningForResponseAsync();
+
+        _activeVoiceResponseCts?.Cancel();
+        _activeVoiceResponseCts = new CancellationTokenSource();
+        _activeVoiceRunId = "";
+        try
+        {
+            await foreach (var streamEvent in _api.StreamStimulusAsync(trimmed, "voice_transcript", "voice_speak", _settings, _activeVoiceResponseCts.Token))
+            {
+                ApplyStreamEvent(streamEvent);
+            }
+            await RefreshAutonomyAsync();
+            await RefreshRuntimeAsync();
+        }
+        catch (OperationCanceledException)
+        {
+            AddChat("Humungousaur", "Stopped.", "activity");
+        }
+        catch (Exception exc)
+        {
+            AddChat("Humungousaur", exc.Message, "error");
+            ShowNotice("The voice request failed.", InfoBarSeverity.Error);
+        }
+        finally
+        {
+            _activeVoiceResponseCts?.Dispose();
+            _activeVoiceResponseCts = null;
+            _activeVoiceRunId = "";
+            _voiceWakePausedForResponse = false;
+            if (keepListening && _settings.VoiceContinuousAfterWake)
+            {
+                ScheduleNextVoiceCapture();
+            }
+            else
+            {
+                _voiceWakeIsAwake = false;
+                await ResumeWakeDetectionAsync();
+            }
+        }
+    }
+
+    private async Task PauseVoiceListeningForResponseAsync()
+    {
+        _voiceWakePausedForResponse = true;
+        _isCapturingVoiceTask = false;
+        await _voiceWakeService.StopAllAsync();
+        try
+        {
+            await _voiceWakeService.StartCommandsAsync(StopCommandList());
+            VoiceWakeStatusText.Text = $"Responding. Say {StopPhraseList().FirstOrDefault() ?? "stop humungousaur"} to stop.";
+        }
+        catch (Exception exc)
+        {
+            VoiceWakeStatusText.Text = $"Responding. Stop phrase unavailable: {exc.Message}";
+        }
+    }
+
+    private async Task StopCurrentVoiceResponseAsync()
+    {
+        _activeVoiceResponseCts?.Cancel();
+        _voiceWakeService.StopAcknowledgement();
+        if (!string.IsNullOrWhiteSpace(_activeVoiceRunId))
+        {
+            try
+            {
+                await _api.CancelRunAsync(_activeVoiceRunId, "Voice stop phrase.");
+            }
+            catch (Exception exc)
+            {
+                AddProcessLine(exc.Message);
+            }
+        }
+        try
+        {
+            await _api.StopVoicePlaybackAsync(_settings);
+        }
+        catch (Exception exc)
+        {
+            AddProcessLine(exc.Message);
+        }
+        _voiceWakePausedForResponse = false;
+        _voiceWakeIsAwake = false;
+        VoiceWakeStatusText.Text = "Response stopped.";
+        await ResumeWakeDetectionAsync();
+    }
+
+    private void ScheduleNextVoiceCapture()
+    {
+        if (!_settings.VoiceWakeEnabled || !_settings.VoiceContinuousAfterWake || !_voiceWakeIsAwake || _voiceWakePausedForResponse)
+        {
+            return;
+        }
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(1500);
+            DispatcherQueue.TryEnqueue(() => StartVoiceTaskCapture(acknowledge: false));
+        });
+    }
+
+    private async Task ResumeWakeDetectionAsync()
+    {
+        if (!_settings.VoiceWakeEnabled)
+        {
+            _voiceWakePausedForResponse = false;
+            VoiceWakeStatusText.Text = "Voice wake-up is off.";
+            return;
+        }
+        try
+        {
+            await _voiceWakeService.StartCommandsAsync(WakeCommandList());
+            _voiceWakePausedForResponse = false;
+            VoiceWakeStatusText.Text = $"Listening for {string.Join(", ", WakePhraseList())}.";
+        }
+        catch (Exception exc)
+        {
+            _settings.VoiceWakeEnabled = false;
+            VoiceWakeSwitch.IsOn = false;
+            _voiceWakePausedForResponse = false;
+            VoiceWakeStatusText.Text = exc.Message;
+            _settingsStore.Save(_settings);
+        }
+    }
+
+    private string NextVoiceAcknowledgement()
+    {
+        var options = new[] { "Hey buddy", "Hey champ", "Hey there", "I'm listening" };
+        var value = options[_voiceAcknowledgementIndex % options.Length];
+        _voiceAcknowledgementIndex++;
+        return value;
+    }
+
+    private string? CommandAfterWakePhrase(string transcript)
+    {
+        var normalized = NormalizeSpeech(transcript);
+        foreach (var phrase in WakePhraseList())
+        {
+            var cleanPhrase = NormalizeSpeech(phrase);
+            var index = normalized.IndexOf(cleanPhrase, StringComparison.OrdinalIgnoreCase);
+            if (cleanPhrase.Length == 0 || index < 0)
+            {
+                continue;
+            }
+            return normalized[(index + cleanPhrase.Length)..].Trim();
+        }
+        return null;
+    }
+
+    private IReadOnlyList<string> WakePhraseList() => SplitPhrases(_settings.VoiceWakePhrases);
+
+    private IReadOnlyList<string> StopPhraseList() => SplitPhrases(_settings.VoiceStopPhrases);
+
+    private IReadOnlyList<string> WakeCommandList()
+    {
+        var phrases = WakePhraseList();
+        var smokeCommands = new[] { "system status", "what is your system status", "are you online", "say you are online" };
+        return phrases.Concat(phrases.SelectMany(phrase => smokeCommands.Select(command => $"{phrase} {command}")))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private IReadOnlyList<string> StopCommandList()
+    {
+        var phrases = StopPhraseList();
+        return phrases.Count == 0 ? ["stop humungousaur"] : phrases.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    private bool IsStopPhrase(string transcript)
+    {
+        var normalized = NormalizeSpeech(transcript);
+        return StopCommandList().Any(phrase => normalized.Contains(NormalizeSpeech(phrase), StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static IReadOnlyList<string> SplitPhrases(string phrases)
+    {
+        return phrases
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .ToList();
+    }
+
+    private static string NormalizeSpeech(string value)
+    {
+        var normalized = new string(value.ToLowerInvariant().Select(ch => char.IsLetterOrDigit(ch) ? ch : ' ').ToArray());
+        return string.Join(" ", normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
     }
 
     private async void RunCycleButton_Click(object sender, RoutedEventArgs e)
@@ -1167,23 +1579,35 @@ public sealed partial class MainWindow : Window
 
     private void ApplySettingsToUi()
     {
-        ApiBaseUrlBox.Text = _settings.ApiBaseUrl;
-        PortBox.Text = _settings.Port.ToString();
-        WorkspacePathBox.Text = _settings.WorkspacePath;
-        PythonPathBox.Text = _settings.PythonPath;
-        ModelNameBox.Text = _settings.ModelName;
-        ModelBaseUrlBox.Text = _settings.ModelBaseUrl;
-        ModelApiKeyBox.Password = _settings.ModelApiKey;
-        VoiceIdBox.Text = _settings.VoiceId;
-        DeepgramApiKeyBox.Password = _settings.DeepgramApiKey;
-        ElevenLabsApiKeyBox.Password = _settings.ElevenLabsApiKey;
-        ElevenLabsModelBox.Text = _settings.ElevenLabsModel;
-        ApproveHighRiskSwitch.IsOn = _settings.ApproveHighRisk;
-        SetComboByTag(PlannerBox, _settings.Planner);
-        SetComboByTag(ModelProviderBox, _settings.ModelProvider);
-        SetComboByTag(TtsProviderBox, _settings.TtsProvider);
-        WorkspaceCaption.Text = ShortenPath(_settings.WorkspacePath);
-        _api.SetBaseUrl(_settings.ApiBaseUrl);
+        _applyingSettingsToUi = true;
+        try
+        {
+            ApiBaseUrlBox.Text = _settings.ApiBaseUrl;
+            PortBox.Text = _settings.Port.ToString();
+            WorkspacePathBox.Text = _settings.WorkspacePath;
+            PythonPathBox.Text = _settings.PythonPath;
+            ModelNameBox.Text = _settings.ModelName;
+            ModelBaseUrlBox.Text = _settings.ModelBaseUrl;
+            ModelApiKeyBox.Password = _settings.ModelApiKey;
+            VoiceIdBox.Text = _settings.VoiceId;
+            DeepgramApiKeyBox.Password = _settings.DeepgramApiKey;
+            ElevenLabsApiKeyBox.Password = _settings.ElevenLabsApiKey;
+            ElevenLabsModelBox.Text = _settings.ElevenLabsModel;
+            VoiceWakeSwitch.IsOn = _settings.VoiceWakeEnabled;
+            VoiceWakePhrasesBox.Text = _settings.VoiceWakePhrases;
+            VoiceStopPhrasesBox.Text = _settings.VoiceStopPhrases;
+            VoiceContinuousSwitch.IsOn = _settings.VoiceContinuousAfterWake;
+            ApproveHighRiskSwitch.IsOn = _settings.ApproveHighRisk;
+            SetComboByTag(PlannerBox, _settings.Planner);
+            SetComboByTag(ModelProviderBox, _settings.ModelProvider);
+            SetComboByTag(TtsProviderBox, _settings.TtsProvider);
+            WorkspaceCaption.Text = ShortenPath(_settings.WorkspacePath);
+            _api.SetBaseUrl(_settings.ApiBaseUrl);
+        }
+        finally
+        {
+            _applyingSettingsToUi = false;
+        }
     }
 
     private void ReadSettingsFromUi()
@@ -1202,6 +1626,10 @@ public sealed partial class MainWindow : Window
         _settings.DeepgramApiKey = DeepgramApiKeyBox.Password;
         _settings.ElevenLabsApiKey = ElevenLabsApiKeyBox.Password;
         _settings.ElevenLabsModel = ElevenLabsModelBox.Text.Trim();
+        _settings.VoiceWakeEnabled = VoiceWakeSwitch.IsOn;
+        _settings.VoiceWakePhrases = string.IsNullOrWhiteSpace(VoiceWakePhrasesBox.Text) ? "hey humungousaur" : VoiceWakePhrasesBox.Text.Trim();
+        _settings.VoiceStopPhrases = string.IsNullOrWhiteSpace(VoiceStopPhrasesBox.Text) ? "stop humungousaur" : VoiceStopPhrasesBox.Text.Trim();
+        _settings.VoiceContinuousAfterWake = VoiceContinuousSwitch.IsOn;
         _settings.ApproveHighRisk = ApproveHighRiskSwitch.IsOn;
     }
 
@@ -1234,6 +1662,10 @@ public sealed partial class MainWindow : Window
         var eventType = streamEvent.Data["event_type"]?.GetValue<string>() ?? "";
         var message = streamEvent.Data["message"]?.GetValue<string>() ?? Humanize(eventType);
         var payload = streamEvent.Data["payload"] as JsonObject;
+        if (eventType == "run_started")
+        {
+            _activeVoiceRunId = payload?["run_id"]?.GetValue<string>() ?? streamEvent.Data["run_id"]?.GetValue<string>() ?? _activeVoiceRunId;
+        }
         switch (eventType)
         {
             case "run_started":

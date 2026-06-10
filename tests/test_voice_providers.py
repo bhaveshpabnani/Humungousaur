@@ -7,7 +7,7 @@ import urllib.error
 
 from humungousaur.config import AgentConfig
 from humungousaur.schemas import ActionStatus
-from humungousaur.tools.voice_tools import VoiceProviderStatusTool, VoiceResponsePrepareTool, VoiceSpeakTool, VoiceTranscribeTool
+from humungousaur.tools.voice_tools import VoiceProviderStatusTool, VoiceResponsePrepareTool, VoiceSpeakTool, VoiceStopPlaybackTool, VoiceTranscribeTool
 from humungousaur.tools.voice.providers import SpeechProviderError, SpeechSynthesis, SpeechTranscription
 
 
@@ -319,6 +319,22 @@ class VoiceProviderTests(unittest.TestCase):
 
         self.assertEqual(result.status, ActionStatus.SUCCEEDED)
         self.assertEqual(result.output["source"], "macos_say")
+
+    def test_voice_stop_playback_dry_run_is_safe(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts", dry_run=True).normalized()
+            result = VoiceStopPlaybackTool().execute({"reason": "test"}, config)
+
+        self.assertEqual(result.status, ActionStatus.SKIPPED)
+        self.assertTrue(result.output["playback_not_stopped"])
+
+    def test_voice_stop_playback_reports_no_active_process(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
+            result = VoiceStopPlaybackTool().execute({"reason": "test"}, config)
+
+        self.assertEqual(result.status, ActionStatus.SUCCEEDED)
+        self.assertFalse(result.output["stopped"])
 
 
 class _FakeResponse:

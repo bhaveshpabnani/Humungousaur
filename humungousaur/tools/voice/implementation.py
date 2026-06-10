@@ -5,6 +5,7 @@ import json
 import mimetypes
 import platform
 import subprocess
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -414,7 +415,7 @@ class VoiceSpeakTool(Tool):
             result = macos_say_speak_text(text, timeout_seconds=float(config.model_timeout_seconds or 60.0))
             source = "macos_say"
         elif platform.system().lower() == "windows":
-            result = _run_powershell_tts(_sapi_speak_script(text=text, rate=rate, volume=volume))
+            result = _run_powershell_tts(_sapi_speak_script(text=text, rate=rate, volume=volume), config=config)
             source = "windows_sapi"
         else:
             return ToolResult(
@@ -462,6 +463,37 @@ class VoiceResponsesTool(Tool):
         )
 
 
+class VoiceStopPlaybackTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="voice_stop_playback",
+            description="Stop the currently tracked local voice playback process for interruptible voice assistants.",
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema(
+                {
+                    "reason": {"type": "string"},
+                }
+            ),
+            capability_group="voice",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        reason = str(tool_input.get("reason") or "").strip()
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would stop tracked local voice playback.",
+                {"reason": reason, "playback_not_stopped": True},
+            )
+
+        result = _stop_tracked_voice_playback(config)
+        status = ActionStatus.SUCCEEDED if result.get("status") == "ok" else ActionStatus.FAILED
+        summary = str(result.get("summary") or ("Stopped tracked voice playback." if status == ActionStatus.SUCCEEDED else "Voice playback stop failed."))
+        return ToolResult(self.name, status, self.risk_level, summary, {**result, "reason": reason}, result.get("error"))
+
+
 def list_voice_responses(config: AgentConfig, limit: int = 20) -> list[dict[str, Any]]:
     directory = _voice_responses_dir(config)
     if not directory.exists():
@@ -499,6 +531,7 @@ def default_voice_tools() -> dict[str, Tool]:
         VoiceTranscribeTool(),
         VoiceResponsePrepareTool(),
         VoiceSpeakTool(),
+        VoiceStopPlaybackTool(),
         VoiceResponsesTool(),
     ]
     return {tool.name: tool for tool in tools}
@@ -632,10 +665,11 @@ def _path_inside(path: Path, root: Path) -> bool:
         return False
 
 
-def _run_powershell_tts(script: str) -> dict[str, str]:
+def _run_powershell_tts(script: str, *, config: AgentConfig | None = None) -> dict[str, str]:
     encoded = base64.b64encode(script.encode("utf-16le")).decode("ascii")
+    process: subprocess.Popen[str] | None = None
     try:
-        completed = subprocess.run(
+        process = subprocess.Popen(
             [
                 "powershell.exe",
                 "-NoProfile",
@@ -645,15 +679,81 @@ def _run_powershell_tts(script: str) -> dict[str, str]:
                 "-EncodedCommand",
                 encoded,
             ],
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=30,
         )
+        if config is not None:
+            _write_voice_playback_state(config, process.pid, "windows_sapi")
+        stdout, stderr = process.communicate(timeout=30)
     except Exception as exc:
+        if isinstance(exc, subprocess.TimeoutExpired) and process is not None:
+            try:
+                process.kill()
+            except Exception:
+                pass
         return {"status": "failed", "error": str(exc)}
-    if completed.returncode != 0:
-        return {"status": "failed", "error": (completed.stderr or completed.stdout or "PowerShell TTS action failed.").strip()}
-    return {"status": "ok", "stdout": completed.stdout.strip(), "stderr": completed.stderr.strip()}
+    finally:
+        if config is not None:
+            _clear_voice_playback_state(config, process)
+    if process.returncode != 0:
+        return {"status": "failed", "error": (stderr or stdout or "PowerShell TTS action failed.").strip()}
+    return {"status": "ok", "stdout": stdout.strip(), "stderr": stderr.strip()}
+
+
+def _voice_playback_state_path(config: AgentConfig) -> Path:
+    directory = config.normalized().data_dir
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory / "voice_playback.json"
+
+
+def _write_voice_playback_state(config: AgentConfig, pid: int, provider: str) -> None:
+    try:
+        _voice_playback_state_path(config).write_text(
+            json.dumps({"pid": pid, "provider": provider, "started_at": time.time()}),
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
+
+
+def _clear_voice_playback_state(config: AgentConfig, process: subprocess.Popen[str] | None) -> None:
+    try:
+        path = _voice_playback_state_path(config)
+        if not path.exists():
+            return
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if process is None or int(payload.get("pid") or -1) == int(getattr(process, "pid", -2)):
+            path.unlink(missing_ok=True)
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        pass
+
+
+def _stop_tracked_voice_playback(config: AgentConfig) -> dict[str, Any]:
+    path = _voice_playback_state_path(config)
+    if not path.exists():
+        return {"status": "ok", "summary": "No tracked voice playback was active.", "stopped": False}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        pid = int(payload.get("pid") or 0)
+    except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+        path.unlink(missing_ok=True)
+        return {"status": "failed", "error": f"Tracked voice playback state was invalid: {exc}", "stopped": False}
+    if pid <= 0:
+        path.unlink(missing_ok=True)
+        return {"status": "ok", "summary": "No tracked voice playback was active.", "stopped": False}
+
+    command = ["taskkill", "/PID", str(pid), "/T", "/F"] if platform.system().lower() == "windows" else ["kill", str(pid)]
+    try:
+        completed = subprocess.run(command, capture_output=True, text=True, timeout=10)
+    except Exception as exc:
+        return {"status": "failed", "error": str(exc), "pid": pid, "stopped": False}
+    finally:
+        path.unlink(missing_ok=True)
+    output = (completed.stdout or completed.stderr or "").strip()
+    if completed.returncode not in {0, 1, 128}:
+        return {"status": "failed", "error": output or f"Failed to stop playback process {pid}.", "pid": pid, "stopped": False}
+    return {"status": "ok", "summary": f"Stopped tracked voice playback process {pid}.", "pid": pid, "stopped": True, "output": output}
 
 
 def _sapi_speak_script(text: str, rate: int, volume: int) -> str:

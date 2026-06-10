@@ -16,6 +16,10 @@ public sealed class AppSettings
     public string DeepgramApiKey { get; set; } = "";
     public string ElevenLabsApiKey { get; set; } = "";
     public string ElevenLabsModel { get; set; } = "";
+    public bool VoiceWakeEnabled { get; set; }
+    public string VoiceWakePhrases { get; set; } = "hey humungousaur";
+    public string VoiceStopPhrases { get; set; } = "stop humungousaur";
+    public bool VoiceContinuousAfterWake { get; set; } = true;
     public bool ApproveHighRisk { get; set; }
     public List<ChannelSetup> Channels { get; set; } = [];
 }

@@ -148,6 +148,13 @@ public sealed class AgentApiClient
 
     public Task<JsonObject> GetVoiceStatusAsync(AppSettings settings) => PostJsonObjectAsync("voice/status", RuntimePayload(settings));
 
+    public Task<JsonObject> StopVoicePlaybackAsync(AppSettings settings)
+    {
+        var payload = RuntimePayload(settings);
+        payload["reason"] = "Windows app voice stop phrase.";
+        return PostJsonObjectAsync("voice/stop_playback", payload);
+    }
+
     public Task<JsonObject> GetAutonomousStatusAsync() => GetJsonObjectAsync("autonomous/status?limit=8");
 
     public async Task<OutboxEnvelope> GetOutboxAsync()

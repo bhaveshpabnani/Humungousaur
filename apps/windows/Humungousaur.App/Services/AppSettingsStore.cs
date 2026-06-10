@@ -75,6 +75,16 @@ public sealed class AppSettingsStore
         }
         settings.ModelName = AppRuntimeDefaults.EffectiveModelName(settings.ModelName);
         settings.TtsProvider = AppRuntimeDefaults.EffectiveTtsProvider(settings.TtsProvider);
+        if (string.IsNullOrWhiteSpace(settings.VoiceWakePhrases) ||
+            settings.VoiceWakePhrases.Contains("jarvis", StringComparison.OrdinalIgnoreCase))
+        {
+            settings.VoiceWakePhrases = "hey humungousaur";
+        }
+        if (string.IsNullOrWhiteSpace(settings.VoiceStopPhrases) ||
+            settings.VoiceStopPhrases.Contains("jarvis", StringComparison.OrdinalIgnoreCase))
+        {
+            settings.VoiceStopPhrases = "stop humungousaur";
+        }
 
         return settings;
     }
@@ -97,6 +107,10 @@ public sealed class AppSettingsStore
             DeepgramApiKey = Protect(settings.DeepgramApiKey),
             ElevenLabsApiKey = Protect(settings.ElevenLabsApiKey),
             ElevenLabsModel = settings.ElevenLabsModel,
+            VoiceWakeEnabled = settings.VoiceWakeEnabled,
+            VoiceWakePhrases = settings.VoiceWakePhrases,
+            VoiceStopPhrases = settings.VoiceStopPhrases,
+            VoiceContinuousAfterWake = settings.VoiceContinuousAfterWake,
             ApproveHighRisk = settings.ApproveHighRisk,
             Channels = settings.Channels.Select(channel => new ChannelSetup
             {
