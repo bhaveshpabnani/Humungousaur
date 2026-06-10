@@ -7,6 +7,7 @@ import json
 import sys
 import tempfile
 import threading
+import tomllib
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -14,6 +15,13 @@ from typing import Any
 
 from humungousaur.api import create_api_server
 from humungousaur.config import AgentConfig
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def project_version() -> str:
+    metadata = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    return str(metadata["project"]["version"])
 
 
 class DesktopRuntimeSmoke:
@@ -91,6 +99,7 @@ def api_post_error(base_url: str, path: str, payload: dict[str, Any]) -> dict[st
 
 def main() -> int:
     smoke = DesktopRuntimeSmoke()
+    version = project_version()
     with tempfile.TemporaryDirectory(prefix="humungousaur-desktop-runtime-") as temp_dir:
         workspace = Path(temp_dir)
         (workspace / "README.md").write_text("# Desktop Runtime Smoke\n\nShared app API contract.", encoding="utf-8")
@@ -104,8 +113,8 @@ def main() -> int:
             smoke.require(system_status.get("workspace") == str(workspace.resolve()), "system status reports desktop workspace")
 
             updates = api_get(base_url, "/updates/latest?offline=1&platform=macos")
-            smoke.require(updates.get("current_version") == "0.1.0", "update endpoint reports installed app version", updates)
-            smoke.require(updates.get("latest_tag") == "v0.1.0", "update endpoint exposes release tag", updates)
+            smoke.require(updates.get("current_version") == version, "update endpoint reports installed app version", updates)
+            smoke.require(updates.get("latest_tag") == f"v{version}", "update endpoint exposes release tag", updates)
             smoke.require(
                 str(updates.get("platform_download_url", "")).endswith("/Humungousaur-macOS.zip"),
                 "update endpoint exposes platform download URL",
