@@ -43,6 +43,11 @@ class CollectorTests(unittest.TestCase):
         self.assertIn("browser_page_activity", status["capabilities"]["collectors"])
         self.assertIn("terminal_activity", status["capabilities"]["collectors"])
         self.assertIn("ide_activity", status["capabilities"]["collectors"])
+        self.assertIn("accessibility_context", status["capabilities"]["collectors"])
+        self.assertIn("notification_activity", status["capabilities"]["collectors"])
+        self.assertIn("calendar_activity", status["capabilities"]["collectors"])
+        self.assertIn("communication_activity", status["capabilities"]["collectors"])
+        self.assertIn("security_context", status["capabilities"]["collectors"])
 
     def test_filesystem_collector_records_and_dedupes_events(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -494,6 +499,85 @@ class CollectorTests(unittest.TestCase):
         self.assertIn("Terminal activity event", result.attention_batches[0]["text"])
         self.assertNotIn("SECRET RAW OUTPUT", str(result.attention_batches[0]))
 
+    def test_calendar_bridge_collector_queues_briefing_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            config = AgentConfig(workspace=workspace, data_dir=root / "data", planner_provider="explicit").normalized()
+            spool_dir = config.data_dir / "collector_spool"
+            spool_dir.mkdir(parents=True)
+            (spool_dir / "calendar_activity.jsonl").write_text(
+                '{"event_id":"meeting-starting-1","stimulus_type":"meeting_starting","text":"Meeting starting soon.","metadata":{"calendar_id":"work"}}\n',
+                encoding="utf-8",
+            )
+            save_collector_profile(
+                config,
+                {
+                    "enabled": True,
+                    "submit_to_harness": True,
+                    "collectors": {
+                        "active_window": False,
+                        "browser": False,
+                        "clipboard": False,
+                        "filesystem": False,
+                        "screenshot": False,
+                        "screen_ocr": False,
+                        "video_frame": False,
+                        "audio_activity": False,
+                        "calendar_activity": True,
+                    },
+                },
+            )
+
+            result = run_collector_tick(config, force=True)
+
+        self.assertEqual(result.semantic_events[0]["event_type"], "calendar_activity")
+        self.assertEqual(result.action_candidates[0]["action_type"], "prepare_briefing")
+        self.assertIn("Calendar event", result.attention_batches[0]["text"])
+
+    def test_security_bridge_collector_requires_rich_capture_opt_in(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            config = AgentConfig(workspace=workspace, data_dir=root / "data", planner_provider="explicit").normalized()
+            spool_dir = config.data_dir / "collector_spool"
+            spool_dir.mkdir(parents=True)
+            (spool_dir / "security_context.jsonl").write_text(
+                '{"event_id":"password-field-1","stimulus_type":"password_field_focused","text":"Password field focused."}\n',
+                encoding="utf-8",
+            )
+            save_collector_profile(
+                config,
+                {
+                    "enabled": True,
+                    "submit_to_harness": True,
+                    "collectors": {
+                        "active_window": False,
+                        "browser": False,
+                        "clipboard": False,
+                        "filesystem": False,
+                        "screenshot": False,
+                        "screen_ocr": False,
+                        "video_frame": False,
+                        "audio_activity": False,
+                        "security_context": True,
+                    },
+                },
+            )
+
+            blocked = run_collector_tick(config, force=True)
+            save_collector_profile(config, {"rich_capture_opt_in": {"security_context": True}})
+            with (spool_dir / "security_context.jsonl").open("a", encoding="utf-8") as handle:
+                handle.write('{"event_id":"private-mode-1","stimulus_type":"private_browsing_detected","text":"Private browsing detected."}\n')
+            allowed = run_collector_tick(config, force=True)
+
+        self.assertEqual(blocked.collected, [])
+        self.assertTrue(any(item["reason"] == "rich capture collector is not opted in" for item in blocked.skipped))
+        self.assertEqual(allowed.semantic_events[0]["event_type"], "security_context_changed")
+        self.assertEqual(allowed.action_candidates[0]["action_type"], "suppress_collection")
+
     def test_bridge_activity_collectors_feed_compact_attention_batches(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
@@ -541,6 +625,78 @@ class CollectorTests(unittest.TestCase):
         self.assertIn("Browser page activity event(s): 1", batch_text)
         self.assertIn("terminal_activity", {event["event_type"] for event in result.semantic_events})
         self.assertIn("browser_page_activity", {event["event_type"] for event in result.semantic_events})
+
+    def test_productivity_bridge_collectors_generate_semantic_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            config = AgentConfig(workspace=workspace, data_dir=root / "data", planner_provider="explicit").normalized()
+            spool_dir = config.data_dir / "collector_spool"
+            spool_dir.mkdir(parents=True)
+            (spool_dir / "communication_activity.jsonl").write_text(
+                '{"event_id":"mention-1","stimulus_type":"mention_received","text":"Mention received in Slack.","metadata":{"channel_id":"slack","conversation_id":"C123"},"payload":{"body":"SECRET MESSAGE BODY"}}\n',
+                encoding="utf-8",
+            )
+            (spool_dir / "calendar_activity.jsonl").write_text(
+                '{"event_id":"meeting-1","stimulus_type":"meeting_starting","text":"Meeting starting in 5 minutes.","metadata":{"app_name":"Calendar"},"payload":{"title":"Planning"}}\n',
+                encoding="utf-8",
+            )
+            (spool_dir / "notification_activity.jsonl").write_text(
+                '{"event_id":"alert-1","stimulus_type":"critical_alert_received","text":"Critical notification received.","metadata":{"app_name":"PagerDuty"},"payload":{"body":"SECRET ALERT BODY"}}\n',
+                encoding="utf-8",
+            )
+            (spool_dir / "security_context.jsonl").write_text(
+                '{"event_id":"security-1","stimulus_type":"private_browsing_detected","text":"Private browsing detected.","metadata":{"privacy_level":"sensitive"},"payload":{"url":"SECRET PRIVATE URL"}}\n',
+                encoding="utf-8",
+            )
+            save_collector_profile(
+                config,
+                {
+                    "enabled": True,
+                    "submit_to_harness": True,
+                    "collectors": {
+                        "active_window": False,
+                        "browser": False,
+                        "clipboard": False,
+                        "filesystem": False,
+                        "screenshot": False,
+                        "screen_ocr": False,
+                        "video_frame": False,
+                        "audio_activity": False,
+                        "communication_activity": True,
+                        "calendar_activity": True,
+                        "notification_activity": True,
+                        "security_context": True,
+                    },
+                    "rich_capture_opt_in": {"security_context": True},
+                },
+            )
+
+            result = run_collector_tick(config, force=True)
+
+        self.assertEqual(
+            {event["collector"] for event in result.collected},
+            {"communication_activity", "calendar_activity", "notification_activity", "security_context"},
+        )
+        batch = result.attention_batches[0]
+        self.assertIn("Communication event(s): 1", batch["text"])
+        self.assertIn("Calendar event(s): 1", batch["text"])
+        self.assertIn("Notification event(s): 1", batch["text"])
+        self.assertIn("Security context event(s): 1", batch["text"])
+        self.assertNotIn("SECRET MESSAGE BODY", str(batch))
+        self.assertNotIn("SECRET ALERT BODY", str(batch))
+        self.assertNotIn("SECRET PRIVATE URL", str(batch))
+        semantic_types = {event["event_type"] for event in result.semantic_events}
+        self.assertIn("communication_activity", semantic_types)
+        self.assertIn("calendar_activity", semantic_types)
+        self.assertIn("notification_activity", semantic_types)
+        self.assertIn("security_context_changed", semantic_types)
+        action_types = {candidate["action_type"] for candidate in result.action_candidates}
+        self.assertIn("review_message", action_types)
+        self.assertIn("prepare_briefing", action_types)
+        self.assertIn("review_attention", action_types)
+        self.assertIn("suppress_collection", action_types)
 
 
 if __name__ == "__main__":

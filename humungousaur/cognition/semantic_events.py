@@ -29,7 +29,16 @@ SEMANTIC_EVENT_TYPES = {
     "screen_context_changed",
     "clipboard_changed",
     "input_device_activity",
+    "accessibility_context_changed",
+    "agent_runtime_activity",
+    "calendar_activity",
+    "communication_activity",
+    "creative_activity",
+    "document_activity",
     "ide_activity",
+    "mail_activity",
+    "notification_activity",
+    "security_context_changed",
     "terminal_activity",
     "window_lifecycle_changed",
     "user_returned_to_work",
@@ -48,6 +57,15 @@ PASSIVE_CONTEXT_TYPES = {
     "project_files_changed",
     "screen_context_changed",
     "clipboard_changed",
+    "accessibility_context_changed",
+    "notification_activity",
+    "calendar_activity",
+    "communication_activity",
+    "mail_activity",
+    "document_activity",
+    "creative_activity",
+    "security_context_changed",
+    "agent_runtime_activity",
 }
 
 
@@ -278,6 +296,15 @@ def semantic_events_from_attention_batch(batch: dict[str, Any]) -> list[Semantic
         ("browser_page_activity", "browser_page_activity", "browser", "metadata"),
         ("terminal_activity", "terminal_activity", "activity", "metadata"),
         ("ide_activity", "ide_activity", "activity", "metadata"),
+        ("accessibility_context", "accessibility_context_changed", "accessibility", "redacted"),
+        ("notification_activity", "notification_activity", "activity", "metadata"),
+        ("calendar_activity", "calendar_activity", "system", "metadata"),
+        ("communication_activity", "communication_activity", "channel_message", "metadata"),
+        ("mail_activity", "mail_activity", "activity", "metadata"),
+        ("document_activity", "document_activity", "activity", "metadata"),
+        ("creative_activity", "creative_activity", "activity", "metadata"),
+        ("security_context", "security_context_changed", "system", "metadata"),
+        ("agent_runtime", "agent_runtime_activity", "system", "metadata"),
     ):
         if grouped.get(collector):
             latest = grouped[collector][-1]
@@ -287,7 +314,20 @@ def semantic_events_from_attention_batch(batch: dict[str, Any]) -> list[Semantic
                     source,
                     str(latest.get("summary") or f"{collector} event."),
                     occurred_at=occurred_at,
-                    metadata=_safe_subset(latest, ("app_name", "window_title", "url", "collector", "stimulus_type", "bridge_event")),
+                    metadata=_safe_subset(
+                        latest,
+                        (
+                            "app_name",
+                            "window_title",
+                            "url",
+                            "channel_id",
+                            "conversation_id",
+                            "privacy_level",
+                            "collector",
+                            "stimulus_type",
+                            "bridge_event",
+                        ),
+                    ),
                     raw_ref=batch_id,
                     sent_to_llm=True,
                     privacy_level=privacy_level,
@@ -466,6 +506,57 @@ def deterministic_action_candidates(config: AgentConfig, event: SemanticEvent) -
                 event,
                 "analyze",
                 "Terminal, build, test, or server failure bridge event is actionable for the active workspace.",
+                risk="medium",
+                metadata=event.metadata,
+            )
+        )
+    elif event.event_type == "notification_activity" and str(event.metadata.get("stimulus_type") or "") in {"critical_alert_received", "reminder_fired"}:
+        candidates.append(
+            _candidate(
+                event,
+                "review_attention",
+                "A critical alert or reminder fired; decide whether it needs user-visible attention.",
+                risk="low",
+                metadata=event.metadata,
+            )
+        )
+    elif event.event_type == "communication_activity" and str(event.metadata.get("stimulus_type") or "") in {"mention_received", "dm_received", "thread_reply_received", "call_invite_received"}:
+        candidates.append(
+            _candidate(
+                event,
+                "review_message",
+                "A direct or mention-like communication event arrived; determine whether a reply or task is needed.",
+                risk="low",
+                metadata=event.metadata,
+            )
+        )
+    elif event.event_type == "calendar_activity" and str(event.metadata.get("stimulus_type") or "") in {"meeting_starting", "meeting_started", "deadline_near", "followup_due"}:
+        candidates.append(
+            _candidate(
+                event,
+                "prepare_briefing",
+                "A calendar, deadline, or follow-up event is active; prepare context silently.",
+                risk="low",
+                metadata=event.metadata,
+            )
+        )
+    elif event.event_type == "security_context_changed":
+        candidates.append(
+            _candidate(
+                event,
+                "suppress_collection",
+                "Security-sensitive context is active; keep rich collection suppressed and avoid interruption unless explicitly requested.",
+                risk="medium",
+                requires_user_approval=False,
+                metadata=event.metadata,
+            )
+        )
+    elif event.event_type == "agent_runtime_activity" and str(event.metadata.get("stimulus_type") or "") in {"tool_failed", "run_stuck", "approval_requested"}:
+        candidates.append(
+            _candidate(
+                event,
+                "review_agent_runtime",
+                "Agent runtime event may need recovery, approval handling, or user-visible status.",
                 risk="medium",
                 metadata=event.metadata,
             )

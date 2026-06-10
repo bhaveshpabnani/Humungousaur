@@ -36,6 +36,17 @@ from .definitions import (
 )
 from .lifecycle import collect_app_lifecycle, collect_browser_lifecycle, collect_input_device, collect_window_lifecycle
 from .models import CollectorEvent, CollectorProfile, CollectorTickResult, utc_now as _utc_now
+from .productivity_adapters import (
+    collect_accessibility_context,
+    collect_agent_runtime,
+    collect_calendar_activity,
+    collect_communication_activity,
+    collect_creative_activity,
+    collect_document_activity,
+    collect_mail_activity,
+    collect_notification_activity,
+    collect_security_context,
+)
 
 
 
@@ -447,6 +458,15 @@ _COLLECTORS: dict[str, Callable[[AgentConfig, CollectorProfile, dict[str, Any]],
     "browser_page_activity": collect_browser_page_activity,
     "terminal_activity": collect_terminal_activity,
     "ide_activity": collect_ide_activity,
+    "accessibility_context": collect_accessibility_context,
+    "notification_activity": collect_notification_activity,
+    "calendar_activity": collect_calendar_activity,
+    "communication_activity": collect_communication_activity,
+    "mail_activity": collect_mail_activity,
+    "document_activity": collect_document_activity,
+    "creative_activity": collect_creative_activity,
+    "security_context": collect_security_context,
+    "agent_runtime": collect_agent_runtime,
 }
 
 
@@ -649,11 +669,27 @@ def _compact_attention_event(event: CollectorEvent) -> dict[str, Any]:
         compact["input_event"] = event.stimulus_type
         compact["idle_bucket"] = str(event.metadata.get("idle_bucket", ""))
         compact["summary"] = event.text[:240]
-    elif event.collector in {"browser_page_activity", "terminal_activity", "ide_activity"}:
+    elif event.collector in {
+        "browser_page_activity",
+        "terminal_activity",
+        "ide_activity",
+        "accessibility_context",
+        "notification_activity",
+        "calendar_activity",
+        "communication_activity",
+        "mail_activity",
+        "document_activity",
+        "creative_activity",
+        "security_context",
+        "agent_runtime",
+    }:
         compact["summary"] = event.text[:240]
         compact["app_name"] = str(event.metadata.get("app_name", ""))
         compact["window_title"] = str(event.metadata.get("window_title", ""))
         compact["url"] = str(event.metadata.get("url", ""))
+        compact["channel_id"] = str(event.metadata.get("channel_id", ""))
+        compact["conversation_id"] = str(event.metadata.get("conversation_id", ""))
+        compact["privacy_level"] = str(event.metadata.get("privacy_level", "metadata"))
         compact["bridge_event"] = bool(event.metadata.get("bridge_event", False))
     else:
         compact["summary"] = event.text[:240]
@@ -739,6 +775,24 @@ def _attention_batch_text(events: list[dict[str, Any]], counts: dict[str, int]) 
         lines.append(f"Terminal activity event(s): {counts['terminal_activity']}; command output is summarized by the bridge.")
     if counts.get("ide_activity"):
         lines.append(f"IDE activity event(s): {counts['ide_activity']}; file paths and diagnostics are compacted.")
+    if counts.get("accessibility_context"):
+        lines.append(f"Accessibility context event(s): {counts['accessibility_context']}; UI values and selected text are redacted unless explicitly summarized by the bridge.")
+    if counts.get("notification_activity"):
+        lines.append(f"Notification event(s): {counts['notification_activity']}.")
+    if counts.get("calendar_activity"):
+        lines.append(f"Calendar event(s): {counts['calendar_activity']}.")
+    if counts.get("communication_activity"):
+        lines.append(f"Communication event(s): {counts['communication_activity']}; message body is compacted by channel policy.")
+    if counts.get("mail_activity"):
+        lines.append(f"Mail event(s): {counts['mail_activity']}; email body is omitted.")
+    if counts.get("document_activity"):
+        lines.append(f"Document event(s): {counts['document_activity']}; document contents are not included.")
+    if counts.get("creative_activity"):
+        lines.append(f"Creative app event(s): {counts['creative_activity']}; asset contents are not included.")
+    if counts.get("security_context"):
+        lines.append(f"Security context event(s): {counts['security_context']}; sensitive contents are blocked.")
+    if counts.get("agent_runtime"):
+        lines.append(f"Agent runtime event(s): {counts['agent_runtime']}.")
     return " ".join(lines)
 
 
