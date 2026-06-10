@@ -20,6 +20,7 @@ Collector code lives under `humungousaur/collectors`.
 - `manager.py`: profile persistence, ticks, filters, local recording, attention batching, semantic event recording, and harness submission.
 - `lifecycle.py`: lifecycle/input collector adapters that can use best-effort OS snapshots or native bridge spool files.
 - `activity_adapters.py`: bridge-backed browser page, terminal, and IDE activity adapters.
+- `productivity_adapters.py`: bridge-backed accessibility, notification, calendar, communication, mail, document, creative, security, and agent-runtime adapters.
 
 The manager records local `collector_stimulus` events and sends only compact `attention_batch` stimuli to the LLM boundary.
 
@@ -116,7 +117,6 @@ Disallowed bridge examples:
 
 1. Lifecycle/input: `input_device`, `app_lifecycle`, `window_lifecycle`, `browser_lifecycle`. Implemented as opt-in collectors with best-effort snapshots and bridge support.
 2. Browser page, terminal, and IDE activity: downloads, uploads, form submit, page errors, command exit, build/test failure, active file, diagnostics. Implemented as opt-in bridge collectors.
-3. Accessibility context: focused control, selected text, visible errors, form state.
-4. Communication: mentions, DMs, reactions, unread threads across configured channels.
-5. Calendar/meeting: meeting start/end, transcript chunks, action-item candidates.
-6. Notification/mail/document/creative app adapters.
+3. Accessibility, notification, calendar, communication, mail, document, creative, security, and agent-runtime activity. Implemented as opt-in bridge collectors; accessibility and security require rich-capture opt-in.
+4. Native helper implementations for each platform/app: macOS Accessibility/System Events helpers, Windows UIA/WinEvent hooks, browser extensions, shell integrations, IDE extensions, calendar/mail adapters, and creative-app plugins.
+5. Deep app-specific enrichment: stable element IDs, safe selected-text summaries, thread metadata, document references, render/export statuses, and structured recovery hints.
