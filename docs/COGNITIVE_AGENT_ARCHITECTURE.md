@@ -263,6 +263,29 @@ The structured trigger implementation milestone adds:
 
 Triggers are the external-activation gate. External adapters submit structured evidence, and triggers queue ordinary runtime events only when exact declared fields match. They do not parse free text, perform regex matching, or choose intent; the queued event still flows through attention, planning, policy, approvals, execution, and reflection.
 
+The privacy-first semantic event milestone adds:
+
+- compact semantic events for direct user text, post-wake voice transcripts, channel messages, active app transitions, browser context, project file changes, clipboard changes, and opt-in screen context changes
+- generated `current_context.md` and `events.md` artifacts from the local event store, so the files are a model/UI brief rather than the source of truth
+- deterministic action candidates such as `update_context`, `monitor_research`, `prepare_resume_context`, `prepare_briefing`, and `analyze`
+- `/events/status` and `/events/rebuild-context` API routes plus matching CLI commands for desktop inspection
+- collector tick results that include semantic events, generated context metadata, and autonomous action candidates alongside the original privacy-filtered attention batch
+
+This layer is the active-context bridge. The pipeline is:
+
+```text
+collector/direct stimulus
+-> privacy filter and compact event builder
+-> semantic event builder
+-> local event store
+-> generated current context brief
+-> deterministic trigger engine
+-> autonomous action candidate queue
+-> normal attention/planning/tool/response/memory/reflection loop
+```
+
+Raw continuous telemetry does not become model input. Direct user text and post-wake voice transcripts still go immediately to the interaction harness; passive collector inputs become compact semantic context first and queue autonomous work only when a structured transition is high-signal.
+
 The loop is the runtime heartbeat. It does not bypass attention, planning, tool policy, approvals, reflection, learning, consolidation, or wakeup gates. It only repeats the already-audited one-cycle runtime with explicit bounds and visible stop reasons.
 
 The tenth implementation milestone adds adaptive recovery:

@@ -16,6 +16,7 @@ from humungousaur.collectors import (
 )
 from humungousaur.config import AgentConfig
 from humungousaur.cognition.loop import AutonomousLoopRunner, autonomous_loop_result_to_dict, autonomous_status
+from humungousaur.cognition.semantic_events import rebuild_current_context, semantic_events_status
 from humungousaur.env import load_workspace_environment
 from humungousaur.indexing import FileIndex
 from humungousaur.integrations.voice_wakeup import handle_activation, run_activation
@@ -240,6 +241,18 @@ def build_parser() -> argparse.ArgumentParser:
     collector_loop.add_argument("--force", action="store_true")
     collector_loop.add_argument("--json", action="store_true")
     _add_planner_args(collector_loop)
+
+    events_status = subparsers.add_parser("events-status", help="Inspect semantic events, current context, and autonomous action candidates")
+    events_status.add_argument("--workspace", type=Path, default=Path.cwd())
+    events_status.add_argument("--data-dir", type=Path, default=Path("artifacts"))
+    events_status.add_argument("--limit", type=int, default=20)
+    events_status.add_argument("--json", action="store_true")
+
+    events_rebuild = subparsers.add_parser("events-rebuild-context", help="Regenerate current_context.md and events.md from local semantic events")
+    events_rebuild.add_argument("--workspace", type=Path, default=Path.cwd())
+    events_rebuild.add_argument("--data-dir", type=Path, default=Path("artifacts"))
+    events_rebuild.add_argument("--limit", type=int, default=40)
+    events_rebuild.add_argument("--json", action="store_true")
 
     multi_agent_board = subparsers.add_parser("multi-agent-board", help="Inspect specialist coordination board")
     multi_agent_board.add_argument("--workspace", type=Path, default=Path.cwd())
@@ -643,6 +656,32 @@ def main() -> None:
             print(json.dumps(payload, indent=2, ensure_ascii=False))
         else:
             print(f"Collector loop: {payload['tick_count']} tick(s).")
+        return
+
+    if args.command == "events-status":
+        payload = semantic_events_status(config, limit=args.limit)
+        if args.json:
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            print(
+                f"Semantic events: {len(payload['semantic_events'])} recent, "
+                f"actions={len(payload['action_candidates'])}, queued={len(payload['queued_action_events'])}."
+            )
+            print(f"Current context: {payload['current_context_path']}")
+            print(f"Events: {payload['events_path']}")
+        return
+
+    if args.command == "events-rebuild-context":
+        payload = rebuild_current_context(config, limit=args.limit)
+        if args.json:
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            print(
+                f"Rebuilt context with {payload['semantic_event_count']} semantic event(s) "
+                f"and {payload['action_candidate_count']} action candidate(s)."
+            )
+            print(f"Current context: {payload['current_context_path']}")
+            print(f"Events: {payload['events_path']}")
         return
 
     if args.command == "multi-agent-board":

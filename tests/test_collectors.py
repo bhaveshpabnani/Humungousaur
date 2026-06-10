@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import humungousaur.collectors.manager as collector_manager
+import humungousaur.collectors.lifecycle as lifecycle_collectors
 from humungousaur.collectors import (
     collector_status,
     run_collector_tick,
@@ -37,6 +38,8 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(status["profile"]["privacy_mode"], "privacy_first")
         self.assertFalse(status["profile"]["rich_capture_opt_in"]["clipboard"])
         self.assertIn("audio_activity", status["capabilities"]["collectors"])
+        self.assertIn("input_device", status["capabilities"]["collectors"])
+        self.assertIn("browser_lifecycle", status["capabilities"]["collectors"])
 
     def test_filesystem_collector_records_and_dedupes_events(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -230,6 +233,7 @@ class CollectorTests(unittest.TestCase):
 
             result = run_collector_tick(config, force=True)
             memory = EventStore(config.memory_db_path).tail(limit=20)
+            context_exists = Path(result.current_context["current_context_path"]).exists()
 
         self.assertEqual(len(result.collected), 2)
         self.assertEqual(len(result.attention_batches), 1)
@@ -238,6 +242,9 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(result.attention_batches[0]["collector_counts"]["filesystem"], 2)
         self.assertIn("Filesystem changes: 2 file(s)", result.attention_batches[0]["text"])
         self.assertEqual(len([event for event in memory if event["event_type"] == "attention_batch"]), 1)
+        self.assertEqual(result.semantic_events[0]["event_type"], "project_files_changed")
+        self.assertEqual(result.action_candidates[0]["action_type"], "update_context")
+        self.assertTrue(context_exists)
 
     def test_rich_capture_collector_requires_explicit_opt_in(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -370,6 +377,79 @@ class CollectorTests(unittest.TestCase):
 
         self.assertEqual(len(result.collected), 1)
         self.assertEqual(len([item for item in result.skipped if "minute budget exceeded" in item["reason"]]), 2)
+
+    def test_input_device_collector_reads_native_bridge_spool_without_text_logging(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            config = AgentConfig(workspace=workspace, data_dir=root / "data", planner_provider="explicit").normalized()
+            spool_dir = config.data_dir / "collector_spool"
+            spool_dir.mkdir(parents=True)
+            (spool_dir / "input_device.jsonl").write_text(
+                '{"event_id":"mouse-forward-1","stimulus_type":"mouse_forward","metadata":{"button":"forward"},"payload":{"button":4}}\n',
+                encoding="utf-8",
+            )
+            save_collector_profile(
+                config,
+                {
+                    "enabled": True,
+                    "submit_to_harness": False,
+                    "collectors": {
+                        "active_window": False,
+                        "browser": False,
+                        "clipboard": False,
+                        "filesystem": False,
+                        "screenshot": False,
+                        "screen_ocr": False,
+                        "video_frame": False,
+                        "audio_activity": False,
+                        "input_device": True,
+                    },
+                },
+            )
+
+            result = run_collector_tick(config, force=True)
+
+        self.assertEqual(len(result.collected), 1)
+        self.assertEqual(result.collected[0]["collector"], "input_device")
+        self.assertEqual(result.collected[0]["stimulus_type"], "mouse_forward")
+        self.assertNotIn("typed", str(result.collected[0]).lower())
+
+    def test_app_lifecycle_collector_detects_opened_process_after_baseline(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            config = AgentConfig(workspace=workspace, data_dir=root / "data", planner_provider="explicit").normalized()
+            save_collector_profile(
+                config,
+                {
+                    "enabled": True,
+                    "submit_to_harness": False,
+                    "collectors": {
+                        "active_window": False,
+                        "browser": False,
+                        "clipboard": False,
+                        "filesystem": False,
+                        "screenshot": False,
+                        "screen_ocr": False,
+                        "video_frame": False,
+                        "audio_activity": False,
+                        "app_lifecycle": True,
+                    },
+                },
+            )
+
+            with patch.object(lifecycle_collectors, "_process_names", side_effect=[{"Finder"}, {"Finder", "Xcode"}]):
+                baseline = run_collector_tick(config, force=True)
+                opened = run_collector_tick(config, force=True)
+
+        self.assertEqual(baseline.collected, [])
+        self.assertEqual(len(opened.collected), 1)
+        self.assertEqual(opened.collected[0]["collector"], "app_lifecycle")
+        self.assertEqual(opened.collected[0]["stimulus_type"], "app_opened")
+        self.assertEqual(opened.collected[0]["metadata"]["app_name"], "Xcode")
 
 
 if __name__ == "__main__":

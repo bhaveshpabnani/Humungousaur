@@ -26,6 +26,7 @@ from humungousaur.collectors import (
 )
 from humungousaur.cognition.loop import AutonomousLoopRunner, autonomous_loop_result_to_dict, autonomous_status
 from humungousaur.cognition.queue import RuntimeEventQueue
+from humungousaur.cognition.semantic_events import rebuild_current_context, semantic_events_status
 from humungousaur.cognition.triggers import TriggerStore, stimulus_from_input
 from humungousaur.integrations.channel_listeners import (
     channel_listener_status,
@@ -330,6 +331,9 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                 if path == "/collectors/status":
                     self._send_json(collector_status(effective_config(), limit=_int_arg(query, "limit", 10)))
                     return
+                if path == "/events/status":
+                    self._send_json(semantic_events_status(effective_config(), limit=_int_arg(query, "limit", 20)))
+                    return
                 webhook_channel_id = _channel_webhook_route(path)
                 if webhook_channel_id is not None:
                     challenge = _str_arg(query, "hub.challenge") or _str_arg(query, "challenge")
@@ -608,6 +612,10 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                         dry_run=_payload_bool(payload, "dry_run", False),
                     )
                     self._send_json(asdict(result), HTTPStatus.CREATED)
+                    return
+                if path == "/events/rebuild-context":
+                    run_config = request_config(effective_config(), payload)
+                    self._send_json(rebuild_current_context(run_config, limit=_payload_int(payload, "limit", 40)), HTTPStatus.CREATED)
                     return
                 if path == "/automation/daemon/configure":
                     run_config = request_config(effective_config(), payload)

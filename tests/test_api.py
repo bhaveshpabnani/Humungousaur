@@ -618,7 +618,7 @@ class APITests(unittest.TestCase):
                     "/collectors/configure",
                     {
                         "enabled": True,
-                        "submit_to_harness": False,
+                        "submit_to_harness": True,
                         "collectors": {
                             "active_window": False,
                             "browser": False,
@@ -633,12 +633,17 @@ class APITests(unittest.TestCase):
                         "max_events_per_tick": 1,
                     },
                 )
-                tick = api_post(base_url, "/collectors/tick", {"dry_run": True})
+                tick = api_post(base_url, "/collectors/tick", {"force": True})
+                events = api_get(base_url, "/events/status?limit=5")
+                rebuilt = api_post(base_url, "/events/rebuild-context", {"limit": 5})
 
             self.assertIn("active_window", status["profile"]["collectors"])
             self.assertTrue(configured["profile"]["enabled"])
             self.assertIn("filesystem", configured["profile"]["collectors"])
             self.assertIn("collected", tick)
+            self.assertIn("semantic_events", events)
+            self.assertTrue(events["current_context_exists"])
+            self.assertIn("current_context_path", rebuilt)
 
     def test_api_approval_lifecycle(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

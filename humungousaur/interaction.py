@@ -8,6 +8,7 @@ import uuid
 from humungousaur.config import AgentConfig
 from humungousaur.cognition import CognitiveRecorder
 from humungousaur.cognition.models import CognitiveDecision
+from humungousaur.cognition.semantic_events import record_stimulus_semantics
 from humungousaur.memory.event_store import EventStore
 from humungousaur.orchestrator import AgentOrchestrator
 from humungousaur.schemas import AgentRunResult
@@ -90,6 +91,17 @@ class InteractionHarness:
         )
         decision = harness_decision_from_cognitive(cognitive_decision, normalized)
         recorded_event_id = self._record_stimulus(normalized, decision) if decision.should_record_activity else None
+        record_stimulus_semantics(
+            self.config,
+            {
+                "text": normalized.text,
+                "source": normalized.source,
+                "metadata": normalized.metadata,
+                "stimulus_id": normalized.stimulus_id,
+                "occurred_at": normalized.occurred_at,
+            },
+            decision=decision.decision,
+        )
         run: AgentRunResult | None = None
         voice_result: dict[str, Any] | None = None
         if decision.should_run_agent:

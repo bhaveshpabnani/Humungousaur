@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict
 from datetime import datetime, timezone
 import hashlib
 import importlib.util
@@ -14,6 +14,7 @@ from typing import Any, Callable
 
 from humungousaur.config import AgentConfig
 from humungousaur.cognition.loop import AutonomousLoopRunner, autonomous_loop_result_to_dict
+from humungousaur.cognition.semantic_events import record_attention_batch_semantics
 from humungousaur.interaction import InteractionHarness, harness_result_to_dict
 from humungousaur.memory.event_store import EventStore
 from humungousaur.schemas import ActionStatus
@@ -25,127 +26,17 @@ from humungousaur.tools.activity.implementation import (
 )
 from humungousaur.tools.os_tools import ScreenshotCaptureTool, active_window_snapshot
 
-
-DEFAULT_COLLECTORS = {
-    "active_window": True,
-    "browser": True,
-    "clipboard": False,
-    "filesystem": True,
-    "screenshot": False,
-    "screen_ocr": False,
-    "video_frame": False,
-    "audio_activity": False,
-}
-SENSITIVE_COLLECTORS = {"clipboard", "screenshot", "screen_ocr", "video_frame", "audio_activity"}
-DEFAULT_RICH_CAPTURE_OPT_IN = {name: False for name in SENSITIVE_COLLECTORS}
-DEFAULT_COLLECTOR_RATE_LIMITS_PER_MINUTE = {
-    "active_window": 6,
-    "browser": 6,
-    "clipboard": 3,
-    "filesystem": 10,
-    "screenshot": 2,
-    "screen_ocr": 2,
-    "video_frame": 1,
-    "audio_activity": 12,
-}
-COLLECTOR_SOURCES = {
-    "active_window": "activity",
-    "browser": "browser",
-    "clipboard": "activity",
-    "filesystem": "activity",
-    "screenshot": "screen_ocr",
-    "screen_ocr": "screen_ocr",
-    "video_frame": "screen_ocr",
-    "audio_activity": "audio_transcript",
-}
+from .definitions import (
+    DEFAULT_COLLECTOR_RATE_LIMITS_PER_MINUTE,
+    DEFAULT_COLLECTORS,
+    DEFAULT_RICH_CAPTURE_OPT_IN,
+    SENSITIVE_COLLECTORS,
+    collector_capability_records,
+)
+from .lifecycle import collect_app_lifecycle, collect_browser_lifecycle, collect_input_device, collect_window_lifecycle
+from .models import CollectorEvent, CollectorProfile, CollectorTickResult, utc_now as _utc_now
 
 
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-@dataclass(slots=True)
-class CollectorProfile:
-    enabled: bool = False
-    privacy_mode: str = "privacy_first"
-    poll_seconds: float = 5.0
-    response_mode: str = "silent"
-    submit_to_harness: bool = True
-    run_autonomous_cycle: bool = False
-    max_events_per_tick: int = 8
-    collectors: dict[str, bool] = field(default_factory=lambda: dict(DEFAULT_COLLECTORS))
-    rich_capture_opt_in: dict[str, bool] = field(default_factory=lambda: dict(DEFAULT_RICH_CAPTURE_OPT_IN))
-    collector_rate_limits_per_minute: dict[str, int] = field(default_factory=lambda: dict(DEFAULT_COLLECTOR_RATE_LIMITS_PER_MINUTE))
-    watch_paths: list[str] = field(default_factory=list)
-    max_file_events: int = 5
-    max_text_chars: int = 2000
-    dwell_seconds: float = 8.0
-    batch_seconds: float = 20.0
-    llm_attention_interval_seconds: float = 60.0
-    screenshot_min_interval_seconds: float = 60.0
-    ocr_min_interval_seconds: float = 90.0
-    video_frame_min_interval_seconds: float = 120.0
-    audio_sample_seconds: float = 1.5
-    audio_rms_threshold: float = 0.02
-    note: str = ""
-    updated_at: str = field(default_factory=_utc_now)
-
-
-@dataclass(slots=True)
-class CollectorEvent:
-    collector: str
-    source: str
-    stimulus_type: str
-    text: str
-    metadata: dict[str, Any] = field(default_factory=dict)
-    payload: dict[str, Any] = field(default_factory=dict)
-    occurred_at: str = field(default_factory=_utc_now)
-    signature: str = ""
-
-    def stable_signature(self) -> str:
-        if self.signature:
-            return self.signature
-        body = json.dumps(
-            {
-                "collector": self.collector,
-                "source": self.source,
-                "stimulus_type": self.stimulus_type,
-                "text": self.text,
-                "metadata": self.metadata,
-                "payload": self.payload,
-            },
-            ensure_ascii=False,
-            sort_keys=True,
-            default=str,
-        )
-        return hashlib.sha256(body.encode("utf-8")).hexdigest()
-
-    def stimulus(self) -> dict[str, Any]:
-        return {
-            "text": self.text,
-            "source": self.source,
-            "metadata": {
-                **self.metadata,
-                "collector": self.collector,
-                "stimulus_type": self.stimulus_type,
-                "payload": self.payload,
-            },
-            "stimulus_id": f"collector-{self.collector}-{self.stable_signature()[:12]}",
-            "occurred_at": self.occurred_at,
-        }
-
-
-@dataclass(slots=True)
-class CollectorTickResult:
-    profile: dict[str, Any]
-    collected: list[dict[str, Any]]
-    submitted: list[dict[str, Any]]
-    skipped: list[dict[str, Any]]
-    attention_batches: list[dict[str, Any]] = field(default_factory=list)
-    loop: dict[str, Any] | None = None
-    started_at: str = field(default_factory=_utc_now)
-    finished_at: str = ""
-    duration_ms: float = 0.0
 
 
 def collector_profile_path(config: AgentConfig) -> Path:
@@ -300,6 +191,10 @@ def run_collector_tick(
         if attention_batch is not None:
             result.attention_batches.append(attention_batch)
             EventStore(normalized.memory_db_path).append("attention_batch", attention_batch)
+            semantic_result = record_attention_batch_semantics(normalized, attention_batch)
+            result.semantic_events.extend(semantic_result.get("semantic_events", []))
+            result.action_candidates.extend(semantic_result.get("action_candidates", []))
+            result.current_context = semantic_result.get("context")
             harness = InteractionHarness(normalized).handle(_attention_stimulus(attention_batch), response_mode=active.response_mode)
             result.submitted.append(
                 {
@@ -340,31 +235,15 @@ def run_collector_loop(
 
 def collector_capabilities() -> dict[str, Any]:
     return {
-        "collectors": {
-            "active_window": {"source": "activity", "sensitive": False, "status": "implemented"},
-            "browser": {"source": "browser", "sensitive": False, "status": "implemented_best_effort"},
-            "clipboard": {"source": "activity", "sensitive": True, "status": "implemented_best_effort"},
-            "filesystem": {"source": "activity", "sensitive": False, "status": "implemented_polling"},
-            "screenshot": {"source": "screen_ocr", "sensitive": True, "status": "implemented_opt_in"},
-            "screen_ocr": {
-                "source": "screen_ocr",
-                "sensitive": True,
-                "status": "implemented_when_tesseract_or_pillow_available",
-                "tesseract_available": bool(shutil.which("tesseract")),
-            },
-            "video_frame": {
-                "source": "screen_ocr",
-                "sensitive": True,
-                "status": "implemented_as_periodic_screen_keyframe",
-            },
-            "audio_activity": {
-                "source": "audio_transcript",
-                "sensitive": True,
-                "status": "implemented_when_sounddevice_and_numpy_available",
-                "sounddevice_available": importlib.util.find_spec("sounddevice") is not None,
-                "numpy_available": importlib.util.find_spec("numpy") is not None,
-            },
-        },
+        "collectors": collector_capability_records(
+            {
+                "screen_ocr": {"tesseract_available": bool(shutil.which("tesseract"))},
+                "audio_activity": {
+                    "sounddevice_available": importlib.util.find_spec("sounddevice") is not None,
+                    "numpy_available": importlib.util.find_spec("numpy") is not None,
+                },
+            }
+        ),
         "contract": {
             "default_privacy_mode": "privacy_first",
             "raw_capture_default": "off for rich collectors",
@@ -560,6 +439,10 @@ _COLLECTORS: dict[str, Callable[[AgentConfig, CollectorProfile, dict[str, Any]],
     "screen_ocr": collect_screen_ocr,
     "video_frame": collect_video_frame,
     "audio_activity": collect_audio_activity,
+    "input_device": collect_input_device,
+    "app_lifecycle": collect_app_lifecycle,
+    "window_lifecycle": collect_window_lifecycle,
+    "browser_lifecycle": collect_browser_lifecycle,
 }
 
 
@@ -749,6 +632,19 @@ def _compact_attention_event(event: CollectorEvent) -> dict[str, Any]:
         compact["filename"] = str(event.metadata.get("filename", ""))
         compact["width"] = event.metadata.get("width")
         compact["height"] = event.metadata.get("height")
+    elif event.collector in {"app_lifecycle", "window_lifecycle"}:
+        compact["app_name"] = str(event.metadata.get("app_name", ""))
+        compact["window_title"] = str(event.metadata.get("window_title", ""))
+        compact["summary"] = event.text[:240]
+    elif event.collector == "browser_lifecycle":
+        compact["app_name"] = str(event.metadata.get("app_name", ""))
+        compact["window_title"] = str(event.metadata.get("window_title", ""))
+        compact["url"] = str(event.metadata.get("url", ""))
+        compact["summary"] = event.text[:240]
+    elif event.collector == "input_device":
+        compact["input_event"] = event.stimulus_type
+        compact["idle_bucket"] = str(event.metadata.get("idle_bucket", ""))
+        compact["summary"] = event.text[:240]
     else:
         compact["summary"] = event.text[:240]
     return compact
@@ -815,6 +711,18 @@ def _attention_batch_text(events: list[dict[str, Any]], counts: dict[str, int]) 
         lines.append(f"Screenshot capture event(s): {counts['screenshot']}; image omitted.")
     if counts.get("video_frame"):
         lines.append(f"Video keyframe event(s): {counts['video_frame']}; frame omitted.")
+    if counts.get("app_lifecycle"):
+        lines.append(f"App lifecycle event(s): {counts['app_lifecycle']}.")
+    if counts.get("window_lifecycle"):
+        latest_window = next((event for event in reversed(events) if event.get("collector") == "window_lifecycle"), {})
+        lines.append(
+            f"Window lifecycle: {latest_window.get('app_name', 'app')} - {latest_window.get('window_title', 'window')}."
+        )
+    if counts.get("browser_lifecycle"):
+        latest_browser = next((event for event in reversed(events) if event.get("collector") == "browser_lifecycle"), {})
+        lines.append(f"Browser lifecycle: {latest_browser.get('window_title') or latest_browser.get('url') or 'browser event'}.")
+    if counts.get("input_device"):
+        lines.append(f"Input-device event(s): {counts['input_device']}; raw typed text is never collected.")
     return " ".join(lines)
 
 

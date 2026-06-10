@@ -117,6 +117,16 @@ from .recovery import EvidenceRecoveryProvider, ModelRecoveryProvider, RecoveryE
 from .recorder import CognitiveRecorder
 from .reflection import EvidenceReflectionProvider, ModelReflectionProvider, ReflectionEngine, ReflectionProvider, ReflectionStore
 from .self_review import EvidenceSelfReviewProvider, ModelSelfReviewProvider, SelfReviewEngine, SelfReviewProvider, SelfReviewStore
+from .semantic_events import (
+    AutonomousActionCandidate,
+    SemanticEvent,
+    current_context_path,
+    events_markdown_path,
+    rebuild_current_context,
+    record_attention_batch_semantics,
+    record_stimulus_semantics,
+    semantic_events_status,
+)
 from .skill_evolution import (
     EvidenceSkillEvolutionProvider,
     ModelSkillEvolutionProvider,
@@ -142,6 +152,7 @@ from .wakeups import WakeupStore
 __all__ = [
     "CognitiveController",
     "AutomationDaemonProfile",
+    "AutonomousActionCandidate",
     "BriefingEngine",
     "BriefingProvider",
     "BriefingRecord",
@@ -248,6 +259,7 @@ __all__ = [
     "RuntimeCycleStatus",
     "RuntimeEvent",
     "RuntimeEventQueue",
+    "SemanticEvent",
     "EvidenceSelfReviewProvider",
     "EvidenceSkillForgeProvider",
     "ModelSelfReviewProvider",
@@ -280,6 +292,8 @@ __all__ = [
     "WakeupStore",
     "automation_daemon_profile_path",
     "automation_daemon_profile_with_overrides",
+    "current_context_path",
+    "events_markdown_path",
     "automation_daemon_status",
     "autonomous_loop_result_to_dict",
     "autonomous_status",
@@ -288,7 +302,11 @@ __all__ = [
     "load_automation_daemon_profile",
     "pack_to_dict",
     "run_automation_daemon_tick",
+    "record_attention_batch_semantics",
+    "record_stimulus_semantics",
+    "rebuild_current_context",
     "save_automation_daemon_profile",
+    "semantic_events_status",
     "stimulus_from_input",
     "trigger_matches",
 ]

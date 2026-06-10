@@ -269,7 +269,7 @@ def main() -> int:
                 "/collectors/configure",
                 {
                     "enabled": True,
-                    "submit_to_harness": False,
+                    "submit_to_harness": True,
                     "collectors": {
                         "active_window": False,
                         "browser": False,
@@ -285,8 +285,22 @@ def main() -> int:
                 },
             )
             smoke.require(collectors_config.get("profile", {}).get("enabled") is True, "collector configuration persists through desktop API")
-            collectors_tick = api_post(base_url, "/collectors/tick", {"dry_run": True})
+            collectors_tick = api_post(base_url, "/collectors/tick", {"force": True})
             smoke.require("collected" in collectors_tick and "skipped" in collectors_tick, "collector tick endpoint runs safely for desktop API")
+            smoke.require(
+                bool(collectors_tick.get("semantic_events")),
+                "collector tick emits semantic events for desktop UI context",
+                collectors_tick,
+            )
+            events_status = api_get(base_url, "/events/status?limit=5")
+            smoke.require(events_status.get("current_context_exists") is True, "events status exposes generated current context")
+            smoke.require(
+                any(event.get("payload", {}).get("event_type") == "project_files_changed" for event in events_status.get("semantic_events", [])),
+                "events status exposes compact project file semantic event",
+                events_status.get("semantic_events", []),
+            )
+            rebuilt_context = api_post(base_url, "/events/rebuild-context", {"limit": 5})
+            smoke.require("current_context_path" in rebuilt_context, "events rebuild endpoint refreshes context artifacts")
 
     return smoke.summary()
 
