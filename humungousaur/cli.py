@@ -8,6 +8,12 @@ from pathlib import Path
 
 from humungousaur.api import run_api_server
 from humungousaur.client_protocol import run_client_protocol_stdio
+from humungousaur.collectors import (
+    collector_status,
+    run_collector_loop,
+    run_collector_tick,
+    save_collector_profile,
+)
 from humungousaur.config import AgentConfig
 from humungousaur.cognition.loop import AutonomousLoopRunner, autonomous_loop_result_to_dict, autonomous_status
 from humungousaur.env import load_workspace_environment
@@ -189,6 +195,44 @@ def build_parser() -> argparse.ArgumentParser:
     daemon_tick.add_argument("--approve-high-risk", action="store_true")
     daemon_tick.add_argument("--json", action="store_true")
     _add_planner_args(daemon_tick)
+
+    collector_status_parser = subparsers.add_parser("collectors-status", help="Inspect continuous local stimulus collector profile and recent events")
+    collector_status_parser.add_argument("--workspace", type=Path, default=Path.cwd())
+    collector_status_parser.add_argument("--data-dir", type=Path, default=Path("artifacts"))
+    collector_status_parser.add_argument("--limit", type=int, default=10)
+    collector_status_parser.add_argument("--json", action="store_true")
+
+    collector_configure = subparsers.add_parser("collectors-configure", help="Persist continuous local stimulus collector settings")
+    collector_configure.add_argument("--workspace", type=Path, default=Path.cwd())
+    collector_configure.add_argument("--data-dir", type=Path, default=Path("artifacts"))
+    collector_configure.add_argument("--enabled", action="store_true")
+    collector_configure.add_argument("--disabled", action="store_true")
+    collector_configure.add_argument("--poll-seconds", type=float)
+    collector_configure.add_argument("--response-mode", choices=("silent", "text", "voice_prepare", "voice_speak"))
+    collector_configure.add_argument("--no-submit-to-harness", action="store_true")
+    collector_configure.add_argument("--run-autonomous-cycle", action="store_true")
+    collector_configure.add_argument("--max-events-per-tick", type=int)
+    collector_configure.add_argument("--watch-path", action="append", default=[])
+    collector_configure.add_argument("--enable-collector", action="append", default=[])
+    collector_configure.add_argument("--disable-collector", action="append", default=[])
+    collector_configure.add_argument("--note", default="")
+    collector_configure.add_argument("--json", action="store_true")
+
+    collector_tick = subparsers.add_parser("collectors-tick", help="Run one continuous stimulus collector tick")
+    collector_tick.add_argument("--workspace", type=Path, default=Path.cwd())
+    collector_tick.add_argument("--data-dir", type=Path, default=Path("artifacts"))
+    collector_tick.add_argument("--force", action="store_true")
+    collector_tick.add_argument("--dry-run", action="store_true")
+    collector_tick.add_argument("--json", action="store_true")
+    _add_planner_args(collector_tick)
+
+    collector_loop = subparsers.add_parser("collectors-loop", help="Run repeated local stimulus collector ticks")
+    collector_loop.add_argument("--workspace", type=Path, default=Path.cwd())
+    collector_loop.add_argument("--data-dir", type=Path, default=Path("artifacts"))
+    collector_loop.add_argument("--max-ticks", type=int, default=0)
+    collector_loop.add_argument("--force", action="store_true")
+    collector_loop.add_argument("--json", action="store_true")
+    _add_planner_args(collector_loop)
 
     multi_agent_board = subparsers.add_parser("multi-agent-board", help="Inspect specialist coordination board")
     multi_agent_board.add_argument("--workspace", type=Path, default=Path.cwd())
@@ -498,6 +542,75 @@ def main() -> None:
             print(result.summary)
             for cycle in payload.get("loop", {}).get("cycles", []):
                 print(f"- {cycle['status']}: {cycle['reason']}")
+        return
+
+    if args.command == "collectors-status":
+        payload = collector_status(config, limit=args.limit)
+        if args.json:
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            profile = payload["profile"]
+            print(
+                f"Collectors: enabled={profile['enabled']}, poll={profile['poll_seconds']}s, "
+                f"recent={len(payload['recent_events'])}."
+            )
+            for name, enabled in profile["collectors"].items():
+                print(f"- {name}: {'on' if enabled else 'off'}")
+        return
+
+    if args.command == "collectors-configure":
+        payload: dict[str, object] = {}
+        if args.enabled:
+            payload["enabled"] = True
+        if args.disabled:
+            payload["enabled"] = False
+        if args.poll_seconds is not None:
+            payload["poll_seconds"] = args.poll_seconds
+        if args.response_mode is not None:
+            payload["response_mode"] = args.response_mode
+        if args.no_submit_to_harness:
+            payload["submit_to_harness"] = False
+        if args.run_autonomous_cycle:
+            payload["run_autonomous_cycle"] = True
+        if args.max_events_per_tick is not None:
+            payload["max_events_per_tick"] = args.max_events_per_tick
+        if args.watch_path:
+            payload["watch_paths"] = args.watch_path
+        collectors: dict[str, bool] = {}
+        for name in args.enable_collector:
+            collectors[name] = True
+        for name in args.disable_collector:
+            collectors[name] = False
+        if collectors:
+            payload["collectors"] = collectors
+        if args.note:
+            payload["note"] = args.note
+        profile = save_collector_profile(config, payload)
+        output = {"profile": asdict(profile), "status": collector_status(config)}
+        if args.json:
+            print(json.dumps(output, indent=2, ensure_ascii=False))
+        else:
+            print(f"Collectors configured: enabled={profile.enabled}, poll={profile.poll_seconds}s.")
+        return
+
+    if args.command == "collectors-tick":
+        result = run_collector_tick(config, force=args.force, dry_run=args.dry_run)
+        payload = asdict(result)
+        if args.json:
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            print(
+                f"Collector tick: collected={len(payload['collected'])}, "
+                f"submitted={len(payload['submitted'])}, skipped={len(payload['skipped'])}."
+            )
+        return
+
+    if args.command == "collectors-loop":
+        payload = run_collector_loop(config, max_ticks=args.max_ticks, force=args.force)
+        if args.json:
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            print(f"Collector loop: {payload['tick_count']} tick(s).")
         return
 
     if args.command == "multi-agent-board":

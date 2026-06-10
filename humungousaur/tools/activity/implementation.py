@@ -18,6 +18,10 @@ ACTIVITY_SOURCES = [
     "audio_transcript",
     "browser",
     "active_window",
+    "clipboard",
+    "filesystem",
+    "screenshot",
+    "video_frame",
     "manual",
 ]
 ACTIVITY_RETENTION_MIN_DAYS = 1

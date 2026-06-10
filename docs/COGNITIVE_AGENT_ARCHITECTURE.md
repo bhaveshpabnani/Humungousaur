@@ -48,10 +48,12 @@ This bridge reads OpenAI/Codex `SKILL.md`, plugin metadata, and documented Codex
 1. Event bus
    - Normalizes user text, voice, activity, screen, browser, app, file, schedule, and system stimuli into durable events.
    - Supports priorities so interrupts and approvals can preempt background work.
+   - Continuous collectors feed active window, browser context, filesystem, clipboard, screenshot/OCR keyframe, video keyframe, and audio activity stimuli into this bus through local privacy filters and dedupe.
 
 2. Perception and context
    - Converts raw signals into compact observations.
    - Separates retrieved/environment content from instructions.
+   - Raw capture collectors are disabled by default; the model receives compact observations through the interaction harness, not a raw 24/7 stream.
 
 3. Attention manager
    - Decides whether an event should be ignored, observed, analyzed, acted on, or answered.

@@ -18,6 +18,12 @@ from urllib.request import Request, urlopen
 
 from humungousaur import __version__
 from humungousaur.config import AgentConfig
+from humungousaur.collectors import (
+    collector_status,
+    load_collector_profile,
+    run_collector_tick,
+    save_collector_profile,
+)
 from humungousaur.cognition.loop import AutonomousLoopRunner, autonomous_loop_result_to_dict, autonomous_status
 from humungousaur.cognition.queue import RuntimeEventQueue
 from humungousaur.cognition.triggers import TriggerStore, stimulus_from_input
@@ -321,6 +327,9 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                 if path == "/channels/listeners":
                     self._send_json(channel_listener_status(effective_config(), channel_id=_str_arg(query, "channel_id") or None))
                     return
+                if path == "/collectors/status":
+                    self._send_json(collector_status(effective_config(), limit=_int_arg(query, "limit", 10)))
+                    return
                 webhook_channel_id = _channel_webhook_route(path)
                 if webhook_channel_id is not None:
                     challenge = _str_arg(query, "hub.challenge") or _str_arg(query, "challenge")
@@ -585,6 +594,20 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                         allow_initiative=_payload_bool(payload, "allow_initiative", False),
                     )
                     self._send_json(autonomous_loop_result_to_dict(result), HTTPStatus.CREATED)
+                    return
+                if path == "/collectors/configure":
+                    run_config = request_config(effective_config(), payload)
+                    profile = save_collector_profile(run_config, payload)
+                    self._send_json({"profile": asdict(profile), **collector_status(run_config)}, HTTPStatus.CREATED)
+                    return
+                if path == "/collectors/tick":
+                    run_config = request_config(effective_config(), payload)
+                    result = run_collector_tick(
+                        run_config,
+                        force=_payload_bool(payload, "force", False),
+                        dry_run=_payload_bool(payload, "dry_run", False),
+                    )
+                    self._send_json(asdict(result), HTTPStatus.CREATED)
                     return
                 if path == "/automation/daemon/configure":
                     run_config = request_config(effective_config(), payload)
@@ -895,6 +918,7 @@ class HumungousaurAPIServer(ThreadingHTTPServer):
     def __init__(self, server_address: tuple[str, int], handler_class: type[BaseHTTPRequestHandler]) -> None:
         self._background_threads: list[threading.Thread] = []
         self._background_threads_lock = threading.Lock()
+        self._stop_event = threading.Event()
         super().__init__(server_address, handler_class)
 
     def start_background_worker(self, worker: threading.Thread) -> None:
@@ -917,6 +941,7 @@ class HumungousaurAPIServer(ThreadingHTTPServer):
             alive[0].join(timeout=min(0.25, remaining))
 
     def server_close(self) -> None:
+        self._stop_event.set()
         self.join_background_workers()
         super().server_close()
 
@@ -924,7 +949,16 @@ class HumungousaurAPIServer(ThreadingHTTPServer):
 def create_api_server(config: AgentConfig, host: str = "127.0.0.1", port: int = 8765) -> HumungousaurAPIServer:
     if host not in {"127.0.0.1", "localhost", "::1"}:
         raise ValueError("Humungousaur API binds to loopback hosts only by default.")
-    return HumungousaurAPIServer((host, port), make_handler(config))
+    server = HumungousaurAPIServer((host, port), make_handler(config))
+    server.start_background_worker(
+        threading.Thread(
+            target=_collector_background_worker,
+            args=(config.normalized(), server._stop_event),
+            daemon=True,
+            name="humungousaur-collectors",
+        )
+    )
+    return server
 
 
 def _append_request_log(config: AgentConfig, entry: dict[str, Any], lock: threading.Lock) -> None:
@@ -1017,6 +1051,17 @@ def run_api_server(config: AgentConfig, host: str = "127.0.0.1", port: int = 876
         pass
     finally:
         server.server_close()
+
+
+def _collector_background_worker(config: AgentConfig, stop_event: threading.Event) -> None:
+    while not stop_event.is_set():
+        profile = load_collector_profile(config)
+        if profile.enabled:
+            try:
+                run_collector_tick(config, profile=profile)
+            except Exception:
+                pass
+        stop_event.wait(max(0.5, profile.poll_seconds))
 
 
 def _run_agent_background(config: AgentConfig, request: str, run_id: str, approve_high_risk: bool) -> None:

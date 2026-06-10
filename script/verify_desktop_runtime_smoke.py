@@ -262,6 +262,32 @@ def main() -> int:
             )
             smoke.require(autonomous_cycle.get("stopped_reason") in {"idle", "max_cycles"}, "bounded autonomy cycle endpoint is safe and responsive")
 
+            collectors_status = api_get(base_url, "/collectors/status?limit=5")
+            smoke.require("active_window" in collectors_status.get("profile", {}).get("collectors", {}), "collector status exposes desktop stimulus collectors")
+            collectors_config = api_post(
+                base_url,
+                "/collectors/configure",
+                {
+                    "enabled": True,
+                    "submit_to_harness": False,
+                    "collectors": {
+                        "active_window": False,
+                        "browser": False,
+                        "clipboard": False,
+                        "filesystem": True,
+                        "screenshot": False,
+                        "screen_ocr": False,
+                        "video_frame": False,
+                        "audio_activity": False,
+                    },
+                    "watch_paths": [str(workspace)],
+                    "max_events_per_tick": 1,
+                },
+            )
+            smoke.require(collectors_config.get("profile", {}).get("enabled") is True, "collector configuration persists through desktop API")
+            collectors_tick = api_post(base_url, "/collectors/tick", {"dry_run": True})
+            smoke.require("collected" in collectors_tick and "skipped" in collectors_tick, "collector tick endpoint runs safely for desktop API")
+
     return smoke.summary()
 
 

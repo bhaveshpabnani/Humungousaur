@@ -601,6 +601,45 @@ class APITests(unittest.TestCase):
             self.assertEqual(status["queued_events"][0]["payload"]["text"], "review the changed file")
             self.assertEqual(status["recent_triggers"][0]["fire_count"], 1)
 
+    def test_api_exposes_continuous_collectors(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            workspace = root / "workspace"
+            watched = root / "watched"
+            workspace.mkdir()
+            watched.mkdir()
+            (watched / "collector.txt").write_text("collector smoke", encoding="utf-8")
+            config = AgentConfig(workspace=workspace, data_dir=root / "data", planner_provider="explicit").normalized()
+
+            with running_api(config) as base_url:
+                status = api_get(base_url, "/collectors/status?limit=5")
+                configured = api_post(
+                    base_url,
+                    "/collectors/configure",
+                    {
+                        "enabled": True,
+                        "submit_to_harness": False,
+                        "collectors": {
+                            "active_window": False,
+                            "browser": False,
+                            "clipboard": False,
+                            "filesystem": True,
+                            "screenshot": False,
+                            "screen_ocr": False,
+                            "video_frame": False,
+                            "audio_activity": False,
+                        },
+                        "watch_paths": [str(watched)],
+                        "max_events_per_tick": 1,
+                    },
+                )
+                tick = api_post(base_url, "/collectors/tick", {"dry_run": True})
+
+            self.assertIn("active_window", status["profile"]["collectors"])
+            self.assertTrue(configured["profile"]["enabled"])
+            self.assertIn("filesystem", configured["profile"]["collectors"])
+            self.assertIn("collected", tick)
+
     def test_api_approval_lifecycle(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)
