@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import json
 import platform
 import subprocess
 import time
@@ -11,6 +9,7 @@ from typing import Any
 from humungousaur.config import AgentConfig
 from humungousaur.tools.os_tools import active_window_snapshot
 
+from .bridge import read_bridge_events
 from .models import CollectorEvent, CollectorProfile, utc_now
 
 
@@ -32,7 +31,7 @@ MAX_LIFECYCLE_EVENTS_PER_TICK = 10
 
 def collect_input_device(config: AgentConfig, profile: CollectorProfile, state: dict[str, Any]) -> list[CollectorEvent]:
     del profile
-    events = _bridge_events(config, state, "input_device", INPUT_STIMULUS_TYPES)
+    events = read_bridge_events(config, state, "input_device", INPUT_STIMULUS_TYPES, source="activity")
     idle_event = _idle_state_event(state)
     if idle_event is not None:
         events.append(idle_event)
@@ -109,7 +108,7 @@ def collect_window_lifecycle(config: AgentConfig, profile: CollectorProfile, sta
 
 def collect_browser_lifecycle(config: AgentConfig, profile: CollectorProfile, state: dict[str, Any]) -> list[CollectorEvent]:
     del profile
-    events = _bridge_events(config, state, "browser_lifecycle", BROWSER_BRIDGE_STIMULUS_TYPES)
+    events = read_bridge_events(config, state, "browser_lifecycle", BROWSER_BRIDGE_STIMULUS_TYPES, source="browser")
     snapshot = _browser_snapshot()
     if not snapshot.get("available"):
         return events[:MAX_LIFECYCLE_EVENTS_PER_TICK]
@@ -151,65 +150,6 @@ def collect_browser_lifecycle(config: AgentConfig, profile: CollectorProfile, st
             )
         )
     return events[:MAX_LIFECYCLE_EVENTS_PER_TICK]
-
-
-def _bridge_events(
-    config: AgentConfig,
-    state: dict[str, Any],
-    collector: str,
-    allowed_stimulus_types: set[str],
-) -> list[CollectorEvent]:
-    path = _collector_spool_path(config, collector)
-    if not path.exists():
-        return []
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return []
-    offsets = state.setdefault("spool_offsets", {})
-    offset = max(0, min(int(offsets.get(collector, 0) or 0), len(lines)))
-    offsets[collector] = len(lines)
-    events: list[CollectorEvent] = []
-    for line in lines[offset:]:
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(payload, dict):
-            continue
-        stimulus_type = str(payload.get("stimulus_type") or "").strip()
-        if stimulus_type not in allowed_stimulus_types:
-            continue
-        text = str(payload.get("text") or _default_bridge_text(stimulus_type)).strip()
-        metadata = payload.get("metadata", {})
-        if not isinstance(metadata, dict):
-            metadata = {}
-        raw_payload = payload.get("payload", {})
-        if not isinstance(raw_payload, dict):
-            raw_payload = {}
-        event_id = str(payload.get("event_id") or "").strip()
-        occurred_at = str(payload.get("occurred_at") or "").strip() or utc_now()
-        events.append(
-            CollectorEvent(
-                collector=collector,
-                source="browser" if collector == "browser_lifecycle" else "activity",
-                stimulus_type=stimulus_type,
-                text=text,
-                metadata={**metadata, "bridge_event": True, "platform": platform.system()},
-                payload=raw_payload,
-                occurred_at=occurred_at,
-                signature=event_id or f"{collector}:{stimulus_type}:{hashlib.sha256(line.encode('utf-8')).hexdigest()}",
-            )
-        )
-    return events
-
-
-def _collector_spool_path(config: AgentConfig, collector: str) -> Path:
-    return config.normalized().data_dir / "collector_spool" / f"{collector}.jsonl"
-
-
-def _default_bridge_text(stimulus_type: str) -> str:
-    return stimulus_type.replace("_", " ").capitalize()
 
 
 def _idle_state_event(state: dict[str, Any]) -> CollectorEvent | None:
