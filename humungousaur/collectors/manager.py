@@ -26,6 +26,7 @@ from humungousaur.tools.activity.implementation import (
 )
 from humungousaur.tools.os_tools import ScreenshotCaptureTool, active_window_snapshot
 
+from .activity_adapters import collect_browser_page_activity, collect_ide_activity, collect_terminal_activity
 from .definitions import (
     DEFAULT_COLLECTOR_RATE_LIMITS_PER_MINUTE,
     DEFAULT_COLLECTORS,
@@ -443,6 +444,9 @@ _COLLECTORS: dict[str, Callable[[AgentConfig, CollectorProfile, dict[str, Any]],
     "app_lifecycle": collect_app_lifecycle,
     "window_lifecycle": collect_window_lifecycle,
     "browser_lifecycle": collect_browser_lifecycle,
+    "browser_page_activity": collect_browser_page_activity,
+    "terminal_activity": collect_terminal_activity,
+    "ide_activity": collect_ide_activity,
 }
 
 
@@ -645,6 +649,12 @@ def _compact_attention_event(event: CollectorEvent) -> dict[str, Any]:
         compact["input_event"] = event.stimulus_type
         compact["idle_bucket"] = str(event.metadata.get("idle_bucket", ""))
         compact["summary"] = event.text[:240]
+    elif event.collector in {"browser_page_activity", "terminal_activity", "ide_activity"}:
+        compact["summary"] = event.text[:240]
+        compact["app_name"] = str(event.metadata.get("app_name", ""))
+        compact["window_title"] = str(event.metadata.get("window_title", ""))
+        compact["url"] = str(event.metadata.get("url", ""))
+        compact["bridge_event"] = bool(event.metadata.get("bridge_event", False))
     else:
         compact["summary"] = event.text[:240]
     return compact
@@ -723,6 +733,12 @@ def _attention_batch_text(events: list[dict[str, Any]], counts: dict[str, int]) 
         lines.append(f"Browser lifecycle: {latest_browser.get('window_title') or latest_browser.get('url') or 'browser event'}.")
     if counts.get("input_device"):
         lines.append(f"Input-device event(s): {counts['input_device']}; raw typed text is never collected.")
+    if counts.get("browser_page_activity"):
+        lines.append(f"Browser page activity event(s): {counts['browser_page_activity']}; selected text and form values are redacted by bridge policy.")
+    if counts.get("terminal_activity"):
+        lines.append(f"Terminal activity event(s): {counts['terminal_activity']}; command output is summarized by the bridge.")
+    if counts.get("ide_activity"):
+        lines.append(f"IDE activity event(s): {counts['ide_activity']}; file paths and diagnostics are compacted.")
     return " ".join(lines)
 
 

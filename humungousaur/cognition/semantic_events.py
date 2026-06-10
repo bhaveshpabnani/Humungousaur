@@ -19,6 +19,7 @@ SEMANTIC_EVENT_TYPES = {
     "app_lifecycle_changed",
     "browser_context_changed",
     "browser_lifecycle_changed",
+    "browser_page_activity",
     "research_session_started",
     "research_session_updated",
     "research_session_ended",
@@ -28,6 +29,8 @@ SEMANTIC_EVENT_TYPES = {
     "screen_context_changed",
     "clipboard_changed",
     "input_device_activity",
+    "ide_activity",
+    "terminal_activity",
     "window_lifecycle_changed",
     "user_returned_to_work",
     "task_context_resumed",
@@ -271,6 +274,25 @@ def semantic_events_from_attention_batch(batch: dict[str, Any]) -> list[Semantic
                 privacy_level="metadata",
             )
         )
+    for collector, event_type, source, privacy_level in (
+        ("browser_page_activity", "browser_page_activity", "browser", "metadata"),
+        ("terminal_activity", "terminal_activity", "activity", "metadata"),
+        ("ide_activity", "ide_activity", "activity", "metadata"),
+    ):
+        if grouped.get(collector):
+            latest = grouped[collector][-1]
+            semantic.append(
+                _event(
+                    event_type,
+                    source,
+                    str(latest.get("summary") or f"{collector} event."),
+                    occurred_at=occurred_at,
+                    metadata=_safe_subset(latest, ("app_name", "window_title", "url", "collector", "stimulus_type", "bridge_event")),
+                    raw_ref=batch_id,
+                    sent_to_llm=True,
+                    privacy_level=privacy_level,
+                )
+            )
     if grouped.get("filesystem"):
         paths = [str(item.get("path") or "") for item in grouped["filesystem"] if str(item.get("path") or "")]
         semantic.append(
@@ -435,6 +457,16 @@ def deterministic_action_candidates(config: AgentConfig, event: SemanticEvent) -
                 event,
                 "prepare_briefing",
                 "Calendar event started; prepare relevant context silently before deciding whether to interrupt.",
+                metadata=event.metadata,
+            )
+        )
+    elif event.event_type == "terminal_activity" and str(event.metadata.get("stimulus_type") or "").endswith(("failed", "crashed")):
+        candidates.append(
+            _candidate(
+                event,
+                "analyze",
+                "Terminal, build, test, or server failure bridge event is actionable for the active workspace.",
+                risk="medium",
                 metadata=event.metadata,
             )
         )

@@ -40,6 +40,9 @@ class CollectorTests(unittest.TestCase):
         self.assertIn("audio_activity", status["capabilities"]["collectors"])
         self.assertIn("input_device", status["capabilities"]["collectors"])
         self.assertIn("browser_lifecycle", status["capabilities"]["collectors"])
+        self.assertIn("browser_page_activity", status["capabilities"]["collectors"])
+        self.assertIn("terminal_activity", status["capabilities"]["collectors"])
+        self.assertIn("ide_activity", status["capabilities"]["collectors"])
 
     def test_filesystem_collector_records_and_dedupes_events(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -450,6 +453,94 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(opened.collected[0]["collector"], "app_lifecycle")
         self.assertEqual(opened.collected[0]["stimulus_type"], "app_opened")
         self.assertEqual(opened.collected[0]["metadata"]["app_name"], "Xcode")
+
+    def test_terminal_bridge_collector_batches_semantic_failure_without_raw_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            config = AgentConfig(workspace=workspace, data_dir=root / "data", planner_provider="explicit").normalized()
+            spool_dir = config.data_dir / "collector_spool"
+            spool_dir.mkdir(parents=True)
+            (spool_dir / "terminal_activity.jsonl").write_text(
+                '{"event_id":"tests-failed-1","stimulus_type":"tests_failed","text":"Tests failed in backend suite.","metadata":{"app_name":"Terminal"},"payload":{"summary":"2 tests failed","raw_output":"SECRET RAW OUTPUT"}}\n',
+                encoding="utf-8",
+            )
+            save_collector_profile(
+                config,
+                {
+                    "enabled": True,
+                    "submit_to_harness": True,
+                    "collectors": {
+                        "active_window": False,
+                        "browser": False,
+                        "clipboard": False,
+                        "filesystem": False,
+                        "screenshot": False,
+                        "screen_ocr": False,
+                        "video_frame": False,
+                        "audio_activity": False,
+                        "terminal_activity": True,
+                    },
+                },
+            )
+
+            result = run_collector_tick(config, force=True)
+
+        self.assertEqual(len(result.collected), 1)
+        self.assertEqual(result.collected[0]["collector"], "terminal_activity")
+        self.assertEqual(result.semantic_events[0]["event_type"], "terminal_activity")
+        self.assertEqual(result.action_candidates[0]["action_type"], "analyze")
+        self.assertIn("Terminal activity event", result.attention_batches[0]["text"])
+        self.assertNotIn("SECRET RAW OUTPUT", str(result.attention_batches[0]))
+
+    def test_bridge_activity_collectors_feed_compact_attention_batches(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            config = AgentConfig(workspace=workspace, data_dir=root / "data", planner_provider="explicit").normalized()
+            spool_dir = config.data_dir / "collector_spool"
+            spool_dir.mkdir(parents=True)
+            (spool_dir / "terminal_activity.jsonl").write_text(
+                '{"event_id":"terminal-fail-1","stimulus_type":"terminal_command_failed","text":"Terminal command failed: pytest exited 1.","metadata":{"app_name":"Terminal"},"payload":{"exit_code":1}}\n',
+                encoding="utf-8",
+            )
+            (spool_dir / "browser_page_activity.jsonl").write_text(
+                '{"event_id":"browser-error-1","stimulus_type":"console_error","text":"Browser console error observed.","metadata":{"app_name":"Chrome","url":"http://localhost:3000"},"payload":{"error_count":1}}\n',
+                encoding="utf-8",
+            )
+            save_collector_profile(
+                config,
+                {
+                    "enabled": True,
+                    "submit_to_harness": True,
+                    "batch_seconds": 1,
+                    "llm_attention_interval_seconds": 1,
+                    "collectors": {
+                        "active_window": False,
+                        "browser": False,
+                        "clipboard": False,
+                        "filesystem": False,
+                        "screenshot": False,
+                        "screen_ocr": False,
+                        "video_frame": False,
+                        "audio_activity": False,
+                        "terminal_activity": True,
+                        "browser_page_activity": True,
+                    },
+                },
+            )
+
+            result = run_collector_tick(config, force=True)
+
+        self.assertEqual({event["collector"] for event in result.collected}, {"terminal_activity", "browser_page_activity"})
+        self.assertEqual(len(result.attention_batches), 1)
+        batch_text = result.attention_batches[0]["text"]
+        self.assertIn("Terminal activity event(s): 1", batch_text)
+        self.assertIn("Browser page activity event(s): 1", batch_text)
+        self.assertIn("terminal_activity", {event["event_type"] for event in result.semantic_events})
+        self.assertIn("browser_page_activity", {event["event_type"] for event in result.semantic_events})
 
 
 if __name__ == "__main__":
