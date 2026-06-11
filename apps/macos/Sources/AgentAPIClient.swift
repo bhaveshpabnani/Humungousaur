@@ -2,6 +2,7 @@ import Foundation
 
 struct RuntimeSecrets {
     var modelAPIKey = ""
+    var activeModelAPIKey = ""
     var deepgramAPIKey = ""
     var elevenLabsAPIKey = ""
 }
@@ -40,6 +41,10 @@ final class AgentAPIClient {
         try await get("tools")
     }
 
+    func modelProviders() async throws -> ModelProviderCatalog {
+        try await get("model/providers")
+    }
+
     func runs() async throws -> [RunItem] {
         try await get("runs?limit=30")
     }
@@ -50,6 +55,34 @@ final class AgentAPIClient {
 
     func channels() async throws -> [ChannelInfo] {
         try await get("channels")
+    }
+
+    func connectors() async throws -> ConnectorCatalog {
+        try await get("connectors")
+    }
+
+    func configureConnector(providerID: String, clientID: String, clientSecret: String, redirectURI: String) async throws -> JSONValue {
+        try await post(
+            "connectors/configure",
+            body: [
+                "provider_id": providerID,
+                "client_id": clientID,
+                "client_secret": clientSecret,
+                "redirect_uri": redirectURI
+            ]
+        )
+    }
+
+    func prepareConnector(providerID: String) async throws -> ConnectorAuthorization {
+        try await post("connectors/connect", body: ["provider_id": providerID])
+    }
+
+    func refreshConnector(providerID: String) async throws -> JSONValue {
+        try await post("connectors/refresh", body: ["provider_id": providerID])
+    }
+
+    func disconnectConnector(providerID: String) async throws -> JSONValue {
+        try await post("connectors/disconnect", body: ["provider_id": providerID])
     }
 
     func outbox() async throws -> OutboxEnvelope {
@@ -186,6 +219,112 @@ final class AgentAPIClient {
 
     func autonomousStatus() async throws -> JSONValue {
         try await get("autonomous/status?limit=10")
+    }
+
+    func activeAgentStatus(limit: Int = 20) async throws -> ActiveAgentStatusResponse {
+        try await get("active-agent/status?limit=\(limit)")
+    }
+
+    func activeAgentPlannerContext(request: String = "") async throws -> ActiveAgentPlannerContextPreview {
+        let encoded = request.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        return try await get("active-agent/planner-context?request=\(encoded)")
+    }
+
+    func collectorStatus(limit: Int = 10) async throws -> CollectorStatusResponse {
+        try await get("collectors/status?limit=\(limit)")
+    }
+
+    func declareActiveAgentTaskContext(_ draft: ActiveAgentTaskContextDraft) async throws -> JSONValue {
+        var payload: [String: Any] = [
+            "goal": draft.goal,
+            "summary": draft.summary,
+            "privacy_mode": draft.privacyMode,
+            "allowed_help": draft.allowedHelpList,
+            "source": "macos_app"
+        ]
+        removeEmptyStrings(from: &payload)
+        return try await post("active-agent/task-contexts", body: payload)
+    }
+
+    func createActiveAgentMutedScope(_ draft: ActiveAgentMutedScopeDraft) async throws -> JSONValue {
+        var payload: [String: Any] = [
+            "mode": draft.mode,
+            "scope_type": draft.scopeType,
+            "entity_refs": draft.entityRefList,
+            "collector": draft.collector,
+            "source": draft.source,
+            "stimulus_type": draft.stimulusType,
+            "expires_at": draft.expiresAt,
+            "reason": draft.reason
+        ]
+        removeEmptyStrings(from: &payload)
+        return try await post("active-agent/muted-scopes", body: payload)
+    }
+
+    func approveActiveAgentDeepDive(requestID: String, reason: String) async throws -> JSONValue {
+        try await post(
+            "active-agent/deep-dives/approve",
+            body: [
+                "request_id": requestID,
+                "reason": reason
+            ]
+        )
+    }
+
+    func rejectActiveAgentDeepDive(requestID: String, reason: String) async throws -> JSONValue {
+        try await post(
+            "active-agent/deep-dives/reject",
+            body: [
+                "request_id": requestID,
+                "reason": reason
+            ]
+        )
+    }
+
+    func recordActiveAgentCorrection(
+        correctionType: String,
+        targetType: String,
+        targetID: String,
+        note: String,
+        taskContext: ActiveAgentTaskContextDraft? = nil,
+        mutedScope: ActiveAgentMutedScopeDraft? = nil
+    ) async throws -> JSONValue {
+        var payload: [String: Any] = [
+            "correction_type": correctionType,
+            "target_type": targetType,
+            "target_id": targetID,
+            "note": note
+        ]
+        if let taskContext, taskContext.hasContext {
+            payload["goal"] = taskContext.goal
+            payload["summary"] = taskContext.summary
+            payload["privacy_mode"] = taskContext.privacyMode
+            payload["allowed_help"] = taskContext.allowedHelpList
+        }
+        if let mutedScope, mutedScope.hasScope {
+            payload["mode"] = mutedScope.mode
+            payload["scope_type"] = mutedScope.scopeType
+            payload["entity_refs"] = mutedScope.entityRefList
+            payload["collector"] = mutedScope.collector
+            payload["source"] = mutedScope.source
+            payload["stimulus_type"] = mutedScope.stimulusType
+            payload["expires_at"] = mutedScope.expiresAt
+        }
+        removeEmptyStrings(from: &payload)
+        return try await post(
+            "active-agent/corrections",
+            body: payload
+        )
+    }
+
+    func cancelActiveAgentMutedScope(scopeID: String, reason: String) async throws -> JSONValue {
+        try await post(
+            "active-agent/muted-scopes/cancel",
+            body: [
+                "scope_id": scopeID,
+                "reason": reason
+            ]
+        )
     }
 
     func runAutonomousCycle(settings: AppSettings, secrets: RuntimeSecrets) async throws -> JSONValue {
@@ -332,9 +471,23 @@ final class AgentAPIClient {
         if !settings.modelBaseURL.isEmpty {
             payload["model_base_url"] = settings.modelBaseURL
         }
+        let activeProvider = settings.activeModelProvider.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !activeProvider.isEmpty, activeProvider != "same-as-main" {
+            payload["active_model_provider"] = apiModelProvider(activeProvider)
+            payload["active_model_api_key_env"] = modelKeyName(activeProvider)
+            if !settings.activeModelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                payload["active_model"] = settings.activeModelName
+            }
+            if !settings.activeModelBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                payload["active_model_base_url"] = settings.activeModelBaseURL
+            }
+        }
 
         var secretPayload: [String: String] = [:]
         addSecret(&secretPayload, name: modelKeyName(settings.modelProvider), value: secrets.modelAPIKey)
+        if !activeProvider.isEmpty, activeProvider != "same-as-main" {
+            addSecret(&secretPayload, name: modelKeyName(activeProvider), value: secrets.activeModelAPIKey)
+        }
         addSecret(&secretPayload, name: "DEEPGRAM_API_KEY", value: secrets.deepgramAPIKey)
         addSecret(&secretPayload, name: "ELEVENLABS_API_KEY", value: secrets.elevenLabsAPIKey)
         addSecret(&secretPayload, name: "ELEVENLABS_VOICE_ID", value: settings.voiceId)
@@ -438,6 +591,17 @@ final class AgentAPIClient {
 
     private func cleanList(_ values: [String]) -> [String] {
         values.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+    }
+
+    private func removeEmptyStrings(from payload: inout [String: Any]) {
+        for (key, value) in payload {
+            if let string = value as? String, string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                payload.removeValue(forKey: key)
+            }
+            if let strings = value as? [String], strings.isEmpty {
+                payload.removeValue(forKey: key)
+            }
+        }
     }
 
     private static func normalizedBaseURL(_ value: String, fallback: URL = URL(string: "http://127.0.0.1:8765/")!) -> URL {

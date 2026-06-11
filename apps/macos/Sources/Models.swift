@@ -105,6 +105,45 @@ struct ToolInfo: Decodable, Identifiable {
     }
 }
 
+struct ModelProviderCatalog: Decodable {
+    var providerCount: Int
+    var providers: [ModelProviderInfo]
+    var transports: [String]
+
+    static let empty = ModelProviderCatalog(providerCount: 0, providers: [], transports: [])
+
+    enum CodingKeys: String, CodingKey {
+        case providerCount = "provider_count"
+        case providers
+        case transports
+    }
+}
+
+struct ModelProviderInfo: Decodable, Identifiable, Equatable {
+    var id: String { providerId }
+    var providerId: String
+    var label: String
+    var transport: String
+    var defaultModel: String
+    var modelEnv: String
+    var apiKeyEnvs: [String]
+    var baseUrlEnv: String
+    var defaultBaseUrl: String
+    var aliases: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case providerId = "provider_id"
+        case label
+        case transport
+        case defaultModel = "default_model"
+        case modelEnv = "model_env"
+        case apiKeyEnvs = "api_key_envs"
+        case baseUrlEnv = "base_url_env"
+        case defaultBaseUrl = "default_base_url"
+        case aliases
+    }
+}
+
 struct RunItem: Decodable, Identifiable, Hashable {
     var id: String { runId }
     var runId: String
@@ -241,6 +280,569 @@ struct OutboxEnvelope: Decodable {
     var messages: [JSONValue]
 }
 
+struct ConnectorCatalog: Decodable {
+    var providerCount: Int
+    var providers: [ConnectorProvider]
+    var redirectUri: String
+
+    enum CodingKeys: String, CodingKey {
+        case providerCount = "provider_count"
+        case providers
+        case redirectUri = "redirect_uri"
+    }
+}
+
+struct ConnectorProvider: Decodable, Identifiable {
+    var id: String { providerId }
+    var providerId: String
+    var displayName: String
+    var category: String
+    var authUrl: String
+    var tokenUrl: String
+    var authType: String
+    var credentialFields: [String]
+    var oauthManagement: String
+    var managedOAuthAvailable: Bool
+    var advancedClientConfig: Bool
+    var advancedClientConfigured: Bool
+    var defaultScopes: [String]
+    var workspaceApps: [String]
+    var toolHints: [String]
+    var supportsPkce: Bool
+    var docsUrl: String
+    var icon: String
+    var brandColor: String
+    var logoAsset: String
+    var logoUrl: String
+    var configured: Bool
+    var clientId: String
+    var connected: Bool
+    var connectedAt: String
+    var expiresAt: Double
+    var hasRefreshToken: Bool
+    var collectorSource: ConnectorCollectorSource?
+
+    enum CodingKeys: String, CodingKey {
+        case providerId = "provider_id"
+        case displayName = "display_name"
+        case category
+        case authUrl = "auth_url"
+        case tokenUrl = "token_url"
+        case authType = "auth_type"
+        case credentialFields = "credential_fields"
+        case oauthManagement = "oauth_management"
+        case managedOAuthAvailable = "managed_oauth_available"
+        case advancedClientConfig = "advanced_client_config"
+        case advancedClientConfigured = "advanced_client_configured"
+        case defaultScopes = "default_scopes"
+        case workspaceApps = "workspace_apps"
+        case toolHints = "tool_hints"
+        case supportsPkce = "supports_pkce"
+        case docsUrl = "docs_url"
+        case icon
+        case brandColor = "brand_color"
+        case logoAsset = "logo_asset"
+        case logoUrl = "logo_url"
+        case configured
+        case clientId = "client_id"
+        case connected
+        case connectedAt = "connected_at"
+        case expiresAt = "expires_at"
+        case hasRefreshToken = "has_refresh_token"
+        case collectorSource = "collector_source"
+    }
+
+    var statusText: String {
+        if connected { return "Connected" }
+        if usesOAuth {
+            if managedOAuthAvailable || configured { return "Ready to connect" }
+            return "Managed OAuth unavailable"
+        }
+        if configured { return "Credentials saved" }
+        return "Needs credentials"
+    }
+
+    var usesOAuth: Bool {
+        authType == "oauth2_authorization_code"
+    }
+
+    var setupTitle: String {
+        if usesOAuth { return "Advanced OAuth Client" }
+        if credentialFields.count <= 1 { return "Local Connection" }
+        return credentialFields.contains("bot_token") ? "Bot Credentials" : "Connection Credentials"
+    }
+
+    var setupCaption: String {
+        if usesOAuth {
+            let scopeText = defaultScopes.isEmpty ? "OAuth scopes: none declared" : "OAuth scopes: \(defaultScopes.joined(separator: ", "))"
+            return "Managed OAuth is the normal user path. Use these fields only for self-hosted or development builds. \(scopeText)"
+        }
+        if credentialFields.count <= 1 {
+            return "No provider API secret is required here. Save a local connection name so tools and collectors can check readiness."
+        }
+        return "Credential fields: \(credentialFields.map(\.humanizedIdentifier).joined(separator: ", "))"
+    }
+
+    var primaryCredentialLabel: String {
+        credentialFields.first?.humanizedIdentifier ?? (usesOAuth ? "Client ID" : "Connection ID")
+    }
+
+    var secondaryCredentialLabel: String {
+        if usesOAuth && supportsPkce {
+            return "Client Secret (optional)"
+        }
+        guard credentialFields.count > 1 else { return usesOAuth ? "Client secret" : "Secret or token" }
+        return credentialFields[1].humanizedIdentifier
+    }
+
+    var saveButtonTitle: String {
+        usesOAuth ? "Save Advanced OAuth Client" : "Save Credentials"
+    }
+
+    var connectionButtonTitle: String {
+        if usesOAuth { return connected ? "Reconnect" : "Connect" }
+        return configured ? "Check Readiness" : "Show Setup"
+    }
+
+    var connectionButtonSymbol: String {
+        usesOAuth ? "safari" : "checkmark.seal"
+    }
+
+    var authModeText: String {
+        authType.humanizedIdentifier
+    }
+
+    var collectorSourceText: String {
+        guard let collectorSource else { return "-" }
+        let modes = [
+            collectorSource.pollerSupported ? "poller" : nil,
+            collectorSource.webhookSupported ? "webhook" : nil
+        ].compactMap { $0 }.joined(separator: ", ")
+        let mappings = collectorSource.collectorMappings
+            .prefix(8)
+            .map { "\($0.sourceEvent.humanizedIdentifier) -> \($0.collector.humanizedIdentifier) / \($0.stimulusType.humanizedIdentifier)" }
+            .joined(separator: "\n")
+        return [
+            collectorSource.sourceType.humanizedIdentifier,
+            modes.isEmpty ? nil : "Modes: \(modes)",
+            mappings.isEmpty ? nil : mappings
+        ].compactMap { $0 }.joined(separator: "\n")
+    }
+}
+
+struct ConnectorCollectorSource: Decodable {
+    var sourceType: String
+    var pollerSupported: Bool
+    var webhookSupported: Bool
+    var collectorMappings: [ConnectorCollectorMapping]
+
+    enum CodingKeys: String, CodingKey {
+        case sourceType = "source_type"
+        case pollerSupported = "poller_supported"
+        case webhookSupported = "webhook_supported"
+        case collectorMappings = "collector_mappings"
+    }
+}
+
+struct ConnectorCollectorMapping: Decodable {
+    var sourceEvent: String
+    var collector: String
+    var stimulusType: String
+
+    enum CodingKeys: String, CodingKey {
+        case sourceEvent = "source_event"
+        case collector
+        case stimulusType = "stimulus_type"
+    }
+}
+
+struct ConnectorAuthorization: Decodable {
+    var providerId: String
+    var displayName: String
+    var authorizationURL: String
+    var state: String
+    var redirectUri: String
+    var scopes: [String]
+    var usesPkce: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case providerId = "provider_id"
+        case displayName = "display_name"
+        case authorizationURL = "authorization_url"
+        case state
+        case redirectUri = "redirect_uri"
+        case scopes
+        case usesPkce = "uses_pkce"
+    }
+}
+
+struct ActiveAgentStatusResponse: Decodable, Sendable {
+    var routes: [ActiveAgentRecord]
+    var decisions: [ActiveAgentRecord]
+    var activations: [ActiveAgentRecord]
+    var memoryCandidates: [ActiveAgentRecord]
+    var taskContexts: [ActiveAgentRecord]
+    var mutedScopes: [ActiveAgentRecord]
+    var deepDiveRequests: [ActiveAgentRecord]
+    var contextWindow: JSONValue
+    var contextWindows: [ActiveAgentRecord]
+    var contextBoundaries: [ActiveAgentRecord]
+    var resumeCapsules: [ActiveAgentRecord]
+    var explanations: [ActiveAgentRecord]
+    var corrections: [ActiveAgentRecord]
+
+    enum CodingKeys: String, CodingKey {
+        case routes
+        case decisions
+        case activations
+        case memoryCandidates = "memory_candidates"
+        case taskContexts = "task_contexts"
+        case mutedScopes = "muted_scopes"
+        case deepDiveRequests = "deep_dive_requests"
+        case contextWindow = "context_window"
+        case contextWindows = "context_windows"
+        case contextBoundaries = "context_boundaries"
+        case resumeCapsules = "resume_capsules"
+        case explanations
+        case corrections
+    }
+
+    static let empty = ActiveAgentStatusResponse(
+        routes: [],
+        decisions: [],
+        activations: [],
+        memoryCandidates: [],
+        taskContexts: [],
+        mutedScopes: [],
+        deepDiveRequests: [],
+        contextWindow: .object([:]),
+        contextWindows: [],
+        contextBoundaries: [],
+        resumeCapsules: [],
+        explanations: [],
+        corrections: []
+    )
+
+    var latestTarget: (type: String, id: String)? {
+        if let activation = activations.first, !activation.id.isEmpty {
+            return ("activation", activation.id)
+        }
+        if let memory = memoryCandidates.first, !memory.id.isEmpty {
+            return ("memory_candidate", memory.id)
+        }
+        if let decision = decisions.first, !decision.id.isEmpty {
+            return ("decision", decision.id)
+        }
+        if let explanation = explanations.first, !explanation.id.isEmpty {
+            return ("explanation", explanation.id)
+        }
+        if let route = routes.first, !route.id.isEmpty {
+            return ("route", route.id)
+        }
+        return nil
+    }
+
+    var latestPosture: String {
+        activations.first?.activationDisplayStatus
+            ?? decisions.first?.string("posture")?.humanizedStatus
+            ?? routes.first?.string("route_class")?.humanizedStatus
+            ?? "Listening"
+    }
+}
+
+struct ActiveAgentPlannerContextPreview: Decodable, Sendable {
+    var source: String
+    var request: String
+    var privacy: String
+    var activeAgentMemory: JSONValue
+    var activeAgentState: JSONValue
+    var safety: JSONValue
+
+    enum CodingKeys: String, CodingKey {
+        case source
+        case request
+        case privacy
+        case activeAgentMemory = "active_agent_memory"
+        case activeAgentState = "active_agent_state"
+        case safety
+    }
+
+    static let empty = ActiveAgentPlannerContextPreview(
+        source: "",
+        request: "",
+        privacy: "Waiting for planner context.",
+        activeAgentMemory: .object([:]),
+        activeAgentState: .object([:]),
+        safety: .object([:])
+    )
+
+    var memoryItems: [ActiveAgentRecord] {
+        records(from: activeAgentMemory["items"])
+    }
+
+    var taskContexts: [ActiveAgentRecord] {
+        records(from: activeAgentState["task_contexts"])
+    }
+
+    var episodes: [ActiveAgentRecord] {
+        records(from: activeAgentState["episodes"])
+    }
+
+    var activations: [ActiveAgentRecord] {
+        records(from: activeAgentState["activations"])
+    }
+
+    var resumeCapsules: [ActiveAgentRecord] {
+        records(from: activeAgentState["resume_capsules"])
+    }
+
+    var deepDiveRequests: [ActiveAgentRecord] {
+        records(from: activeAgentState["deep_dive_requests"])
+    }
+
+    var mutedScopes: [ActiveAgentRecord] {
+        records(from: activeAgentState["muted_scopes"])
+    }
+
+    private func records(from value: JSONValue?) -> [ActiveAgentRecord] {
+        value?.arrayValue?.compactMap { item in
+            guard let object = item.objectValue else { return nil }
+            return ActiveAgentRecord(values: object)
+        } ?? []
+    }
+}
+
+struct ActiveAgentRecord: Decodable, Identifiable, Hashable, Sendable {
+    var values: [String: JSONValue]
+
+    var id: String {
+        string("activation_id")
+            ?? string("candidate_id")
+            ?? string("decision_id")
+            ?? string("route_id")
+            ?? string("explanation_id")
+            ?? string("correction_id")
+            ?? string("task_context_id")
+            ?? string("scope_id")
+            ?? string("request_id")
+            ?? string("boundary_id")
+            ?? string("capsule_id")
+            ?? string("id")
+            ?? UUID().uuidString
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        values = (try? container.decode([String: JSONValue].self)) ?? [:]
+    }
+
+    init(values: [String: JSONValue]) {
+        self.values = values
+    }
+
+    func string(_ key: String) -> String? {
+        values[key]?.stringValue
+    }
+
+    func bool(_ key: String) -> Bool {
+        values[key]?.boolValue ?? false
+    }
+
+    var primaryText: String {
+        string("user_visible_text")
+            ?? string("reason")
+            ?? string("summary")
+            ?? string("purpose")
+            ?? string("note")
+            ?? string("route_class")?.humanizedStatus
+            ?? id
+    }
+
+    var activationDisplayStatus: String? {
+        guard string("activation_id") != nil else { return nil }
+        let posture = string("posture")?.humanizedStatus
+        let status = string("status")?.humanizedStatus
+        if let posture, let status {
+            return "\(posture) / \(status)"
+        }
+        return status ?? posture
+    }
+
+    var secondaryText: String {
+        [
+            string("collector")?.humanizedIdentifier,
+            string("source")?.humanizedIdentifier,
+            string("stimulus_type")?.humanizedIdentifier,
+            string("created_at")
+        ]
+        .compactMap { $0 }
+        .filter { !$0.isEmpty }
+        .joined(separator: " / ")
+    }
+
+    var statusText: String {
+        string("status")?.humanizedStatus
+            ?? string("posture")?.humanizedStatus
+            ?? string("route_class")?.humanizedStatus
+            ?? string("correction_type")?.humanizedStatus
+            ?? "Recorded"
+    }
+
+    var detailValue: JSONValue {
+        .object(values)
+    }
+}
+
+struct ActiveAgentTaskContextDraft: Equatable {
+    var goal = ""
+    var summary = ""
+    var privacyMode = "metadata_first"
+    var allowedHelp = "resume_capsule"
+
+    var allowedHelpList: [String] {
+        allowedHelp
+            .split(separator: ",")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    var hasContext: Bool {
+        !goal.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
+struct ActiveAgentMutedScopeDraft: Equatable {
+    var mode = "no_assistance"
+    var scopeType = "manual"
+    var collector = ""
+    var source = ""
+    var stimulusType = ""
+    var entityRefs = ""
+    var expiresAt = ""
+    var reason = "Muted from macOS Active Agent panel."
+
+    var entityRefList: [String] {
+        entityRefs
+            .split(separator: ",")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    var hasScope: Bool {
+        !collector.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !stimulusType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !entityRefList.isEmpty
+    }
+}
+
+struct CollectorStatusResponse: Decodable, Sendable {
+    var values: [String: JSONValue]
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        values = (try? container.decode([String: JSONValue].self)) ?? [:]
+    }
+
+    init(values: [String: JSONValue]) {
+        self.values = values
+    }
+
+    static let empty = CollectorStatusResponse(values: [:])
+
+    var detailValue: JSONValue {
+        .object(values)
+    }
+
+    var eventLog: JSONValue {
+        values["event_log"] ?? .object([:])
+    }
+
+    var helperHealth: [CollectorHealthRecord] {
+        eventLog["helper_health"]?.arrayValue?.compactMap { value in
+            guard let object = value.objectValue else { return nil }
+            return CollectorHealthRecord(values: object)
+        } ?? []
+    }
+
+    var recentEvents: [ActiveAgentRecord] {
+        let eventValues = values["recent_events"]?.arrayValue
+            ?? eventLog["recent_events"]?.arrayValue
+            ?? []
+        return eventValues.compactMap { value in
+            guard let object = value.objectValue else { return nil }
+            return ActiveAgentRecord(values: object)
+        }
+    }
+
+    var eventCount: Int {
+        Int(eventLog["event_count"]?.numberValue ?? 0)
+    }
+
+    var latestSequence: Int {
+        Int(eventLog["latest_sequence"]?.numberValue ?? 0)
+    }
+
+    var deadLetterCount: Int {
+        Int(eventLog["dead_letter_count"]?.numberValue ?? 0)
+    }
+
+    var statusText: String {
+        if helperHealth.contains(where: { $0.needsAttention }) || deadLetterCount > 0 {
+            return "Needs attention"
+        }
+        if eventCount > 0 {
+            return "Collecting"
+        }
+        return "Ready"
+    }
+}
+
+struct CollectorHealthRecord: Identifiable, Hashable, Sendable {
+    var values: [String: JSONValue]
+
+    var id: String {
+        string("helper_id")
+            ?? string("collector")
+            ?? UUID().uuidString
+    }
+
+    func string(_ key: String) -> String? {
+        values[key]?.stringValue
+    }
+
+    var collector: String {
+        string("collector")?.humanizedIdentifier ?? "Collector"
+    }
+
+    var statusText: String {
+        string("status")?.humanizedStatus ?? "Unknown"
+    }
+
+    var platformText: String {
+        string("platform")?.humanizedIdentifier ?? "Local"
+    }
+
+    var detailText: String {
+        [
+            string("permission_state")?.humanizedIdentifier,
+            string("message"),
+            string("last_event_at").map { "Last event: \($0)" }
+        ]
+        .compactMap { $0 }
+        .filter { !$0.isEmpty }
+        .joined(separator: " / ")
+    }
+
+    var needsAttention: Bool {
+        switch string("status")?.lowercased() {
+        case "degraded", "permission_denied", "stopped", "failed": true
+        default: false
+        }
+    }
+}
+
 struct UpdateInfo: Decodable, Equatable {
     var currentVersion: String
     var latestVersion: String
@@ -313,7 +915,7 @@ struct AgentRunResponse: Decodable {
     }
 }
 
-enum JSONValue: Decodable, Hashable, CustomStringConvertible {
+enum JSONValue: Decodable, Hashable, CustomStringConvertible, Sendable {
     case string(String)
     case number(Double)
     case bool(Bool)
@@ -365,6 +967,10 @@ enum JSONValue: Decodable, Hashable, CustomStringConvertible {
 
     var boolValue: Bool? {
         if case let .bool(value) = self { value } else { nil }
+    }
+
+    var numberValue: Double? {
+        if case let .number(value) = self { value } else { nil }
     }
 
     subscript(_ key: String) -> JSONValue? {

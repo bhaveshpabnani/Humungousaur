@@ -9,6 +9,9 @@ struct AppSettings: Codable, Equatable {
     var modelProvider = "openai"
     var modelName = "gpt-5-mini"
     var modelBaseURL = ""
+    var activeModelProvider = "same-as-main"
+    var activeModelName = ""
+    var activeModelBaseURL = ""
     var ttsProvider = "system"
     var voiceId = ""
     var elevenLabsModel = ""
@@ -75,6 +78,10 @@ final class SettingsStore {
         if settings.voiceStopPhrases.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || settings.voiceStopPhrases.localizedCaseInsensitiveContains("jarvis") {
             settings.voiceStopPhrases = "stop humungousaur"
+            shouldSave = true
+        }
+        if settings.activeModelProvider.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            settings.activeModelProvider = "same-as-main"
             shouldSave = true
         }
         if shouldSave {

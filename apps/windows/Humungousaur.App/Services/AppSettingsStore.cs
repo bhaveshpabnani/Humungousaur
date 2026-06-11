@@ -74,6 +74,7 @@ public sealed class AppSettingsStore
             settings.ModelProvider = AppRuntimeDefaults.EffectiveModelProvider(settings.ModelProvider);
         }
         settings.ModelName = AppRuntimeDefaults.EffectiveModelName(settings.ModelName);
+        settings.ActiveModelProvider = AppRuntimeDefaults.EffectiveActiveModelProvider(settings.ActiveModelProvider);
         settings.TtsProvider = AppRuntimeDefaults.EffectiveTtsProvider(settings.TtsProvider);
         if (string.IsNullOrWhiteSpace(settings.VoiceWakePhrases) ||
             settings.VoiceWakePhrases.Contains("jarvis", StringComparison.OrdinalIgnoreCase))
@@ -102,6 +103,10 @@ public sealed class AppSettingsStore
             ModelName = settings.ModelName,
             ModelBaseUrl = settings.ModelBaseUrl,
             ModelApiKey = Protect(settings.ModelApiKey),
+            ActiveModelProvider = settings.ActiveModelProvider,
+            ActiveModelName = settings.ActiveModelName,
+            ActiveModelBaseUrl = settings.ActiveModelBaseUrl,
+            ActiveModelApiKey = Protect(settings.ActiveModelApiKey),
             TtsProvider = settings.TtsProvider,
             VoiceId = settings.VoiceId,
             DeepgramApiKey = Protect(settings.DeepgramApiKey),
@@ -133,6 +138,7 @@ public sealed class AppSettingsStore
     private static void UnprotectSettings(AppSettings settings)
     {
         settings.ModelApiKey = Unprotect(settings.ModelApiKey);
+        settings.ActiveModelApiKey = Unprotect(settings.ActiveModelApiKey);
         settings.DeepgramApiKey = Unprotect(settings.DeepgramApiKey);
         settings.ElevenLabsApiKey = Unprotect(settings.ElevenLabsApiKey);
         foreach (var channel in settings.Channels)

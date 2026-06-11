@@ -57,6 +57,24 @@ public sealed class LocalAgentProcess
             info.ArgumentList.Add("--model-base-url");
             info.ArgumentList.Add(settings.ModelBaseUrl);
         }
+        var activeProvider = AppRuntimeDefaults.EffectiveActiveModelProvider(settings.ActiveModelProvider);
+        if (!activeProvider.Equals("same-as-main", StringComparison.OrdinalIgnoreCase))
+        {
+            info.ArgumentList.Add("--active-model-provider");
+            info.ArgumentList.Add(AppRuntimeDefaults.CliActiveModelProvider(activeProvider));
+            info.ArgumentList.Add("--active-model-api-key-env");
+            info.ArgumentList.Add(AppRuntimeDefaults.ModelApiKeyName(activeProvider));
+            if (!string.IsNullOrWhiteSpace(settings.ActiveModelName))
+            {
+                info.ArgumentList.Add("--active-model");
+                info.ArgumentList.Add(settings.ActiveModelName);
+            }
+            if (!string.IsNullOrWhiteSpace(settings.ActiveModelBaseUrl))
+            {
+                info.ArgumentList.Add("--active-model-base-url");
+                info.ArgumentList.Add(settings.ActiveModelBaseUrl);
+            }
+        }
         ApplyRuntimeEnvironment(info, settings);
 
         _process = new Process { StartInfo = info, EnableRaisingEvents = true };
@@ -118,6 +136,11 @@ public sealed class LocalAgentProcess
     private static void ApplyRuntimeEnvironment(ProcessStartInfo info, AppSettings settings)
     {
         AddEnvironmentSecret(info, AppRuntimeDefaults.ModelApiKeyName(settings.ModelProvider), settings.ModelApiKey);
+        var activeProvider = AppRuntimeDefaults.EffectiveActiveModelProvider(settings.ActiveModelProvider);
+        if (!activeProvider.Equals("same-as-main", StringComparison.OrdinalIgnoreCase))
+        {
+            AddEnvironmentSecret(info, AppRuntimeDefaults.ModelApiKeyName(activeProvider), settings.ActiveModelApiKey);
+        }
         AddEnvironmentSecret(info, "DEEPGRAM_API_KEY", settings.DeepgramApiKey);
         AddEnvironmentSecret(info, "ELEVENLABS_API_KEY", settings.ElevenLabsApiKey);
         AddEnvironmentSecret(info, "ELEVENLABS_VOICE_ID", settings.VoiceId);

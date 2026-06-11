@@ -48,10 +48,12 @@ struct SidebarView: View {
                     nav(.workboard)
                     nav(.runs)
                     nav(.approvals)
+                    nav(.activeAgent)
                     nav(.autonomy)
                 }
                 Section("Agent") {
                     nav(.tools)
+                    nav(.connectors)
                     nav(.channels)
                     nav(.voice)
                 }

@@ -114,56 +114,40 @@ struct SettingsView: View {
                         TextField("Python path", text: $model.settings.pythonPath)
                         Stepper("Local port \(model.settings.port)", value: $model.settings.port, in: 1...65535)
                     }
-                    Section("AI model") {
+                    Section("Main agent model") {
                         Picker("Reasoning mode", selection: $model.settings.planner) {
                             Text("Model").tag("model")
                             Text("Explicit").tag("explicit")
                         }
                         Picker("Provider", selection: $model.settings.modelProvider) {
-                            Text("OpenAI").tag("openai")
-                            Text("OpenAI Chat").tag("openai-chat")
-                            Text("OpenRouter").tag("openrouter")
-                            Text("Nous Portal").tag("nous")
-                            Text("NovitaAI").tag("novita")
-                            Text("LM Studio").tag("lmstudio")
-                            Text("Anthropic").tag("anthropic")
-                            Text("Qwen Cloud").tag("alibaba")
-                            Text("Groq").tag("groq")
-                            Text("xAI Grok").tag("xai")
-                            Text("Google Gemini").tag("gemini")
-                            Text("DeepSeek").tag("deepseek")
-                            Text("Mistral").tag("mistral")
-                            Text("Cerebras").tag("cerebras")
-                            Text("Ollama").tag("ollama")
-                            Text("Ollama Cloud").tag("ollama-cloud")
-                            Text("Local OpenAI").tag("local-openai")
-                            Text("Vercel AI Gateway").tag("vercel")
-                            Text("LiteLLM").tag("litellm")
-                            Text("NVIDIA NIM").tag("nvidia")
-                            Text("Hugging Face").tag("huggingface")
-                            Text("Z.AI / GLM").tag("zai")
-                            Text("Kimi / Moonshot").tag("kimi-coding")
-                            Text("Kimi China").tag("kimi-coding-cn")
-                            Text("StepFun").tag("stepfun")
-                            Text("MiniMax").tag("minimax")
-                            Text("MiniMax China").tag("minimax-cn")
-                            Text("Arcee AI").tag("arcee")
-                            Text("GMI Cloud").tag("gmi")
-                            Text("Xiaomi MiMo").tag("xiaomi")
-                            Text("Tencent TokenHub").tag("tencent-tokenhub")
-                            Text("OpenCode Zen").tag("opencode-zen")
-                            Text("OpenCode Go").tag("opencode-go")
-                            Text("Kilo Code").tag("kilocode")
-                            Text("Azure OpenAI").tag("azure-openai")
-                            Text("Azure Foundry").tag("azure-foundry")
-                            Text("GitHub Copilot").tag("copilot")
-                            Text("AWS Bedrock").tag("bedrock")
-                            Text("Browser Use Cloud").tag("browser-use-cloud")
+                            ForEach(model.modelProviderOptions) { provider in
+                                Text(provider.label).tag(provider.providerId)
+                            }
                         }
                         TextField("Model name", text: $model.settings.modelName)
                         TextField("Provider URL", text: $model.settings.modelBaseURL)
                         SecureField("API key", text: $model.secrets.modelAPIKey)
                         Toggle("Allow protected actions without asking", isOn: $model.settings.approveHighRisk)
+                    }
+                    Section("Active agent interpretation model") {
+                        Picker("Provider", selection: $model.settings.activeModelProvider) {
+                            Text("Same as main agent").tag("same-as-main")
+                            ForEach(model.modelProviderOptions) { provider in
+                                Text(provider.label).tag(provider.providerId)
+                            }
+                        }
+                        TextField(
+                            "Model name",
+                            text: $model.settings.activeModelName,
+                            prompt: Text(model.settings.activeModelProvider == "same-as-main" ? model.settings.modelName : model.defaultModelName(for: model.settings.activeModelProvider))
+                        )
+                        TextField(
+                            "Provider URL",
+                            text: $model.settings.activeModelBaseURL,
+                            prompt: Text(model.settings.activeModelProvider == "same-as-main" ? model.settings.modelBaseURL : model.defaultBaseURL(for: model.settings.activeModelProvider))
+                        )
+                        SecureField("API key", text: $model.secrets.activeModelAPIKey)
+                            .disabled(model.settings.activeModelProvider == "same-as-main")
                     }
                     Section("App updates") {
                         Text(model.updateStatusText)

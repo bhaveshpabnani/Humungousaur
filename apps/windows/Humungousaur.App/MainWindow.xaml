@@ -98,6 +98,11 @@
                         <FontIcon Glyph="&#xE8FB;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem Content="Active Agent" Tag="active-agent">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xEC24;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
                 <NavigationViewItem Content="Autonomy" Tag="autonomy">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE9D9;" />
@@ -107,6 +112,11 @@
                 <NavigationViewItem Content="Capabilities" Tag="tools">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE713;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Connectors" Tag="connectors">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE71B;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem Content="Channels" Tag="channels">
@@ -348,13 +358,15 @@
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
+	                                <RowDefinition Height="Auto" />
+	                                <RowDefinition Height="Auto" />
+	                                <RowDefinition Height="Auto" />
+	                                <RowDefinition Height="Auto" />
+	                                <RowDefinition Height="Auto" />
+	                                <RowDefinition Height="Auto" />
+	                                <RowDefinition Height="Auto" />
+	                                <RowDefinition Height="Auto" />
+	                            </Grid.RowDefinitions>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="*" />
@@ -530,6 +542,237 @@
                     </Border>
                 </Grid>
 
+                <Grid x:Name="ActiveAgentPage" Margin="0,42,0,0" Visibility="Collapsed" RowSpacing="14">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <StackPanel Spacing="5">
+                        <TextBlock Text="Control" FontSize="12" FontWeight="Bold" Foreground="{StaticResource AssistantAccentBrush}" />
+                        <TextBlock Text="Active Agent" Style="{StaticResource PageTitleStyle}" />
+                        <TextBlock Text="Inspect reflex decisions, quiet memory, deep-dive requests, and user corrections for collector-triggered activity." Style="{StaticResource PageSubtitleStyle}" />
+                    </StackPanel>
+                    <Grid Grid.Row="1" ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Style="{StaticResource CardBorderStyle}">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Posture" Style="{StaticResource CardTitleStyle}" />
+                                <TextBlock x:Name="ActiveAgentPostureText" Text="Waiting for status" TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Column="1" Style="{StaticResource CardBorderStyle}">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Decisions" Style="{StaticResource CardTitleStyle}" />
+                                <TextBlock x:Name="ActiveAgentDecisionCountText" Text="Decisions -" />
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Column="2" Style="{StaticResource CardBorderStyle}">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Contexts" Style="{StaticResource CardTitleStyle}" />
+                                <TextBlock x:Name="ActiveAgentContextCountText" Text="Contexts -" />
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Column="3" Style="{StaticResource CardBorderStyle}">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Muted" Style="{StaticResource CardTitleStyle}" />
+                                <TextBlock x:Name="ActiveAgentMutedCountText" Text="Muted -" />
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Column="4" Style="{StaticResource CardBorderStyle}">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="Collectors" Style="{StaticResource CardTitleStyle}" />
+                                <TextBlock x:Name="ActiveAgentCollectorHealthText" Text="Collectors -" TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                    <Grid Grid.Row="2" ColumnSpacing="14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="360" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid RowSpacing="10">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="220" />
+                            </Grid.RowDefinitions>
+                            <Border Style="{StaticResource CardBorderStyle}">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="Feedback" Style="{StaticResource CardTitleStyle}" />
+                                    <TextBox x:Name="ActiveAgentFeedbackNoteBox" Header="Note" Text="Feedback from Windows Active Agent panel." TextWrapping="Wrap" MinHeight="64" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <Button Content="Helpful" Click="ActiveAgentHelpfulButton_Click" />
+                                        <Button Content="Not relevant" Click="ActiveAgentNotRelevantButton_Click" />
+                                        <Button Content="Private" Click="ActiveAgentPrivateButton_Click" />
+                                        <Button Content="Wrong task" Click="ActiveAgentWrongTaskButton_Click" />
+                                    </StackPanel>
+                                    <TextBox x:Name="ActiveAgentWrongGoalBox" Header="Correct goal" PlaceholderText="User-declared goal" TextWrapping="Wrap" />
+                                    <TextBox x:Name="ActiveAgentWrongSummaryBox" Header="Correct summary" PlaceholderText="Short task summary" TextWrapping="Wrap" />
+                                    <Grid ColumnSpacing="8" RowSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+                                        <ComboBox x:Name="ActiveAgentMuteModeBox" Header="Mute mode" SelectedIndex="0">
+                                            <ComboBoxItem Content="No assistance" Tag="no_assistance" />
+                                            <ComboBoxItem Content="Not now" Tag="not_now" />
+                                            <ComboBoxItem Content="Private" Tag="private" />
+                                            <ComboBoxItem Content="Do not track" Tag="do_not_track" />
+                                        </ComboBox>
+                                        <TextBox x:Name="ActiveAgentMuteCollectorBox" Grid.Column="1" Header="Collector" PlaceholderText="device_state" />
+                                        <TextBox x:Name="ActiveAgentMuteSourceBox" Grid.Row="1" Header="Source" PlaceholderText="activity" />
+                                        <TextBox x:Name="ActiveAgentMuteStimulusBox" Grid.Row="1" Grid.Column="1" Header="Stimulus" PlaceholderText="active_window_changed" />
+                                        <TextBox x:Name="ActiveAgentMuteEntityRefsBox" Grid.Row="2" Grid.ColumnSpan="2" Header="Entity refs" PlaceholderText="app:Notes&#x0a;document:proposal" AcceptsReturn="True" MinHeight="58" TextWrapping="NoWrap" />
+                                        <TextBox x:Name="ActiveAgentMuteReasonBox" Grid.Row="3" Grid.ColumnSpan="2" Header="Mute reason" PlaceholderText="User scoped this activity out of assistance." TextWrapping="Wrap" />
+                                    </Grid>
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <Button Content="Create mute" Click="CreateActiveMutedScopeButton_Click" />
+                                        <Button Content="Refresh" Click="RefreshActiveAgentButton_Click" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Row="1" Style="{StaticResource CardBorderStyle}">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="Latest Reflex" Style="{StaticResource CardTitleStyle}" />
+                                    <ListView x:Name="ActiveAgentDecisionList" SelectionMode="Single">
+                                        <ListView.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Margin="0,5">
+                                                    <TextBlock Text="{Binding RecordStatus}" FontWeight="SemiBold" Foreground="{StaticResource AssistantAccentBrush}" />
+                                                    <TextBlock Text="{Binding RecordTitle}" TextWrapping="WrapWholeWords" />
+                                                    <TextBlock Text="{Binding RecordSubtitle}" Opacity="0.62" FontSize="12" TextWrapping="WrapWholeWords" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ListView.ItemTemplate>
+                                    </ListView>
+                                </StackPanel>
+                            </Border>
+                            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="Muted Scopes" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                <Button Content="Cancel selected mute" Click="CancelActiveMutedScopeButton_Click" />
+                            </StackPanel>
+                            <Border Grid.Row="3" Style="{StaticResource CardBorderStyle}">
+                                <ListView x:Name="ActiveAgentMuteList">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Margin="0,5">
+                                                <TextBlock Text="{Binding RecordStatus}" FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding RecordTitle}" TextWrapping="WrapWholeWords" />
+                                                <TextBlock Text="{Binding ShortId}" Opacity="0.56" FontSize="12" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                            </Border>
+                        </Grid>
+                        <Grid Grid.Column="1" RowSpacing="10">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="190" />
+                                <RowDefinition Height="210" />
+                                <RowDefinition Height="210" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <Grid ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border Style="{StaticResource CardBorderStyle}">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Text="Why" Style="{StaticResource CardTitleStyle}" />
+                                        <ListView x:Name="ActiveAgentExplanationList" SelectionMode="Single">
+                                            <ListView.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Margin="0,5">
+                                                        <TextBlock Text="{Binding RecordTitle}" TextWrapping="WrapWholeWords" />
+                                                        <TextBlock Text="{Binding RecordSubtitle}" Opacity="0.62" FontSize="12" TextWrapping="WrapWholeWords" />
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ListView.ItemTemplate>
+                                        </ListView>
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Column="1" Style="{StaticResource CardBorderStyle}">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock Text="Task Context" Style="{StaticResource CardTitleStyle}" />
+                                        <ListView x:Name="ActiveAgentTaskContextList" SelectionMode="Single">
+                                            <ListView.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Margin="0,5">
+                                                        <TextBlock Text="{Binding RecordTitle}" TextWrapping="WrapWholeWords" />
+                                                        <TextBlock Text="{Binding RecordSubtitle}" Opacity="0.62" FontSize="12" TextWrapping="WrapWholeWords" />
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ListView.ItemTemplate>
+                                        </ListView>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                            <Border Grid.Row="1" Style="{StaticResource CardBorderStyle}">
+                                <StackPanel Spacing="8">
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="Deep Dive Requests" Style="{StaticResource CardTitleStyle}" VerticalAlignment="Center" />
+                                        <Button Grid.Column="1" Content="Approve" Click="ApproveActiveDeepDiveButton_Click" />
+                                        <Button Grid.Column="2" Content="Reject" Click="RejectActiveDeepDiveButton_Click" />
+                                    </Grid>
+                                    <TextBox x:Name="ActiveAgentDeepDiveReasonBox" PlaceholderText="Reason for approving or rejecting selected request" TextWrapping="Wrap" />
+                                    <ListView x:Name="ActiveAgentDeepDiveList" SelectionMode="Single">
+                                        <ListView.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Margin="0,5">
+                                                    <TextBlock Text="{Binding RecordStatus}" FontWeight="SemiBold" />
+                                                    <TextBlock Text="{Binding RecordTitle}" TextWrapping="WrapWholeWords" />
+                                                    <TextBlock Text="{Binding RecordSubtitle}" Opacity="0.62" FontSize="12" TextWrapping="WrapWholeWords" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ListView.ItemTemplate>
+                                    </ListView>
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Row="2" Style="{StaticResource CardBorderStyle}">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="Collector Source Health" Style="{StaticResource CardTitleStyle}" />
+                                    <ListView x:Name="ActiveAgentCollectorSourceHealthList" SelectionMode="None">
+                                        <ListView.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Margin="0,5">
+                                                    <TextBlock Text="{Binding Status}" FontWeight="SemiBold" Foreground="{StaticResource AssistantAccentBrush}" />
+                                                    <TextBlock Text="{Binding Name}" TextWrapping="WrapWholeWords" />
+                                                    <TextBlock Text="{Binding Subtitle}" Opacity="0.62" FontSize="12" TextWrapping="WrapWholeWords" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ListView.ItemTemplate>
+                                    </ListView>
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Row="3" Style="{StaticResource CardBorderStyle}">
+                                <ScrollViewer>
+                                    <TextBlock x:Name="ActiveAgentRawText" TextWrapping="WrapWholeWords" Style="{StaticResource MonoTextStyle}" />
+                                </ScrollViewer>
+                            </Border>
+                        </Grid>
+                    </Grid>
+                </Grid>
+
                 <Grid x:Name="RuntimePage" Margin="0,42,0,0" Visibility="Collapsed" ColumnSpacing="14">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="330" />
@@ -654,6 +897,106 @@
                     </Grid>
                 </Grid>
 
+                <Grid x:Name="ConnectorsPage" Margin="0,42,0,0" Visibility="Collapsed" ColumnSpacing="18">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="330" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid RowSpacing="10">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <StackPanel Spacing="5">
+                            <TextBlock Text="Workspace" FontSize="12" FontWeight="Bold" Foreground="{StaticResource AssistantAccentBrush}" />
+                            <TextBlock Text="Connectors" Style="{StaticResource PageTitleStyle}" />
+                            <TextBlock x:Name="ConnectorSummaryText" Text="-" Style="{StaticResource PageSubtitleStyle}" />
+                        </StackPanel>
+                        <ListView x:Name="ConnectorList" Grid.Row="1" SelectionChanged="ConnectorList_SelectionChanged">
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="0,5" Padding="12" Background="{StaticResource AppCardBrush}" CornerRadius="8" BorderBrush="{StaticResource AppStrokeBrush}" BorderThickness="1">
+                                        <Grid ColumnSpacing="10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="38" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border Width="34" Height="34" CornerRadius="8" Background="{Binding LogoTileBackground}" BorderBrush="{StaticResource AppStrokeBrush}" BorderThickness="1">
+                                                <Grid>
+                                                    <TextBlock Text="{Binding LogoInitial}" Visibility="{Binding LogoInitialVisibility}" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="SemiBold" Foreground="{Binding LogoInitialForeground}" />
+                                                    <Image Source="{Binding LogoImageSource}" Visibility="{Binding LogoImageVisibility}" Width="22" Height="22" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                </Grid>
+                                            </Border>
+                                            <StackPanel Grid.Column="1" Spacing="5">
+                                                <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" />
+                                                <TextBlock Text="{Binding StatusText}" Opacity="0.72" />
+                                                <TextBlock Text="{Binding AuthModeText}" Opacity="0.62" />
+                                                <TextBlock Text="{Binding AppsText}" Opacity="0.62" TextWrapping="WrapWholeWords" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </Grid>
+                    <ScrollViewer Grid.Column="1">
+                        <StackPanel Spacing="12">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="52" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border x:Name="ConnectorLogoBorder" Width="46" Height="46" CornerRadius="10" Background="{StaticResource AssistantAccentBrush}">
+                                    <Grid>
+                                        <TextBlock x:Name="ConnectorLogoText" Text="-" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="SemiBold" Foreground="White" />
+                                        <Image x:Name="ConnectorLogoImage" Width="30" Height="30" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" />
+                                    </Grid>
+                                </Border>
+                                <StackPanel Grid.Column="1" Spacing="4">
+                                    <TextBlock x:Name="ConnectorTitleText" Text="Select a connector" Style="{StaticResource PageTitleStyle}" />
+                                    <TextBlock x:Name="ConnectorStatusText" Text="Setup and connection state appear here." TextWrapping="WrapWholeWords" />
+                                </StackPanel>
+                            </Grid>
+                            <Border Style="{StaticResource CardBorderStyle}">
+                                <Grid RowSpacing="10" ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <StackPanel Grid.ColumnSpan="2" Spacing="4">
+                                        <TextBlock x:Name="ConnectorSetupTitleText" Text="Connection Credentials" FontWeight="SemiBold" />
+                                        <TextBlock x:Name="ConnectorSetupCaptionText" Text="-" Opacity="0.72" TextWrapping="WrapWholeWords" />
+                                    </StackPanel>
+                                    <TextBox x:Name="ConnectorClientIdBox" Grid.Row="1" Header="Client ID" />
+                                    <PasswordBox x:Name="ConnectorClientSecretBox" Grid.Row="1" Grid.Column="1" Header="Client secret" />
+                                    <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="8">
+                                        <Button x:Name="SaveConnectorClientButton" Content="Save Credentials" Click="SaveConnectorClientButton_Click" />
+                                        <Button x:Name="ConnectConnectorButton" Content="Open OAuth Sign-In" Click="ConnectConnectorButton_Click" />
+                                        <Button x:Name="RefreshConnectorButton" Content="Refresh Token" Click="RefreshConnectorButton_Click" />
+                                        <Button x:Name="DisconnectConnectorButton" Content="Disconnect" Click="DisconnectConnectorButton_Click" />
+                                        <Button Content="Docs" Click="ConnectorDocsButton_Click" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                            <Border Style="{StaticResource CardBorderStyle}">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="Apps" FontWeight="SemiBold" />
+                                    <TextBlock x:Name="ConnectorAppsText" Text="-" TextWrapping="WrapWholeWords" />
+                                    <TextBlock Text="Native tool mapping" FontWeight="SemiBold" Margin="0,10,0,0" />
+                                    <TextBlock x:Name="ConnectorToolsText" Text="-" TextWrapping="WrapWholeWords" />
+                                    <TextBlock Text="Collector source mapping" FontWeight="SemiBold" Margin="0,10,0,0" />
+                                    <TextBlock x:Name="ConnectorSourceText" Text="-" TextWrapping="WrapWholeWords" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+
                 <Grid x:Name="SettingsPage" Margin="0,42,0,0" Visibility="Collapsed" RowSpacing="14">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -697,6 +1040,7 @@
                                 <ComboBoxItem Content="Anthropic" Tag="anthropic" />
                                 <ComboBoxItem Content="Qwen Cloud" Tag="alibaba" />
                                 <ComboBoxItem Content="Groq" Tag="groq" />
+                                <ComboBoxItem Content="Grok" Tag="grok" />
                                 <ComboBoxItem Content="xAI Grok" Tag="xai" />
                                 <ComboBoxItem Content="Google Gemini" Tag="gemini" />
                                 <ComboBoxItem Content="DeepSeek" Tag="deepseek" />
@@ -727,17 +1071,63 @@
                                 <ComboBoxItem Content="GitHub Copilot" Tag="copilot" />
                                 <ComboBoxItem Content="AWS Bedrock" Tag="bedrock" />
                                 <ComboBoxItem Content="Browser Use Cloud" Tag="browser-use-cloud" />
-                            </ComboBox>
-                            <TextBox x:Name="ModelNameBox" Grid.Row="3" Grid.Column="1" Header="Model override" />
-                            <TextBox x:Name="ModelBaseUrlBox" Grid.Row="4" Header="Model base URL" PlaceholderText="https://api.groq.com/openai/v1" />
-                            <PasswordBox x:Name="ModelApiKeyBox" Grid.Row="4" Grid.Column="1" Header="Model API key" />
-                            <StackPanel Grid.Row="5" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="10">
-                                <ToggleSwitch x:Name="ApproveHighRiskSwitch" Header="Approve high risk" />
-                                <Button Content="Save settings" Click="SaveSettingsButton_Click" />
-                                <Button Content="Start agent" Click="StartAgentButton_Click" />
-                                <Button Content="Stop agent" Click="StopAgentButton_Click" />
-                            </StackPanel>
-                            <Border Grid.Row="6" Grid.ColumnSpan="2" Padding="12" CornerRadius="8" Background="{StaticResource AppSubtleBrush}" BorderBrush="{StaticResource AppStrokeBrush}" BorderThickness="1">
+	                            </ComboBox>
+	                            <TextBox x:Name="ModelNameBox" Grid.Row="3" Grid.Column="1" Header="Model override" />
+	                            <TextBox x:Name="ModelBaseUrlBox" Grid.Row="4" Header="Model base URL" PlaceholderText="https://api.groq.com/openai/v1" />
+	                            <PasswordBox x:Name="ModelApiKeyBox" Grid.Row="4" Grid.Column="1" Header="Model API key" />
+	                            <ComboBox x:Name="ActiveModelProviderBox" Grid.Row="5" Header="Active agent provider" SelectedIndex="0">
+	                                <ComboBoxItem Content="Same as main agent" Tag="same-as-main" />
+	                                <ComboBoxItem Content="OpenAI" Tag="openai" />
+	                                <ComboBoxItem Content="OpenAI Chat" Tag="openai-chat" />
+	                                <ComboBoxItem Content="OpenRouter" Tag="openrouter" />
+	                                <ComboBoxItem Content="Nous Portal" Tag="nous" />
+	                                <ComboBoxItem Content="NovitaAI" Tag="novita" />
+	                                <ComboBoxItem Content="LM Studio" Tag="lmstudio" />
+	                                <ComboBoxItem Content="Anthropic" Tag="anthropic" />
+	                                <ComboBoxItem Content="Qwen Cloud" Tag="alibaba" />
+	                                <ComboBoxItem Content="Groq" Tag="groq" />
+	                                <ComboBoxItem Content="Grok" Tag="grok" />
+	                                <ComboBoxItem Content="xAI Grok" Tag="xai" />
+	                                <ComboBoxItem Content="Google Gemini" Tag="gemini" />
+	                                <ComboBoxItem Content="DeepSeek" Tag="deepseek" />
+	                                <ComboBoxItem Content="Mistral" Tag="mistral" />
+	                                <ComboBoxItem Content="Cerebras" Tag="cerebras" />
+	                                <ComboBoxItem Content="Ollama" Tag="ollama" />
+	                                <ComboBoxItem Content="Ollama Cloud" Tag="ollama-cloud" />
+	                                <ComboBoxItem Content="Local OpenAI" Tag="local-openai" />
+	                                <ComboBoxItem Content="Vercel AI Gateway" Tag="vercel" />
+	                                <ComboBoxItem Content="LiteLLM" Tag="litellm" />
+	                                <ComboBoxItem Content="NVIDIA NIM" Tag="nvidia" />
+	                                <ComboBoxItem Content="Hugging Face" Tag="huggingface" />
+	                                <ComboBoxItem Content="Z.AI / GLM" Tag="zai" />
+	                                <ComboBoxItem Content="Kimi / Moonshot" Tag="kimi-coding" />
+	                                <ComboBoxItem Content="Kimi China" Tag="kimi-coding-cn" />
+	                                <ComboBoxItem Content="StepFun" Tag="stepfun" />
+	                                <ComboBoxItem Content="MiniMax" Tag="minimax" />
+	                                <ComboBoxItem Content="MiniMax China" Tag="minimax-cn" />
+	                                <ComboBoxItem Content="Arcee AI" Tag="arcee" />
+	                                <ComboBoxItem Content="GMI Cloud" Tag="gmi" />
+	                                <ComboBoxItem Content="Xiaomi MiMo" Tag="xiaomi" />
+	                                <ComboBoxItem Content="Tencent TokenHub" Tag="tencent-tokenhub" />
+	                                <ComboBoxItem Content="OpenCode Zen" Tag="opencode-zen" />
+	                                <ComboBoxItem Content="OpenCode Go" Tag="opencode-go" />
+	                                <ComboBoxItem Content="Kilo Code" Tag="kilocode" />
+	                                <ComboBoxItem Content="Azure OpenAI" Tag="azure-openai" />
+	                                <ComboBoxItem Content="Azure Foundry" Tag="azure-foundry" />
+	                                <ComboBoxItem Content="GitHub Copilot" Tag="copilot" />
+	                                <ComboBoxItem Content="AWS Bedrock" Tag="bedrock" />
+	                                <ComboBoxItem Content="Browser Use Cloud" Tag="browser-use-cloud" />
+	                            </ComboBox>
+	                            <TextBox x:Name="ActiveModelNameBox" Grid.Row="5" Grid.Column="1" Header="Active agent model override" PlaceholderText="defaults to selected provider" />
+	                            <TextBox x:Name="ActiveModelBaseUrlBox" Grid.Row="6" Header="Active agent base URL" PlaceholderText="defaults to selected provider" />
+	                            <PasswordBox x:Name="ActiveModelApiKeyBox" Grid.Row="6" Grid.Column="1" Header="Active agent API key" />
+	                            <StackPanel Grid.Row="7" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="10">
+	                                <ToggleSwitch x:Name="ApproveHighRiskSwitch" Header="Approve high risk" />
+	                                <Button Content="Save settings" Click="SaveSettingsButton_Click" />
+	                                <Button Content="Start agent" Click="StartAgentButton_Click" />
+	                                <Button Content="Stop agent" Click="StopAgentButton_Click" />
+	                            </StackPanel>
+	                            <Border Grid.Row="8" Grid.ColumnSpan="2" Padding="12" CornerRadius="8" Background="{StaticResource AppSubtleBrush}" BorderBrush="{StaticResource AppStrokeBrush}" BorderThickness="1">
                                 <Grid ColumnSpacing="10">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />

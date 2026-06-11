@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Text.Json.Nodes;
 using Humungousaur.App.Models;
 using Humungousaur.App.Services;
@@ -22,9 +23,15 @@ public sealed partial class MainWindow : Window
     private readonly ObservableCollection<string> _processLines = [];
     private AppSettings _settings = new();
     private List<ChannelInfo> _channels = [];
+    private List<ConnectorProvider> _connectors = [];
+    private string _connectorRedirectUri = "http://127.0.0.1:8765/connectors/callback";
+    private List<ModelProviderInfo> _modelProviders = [];
     private List<ToolInfo> _tools = [];
     private List<RuntimeRunItem> _runs = [];
     private List<ApprovalItem> _approvals = [];
+    private ActiveAgentStatusResponse _activeAgentStatus = new();
+    private JsonObject _activeAgentPlannerContext = new();
+    private CollectorStatusResponse _collectorStatus = new();
     private string _latestDownloadUrl = "";
     private string _lastHandledVoiceTranscript = "";
     private string _activeVoiceRunId = "";
@@ -71,15 +78,82 @@ public sealed partial class MainWindow : Window
 
     private async void RefreshButton_Click(object sender, RoutedEventArgs e) => await RefreshAllAsync();
 
+    private async void RefreshActiveAgentButton_Click(object sender, RoutedEventArgs e) => await RefreshActiveAgentAsync();
+
+    private async void ActiveAgentHelpfulButton_Click(object sender, RoutedEventArgs e) => await RecordActiveAgentCorrectionAsync("helpful");
+
+    private async void ActiveAgentNotRelevantButton_Click(object sender, RoutedEventArgs e) => await RecordActiveAgentCorrectionAsync("not_relevant");
+
+    private async void ActiveAgentPrivateButton_Click(object sender, RoutedEventArgs e) => await RecordActiveAgentCorrectionAsync("private");
+
+    private async void ActiveAgentWrongTaskButton_Click(object sender, RoutedEventArgs e) => await RecordActiveAgentCorrectionAsync("wrong_task");
+
+    private async void CreateActiveMutedScopeButton_Click(object sender, RoutedEventArgs e)
+    {
+        var mode = ComboTag(ActiveAgentMuteModeBox, "no_assistance");
+        var collector = ActiveAgentMuteCollectorBox.Text.Trim();
+        var source = ActiveAgentMuteSourceBox.Text.Trim();
+        var stimulusType = ActiveAgentMuteStimulusBox.Text.Trim();
+        var entityRefs = ParseListLines(ActiveAgentMuteEntityRefsBox.Text);
+        if (string.IsNullOrWhiteSpace(collector) && string.IsNullOrWhiteSpace(source) && string.IsNullOrWhiteSpace(stimulusType) && entityRefs.Count == 0)
+        {
+            ShowNotice("Add at least one mute scope: collector, source, stimulus, or entity ref.", InfoBarSeverity.Warning);
+            return;
+        }
+
+        try
+        {
+            await _api.CreateActiveAgentMutedScopeAsync(
+                mode,
+                collector,
+                source,
+                stimulusType,
+                entityRefs,
+                ActiveAgentMuteReasonBox.Text);
+            ShowNotice("Muted scope created.", InfoBarSeverity.Success);
+            await RefreshActiveAgentAsync();
+        }
+        catch (Exception exc)
+        {
+            ShowNotice(exc.Message, InfoBarSeverity.Error);
+        }
+    }
+
+    private async void CancelActiveMutedScopeButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (ActiveAgentMuteList.SelectedItem is not ActiveAgentRecord scope || string.IsNullOrWhiteSpace(scope.Id))
+        {
+            ShowNotice("Select a muted scope first.", InfoBarSeverity.Warning);
+            return;
+        }
+        try
+        {
+            await _api.CancelActiveAgentMutedScopeAsync(scope.Id, "Cancelled from Windows Active Agent panel.");
+            ShowNotice("Muted scope cancelled.", InfoBarSeverity.Success);
+            await RefreshActiveAgentAsync();
+        }
+        catch (Exception exc)
+        {
+            ShowNotice(exc.Message, InfoBarSeverity.Error);
+        }
+    }
+
+    private async void ApproveActiveDeepDiveButton_Click(object sender, RoutedEventArgs e) => await UpdateActiveDeepDiveAsync(approved: true);
+
+    private async void RejectActiveDeepDiveButton_Click(object sender, RoutedEventArgs e) => await UpdateActiveDeepDiveAsync(approved: false);
+
     private async Task RefreshAllAsync()
     {
         ReadSettingsFromUi();
         _api.SetBaseUrl(_settings.ApiBaseUrl);
         await RefreshHealthAsync();
+        await RefreshModelProvidersAsync();
         await RefreshChannelsAsync();
+        await RefreshConnectorsAsync();
         await RefreshVoiceAsync();
         await RefreshToolsAsync();
         await RefreshAutonomyAsync();
+        await RefreshActiveAgentAsync();
         await RefreshOutboxAsync();
         await RefreshRuntimeAsync();
         await RefreshUpdateAsync();
@@ -99,6 +173,25 @@ public sealed partial class MainWindow : Window
         {
             RuntimeSummaryText.Text = $"API offline at {_settings.ApiBaseUrl}";
             SetStatus(false, "Offline");
+            AddProcessLine(exc.Message);
+        }
+    }
+
+    private async Task RefreshModelProvidersAsync()
+    {
+        try
+        {
+            var catalog = await _api.GetModelProvidersAsync();
+            var providers = NormalizeModelProviders(catalog.Providers);
+            if (providers.Count == 0)
+            {
+                return;
+            }
+            _modelProviders = providers;
+            PopulateModelProviderBoxes();
+        }
+        catch (Exception exc)
+        {
             AddProcessLine(exc.Message);
         }
     }
@@ -160,6 +253,29 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private async Task RefreshConnectorsAsync()
+    {
+        try
+        {
+            var catalog = await _api.GetConnectorsAsync();
+            _connectors = catalog.Providers;
+            _connectorRedirectUri = string.IsNullOrWhiteSpace(catalog.RedirectUri) ? _connectorRedirectUri : catalog.RedirectUri;
+            ConnectorList.ItemsSource = _connectors;
+            ConnectorSummaryText.Text = $"{catalog.ProviderCount} connectors / redirect {_connectorRedirectUri}";
+            if (_connectors.Count > 0 && ConnectorList.SelectedIndex < 0)
+            {
+                ConnectorList.SelectedIndex = 0;
+            }
+            RenderSelectedConnector();
+        }
+        catch (Exception exc)
+        {
+            ConnectorSummaryText.Text = "Connectors offline";
+            ConnectorStatusText.Text = exc.Message;
+            AddProcessLine(exc.Message);
+        }
+    }
+
     private async Task RefreshAutonomyAsync()
     {
         try
@@ -173,6 +289,197 @@ public sealed partial class MainWindow : Window
             AutonomyReadyText.Text = "Loop offline";
             AutonomyStatusText.Text = exc.Message;
         }
+    }
+
+    private async Task RefreshActiveAgentAsync()
+    {
+        try
+        {
+            _activeAgentPlannerContext = await _api.GetActiveAgentPlannerContextAsync("desktop planner preview");
+            _activeAgentStatus = await _api.GetActiveAgentStatusAsync(20);
+            RenderActiveAgentStatus();
+        }
+        catch (Exception exc)
+        {
+            _activeAgentStatus = new ActiveAgentStatusResponse();
+            _activeAgentPlannerContext = new();
+            ActiveAgentPostureText.Text = "Active agent offline";
+            ActiveAgentRawText.Text = exc.Message;
+            AddProcessLine(exc.Message);
+        }
+
+        try
+        {
+            _collectorStatus = await _api.GetCollectorStatusAsync(12);
+            RenderCollectorStatus();
+        }
+        catch (Exception exc)
+        {
+            _collectorStatus = new CollectorStatusResponse();
+            ActiveAgentCollectorHealthText.Text = "Collectors offline";
+            ActiveAgentCollectorSourceHealthList.ItemsSource = new List<CollectorHealthItem>
+            {
+                new() { Name = "Collectors", Status = "Offline", Subtitle = exc.Message },
+            };
+            AddProcessLine(exc.Message);
+        }
+    }
+
+    private void RenderActiveAgentStatus()
+    {
+        ActiveAgentPostureText.Text = $"Latest posture: {Humanize(_activeAgentStatus.LatestPosture)}";
+        ActiveAgentDecisionCountText.Text = $"Decisions {_activeAgentStatus.Decisions.Count}";
+        ActiveAgentContextCountText.Text = $"Contexts {_activeAgentStatus.TaskContexts.Count}";
+        ActiveAgentMutedCountText.Text = $"Muted {_activeAgentStatus.MutedScopes.Count}";
+        ActiveAgentDecisionList.ItemsSource = _activeAgentStatus.Decisions;
+        ActiveAgentExplanationList.ItemsSource = _activeAgentStatus.Explanations;
+        ActiveAgentTaskContextList.ItemsSource = _activeAgentStatus.TaskContexts;
+        ActiveAgentDeepDiveList.ItemsSource = _activeAgentStatus.DeepDiveRequests;
+        ActiveAgentMuteList.ItemsSource = _activeAgentStatus.MutedScopes;
+        ActiveAgentRawText.Text = FormatActiveAgentPlannerContext(_activeAgentPlannerContext) + "\n\nTechnical active-agent status\n\n" + FormatActiveAgentStatus(_activeAgentStatus);
+    }
+
+    private void RenderCollectorStatus()
+    {
+        ActiveAgentCollectorHealthText.Text = _collectorStatus.SummaryText;
+        ActiveAgentCollectorSourceHealthList.ItemsSource = _collectorStatus.HealthItems;
+    }
+
+    private static string FormatActiveAgentPlannerContext(JsonObject preview)
+    {
+        var memory = preview["active_agent_memory"] as JsonObject ?? new JsonObject();
+        var state = preview["active_agent_state"] as JsonObject ?? new JsonObject();
+        var safety = preview["safety"] as JsonObject ?? new JsonObject();
+        return string.Join(
+            "\n\n",
+            "Planner preview",
+            preview["privacy"]?.GetValue<string>() ?? "Redacted planner-visible active-agent context.",
+            $"Memory {CountArray(memory, "items")}  Episodes {CountArray(state, "episodes")}  Tasks {CountArray(state, "task_contexts")}  Activations {CountArray(state, "activations")}  Responses {CountArray(state, "activation_responses")}  Resume {CountArray(state, "resume_capsules")}  Deep dives {CountArray(state, "deep_dive_requests")}  Results {CountArray(state, "deep_dive_results")}  Muted {CountArray(state, "muted_scopes")}",
+            "Planner-visible state",
+            AgentApiClient.Pretty(new JsonObject
+            {
+                ["active_agent_memory"] = CloneNode(memory),
+                ["active_agent_state"] = CloneNode(state),
+                ["safety"] = CloneNode(safety),
+            }));
+    }
+
+    private static int CountArray(JsonObject obj, string key) => (obj[key] as JsonArray)?.Count ?? 0;
+
+    private static JsonNode? CloneNode(JsonNode? node) => node is null ? null : JsonNode.Parse(node.ToJsonString());
+
+    private static string FormatActiveAgentStatus(ActiveAgentStatusResponse status)
+    {
+        static string Section(string title, IEnumerable<ActiveAgentRecord> records)
+        {
+            var rendered = records
+                .Take(8)
+                .Select(record => $"{record.RecordStatus}  {record.ShortId}\n{record.RecordTitle}\n{record.RecordSubtitle}\n{record.Detail}")
+                .ToList();
+            return rendered.Count == 0 ? $"{title}\n-" : $"{title}\n{string.Join("\n\n", rendered)}";
+        }
+
+        return string.Join(
+            "\n\n",
+            [
+                $"Latest posture: {status.LatestPosture}",
+                Section("Decisions", status.Decisions),
+                Section("Agent bridge activations", status.Activations),
+                Section("Activation responses", status.ActivationResponses),
+                Section("Memory candidates", status.MemoryCandidates),
+                Section("Explanations", status.Explanations),
+                Section("Task contexts", status.TaskContexts),
+                Section("Muted scopes", status.MutedScopes),
+                Section("Deep dive requests", status.DeepDiveRequests),
+                Section("Deep dive results", status.DeepDiveResults),
+                Section("Episode links", status.EpisodeLinks),
+                Section("Context boundaries", status.ContextBoundaries),
+                Section("Resume capsules", status.ResumeCapsules),
+                Section("Corrections", status.Corrections),
+                Section("Privacy actions", status.PrivacyActions),
+                Section("Eval runs", status.EvalRuns),
+            ]);
+    }
+
+    private async Task RecordActiveAgentCorrectionAsync(string correctionType)
+    {
+        var target = SelectedActiveAgentTarget() ?? _activeAgentStatus.LatestTarget;
+        if (target is null)
+        {
+            ShowNotice("No active-agent decision to correct yet.", InfoBarSeverity.Warning);
+            return;
+        }
+        var goal = ActiveAgentWrongGoalBox.Text.Trim();
+        var summary = ActiveAgentWrongSummaryBox.Text.Trim();
+        if (correctionType == "wrong_task" && string.IsNullOrWhiteSpace(goal) && string.IsNullOrWhiteSpace(summary))
+        {
+            ShowNotice("Add the corrected goal or summary before marking the task wrong.", InfoBarSeverity.Warning);
+            return;
+        }
+        try
+        {
+            var note = string.IsNullOrWhiteSpace(ActiveAgentFeedbackNoteBox.Text)
+                ? "Feedback from Windows Active Agent panel."
+                : ActiveAgentFeedbackNoteBox.Text.Trim();
+            await _api.RecordActiveAgentCorrectionAsync(correctionType, target.Value.TargetType, target.Value.TargetId, note, goal, summary);
+            ShowNotice("Active-agent feedback recorded.", InfoBarSeverity.Success);
+            await RefreshActiveAgentAsync();
+        }
+        catch (Exception exc)
+        {
+            ShowNotice(exc.Message, InfoBarSeverity.Error);
+        }
+    }
+
+    private async Task UpdateActiveDeepDiveAsync(bool approved)
+    {
+        if (ActiveAgentDeepDiveList.SelectedItem is not ActiveAgentRecord request || string.IsNullOrWhiteSpace(request.Id))
+        {
+            ShowNotice("Select a deep-dive request first.", InfoBarSeverity.Warning);
+            return;
+        }
+
+        var reason = string.IsNullOrWhiteSpace(ActiveAgentDeepDiveReasonBox.Text)
+            ? approved ? "Approved from Windows Active Agent panel." : "Rejected from Windows Active Agent panel."
+            : ActiveAgentDeepDiveReasonBox.Text.Trim();
+        try
+        {
+            if (approved)
+            {
+                await _api.ApproveActiveAgentDeepDiveAsync(request.Id, reason);
+            }
+            else
+            {
+                await _api.RejectActiveAgentDeepDiveAsync(request.Id, reason);
+            }
+            ShowNotice(approved ? "Deep-dive request approved." : "Deep-dive request rejected.", InfoBarSeverity.Success);
+            await RefreshActiveAgentAsync();
+        }
+        catch (Exception exc)
+        {
+            ShowNotice(exc.Message, InfoBarSeverity.Error);
+        }
+    }
+
+    private (string TargetType, string TargetId)? SelectedActiveAgentTarget()
+    {
+        if (ActiveAgentDecisionList.SelectedItem is ActiveAgentRecord { Id.Length: > 0 } decision)
+        {
+            return ("decision", decision.Id);
+        }
+        if (ActiveAgentExplanationList.SelectedItem is ActiveAgentRecord { Id.Length: > 0 } explanation)
+        {
+            return ("explanation", explanation.Id);
+        }
+        if (ActiveAgentTaskContextList.SelectedItem is ActiveAgentRecord { Id.Length: > 0 } taskContext)
+        {
+            return ("task_context", taskContext.Id);
+        }
+        if (ActiveAgentDeepDiveList.SelectedItem is ActiveAgentRecord { Id.Length: > 0 } deepDive)
+        {
+            return ("deep_dive_request", deepDive.Id);
+        }
+        return null;
     }
 
     private async Task RefreshOutboxAsync()
@@ -1231,8 +1538,10 @@ public sealed partial class MainWindow : Window
     {
         AssistantPage.Visibility = tag == "assistant" ? Visibility.Visible : Visibility.Collapsed;
         ChannelsPage.Visibility = tag == "channels" ? Visibility.Visible : Visibility.Collapsed;
+        ConnectorsPage.Visibility = tag == "connectors" ? Visibility.Visible : Visibility.Collapsed;
         VoicePage.Visibility = tag == "voice" ? Visibility.Visible : Visibility.Collapsed;
         AutonomyPage.Visibility = tag == "autonomy" ? Visibility.Visible : Visibility.Collapsed;
+        ActiveAgentPage.Visibility = tag == "active-agent" ? Visibility.Visible : Visibility.Collapsed;
         RuntimePage.Visibility = tag == "runtime" ? Visibility.Visible : Visibility.Collapsed;
         ToolsPage.Visibility = tag == "tools" ? Visibility.Visible : Visibility.Collapsed;
         SettingsPage.Visibility = tag == "settings" ? Visibility.Visible : Visibility.Collapsed;
@@ -1248,6 +1557,191 @@ public sealed partial class MainWindow : Window
                 || tool.CapabilityGroup.Contains(query, StringComparison.OrdinalIgnoreCase)
                 || tool.Description.Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
         ToolList.ItemsSource = tools;
+    }
+
+    private ConnectorProvider? SelectedConnector => ConnectorList.SelectedItem as ConnectorProvider ?? _connectors.FirstOrDefault();
+
+    private void ConnectorList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        RenderSelectedConnector();
+    }
+
+    private void RenderSelectedConnector()
+    {
+        var connector = SelectedConnector;
+        if (connector is null)
+        {
+            ConnectorTitleText.Text = "Select a connector";
+            ConnectorStatusText.Text = "Setup and connection state appear here.";
+            ConnectorLogoText.Text = "-";
+            ConnectorLogoText.Visibility = Visibility.Visible;
+            ConnectorLogoImage.Source = null;
+            ConnectorLogoImage.Visibility = Visibility.Collapsed;
+            ConnectorLogoBorder.Background = new SolidColorBrush(Colors.SlateGray);
+            ConnectorSetupTitleText.Text = "Connection Credentials";
+            ConnectorSetupCaptionText.Text = "-";
+            ConnectorAppsText.Text = "-";
+            ConnectorToolsText.Text = "-";
+            ConnectorSourceText.Text = "-";
+            SaveConnectorClientButton.IsEnabled = false;
+            ConnectConnectorButton.IsEnabled = false;
+            RefreshConnectorButton.IsEnabled = false;
+            DisconnectConnectorButton.IsEnabled = false;
+            return;
+        }
+        ConnectorTitleText.Text = connector.DisplayName;
+        ConnectorLogoText.Text = connector.LogoInitial;
+        ConnectorLogoText.Visibility = connector.LogoInitialVisibility;
+        ConnectorLogoImage.Source = connector.LogoImageSource;
+        ConnectorLogoImage.Visibility = connector.LogoImageVisibility;
+        ConnectorLogoBorder.Background = connector.LogoTileBackground;
+        ConnectorLogoBorder.BorderBrush = (Brush)Application.Current.Resources["AppStrokeBrush"];
+        ConnectorLogoBorder.BorderThickness = connector.LogoImageSource is null ? new Thickness(0) : new Thickness(1);
+        ConnectorStatusText.Text = string.Join(Environment.NewLine, new[]
+        {
+            $"State: {connector.StatusText}",
+            $"Auth mode: {connector.AuthModeText}",
+            $"Managed OAuth: {(connector.ManagedOAuthAvailable ? "available" : "not configured for this build")}",
+            $"Advanced OAuth client: {(connector.AdvancedClientConfigured ? connector.ClientId : "not configured")}",
+            $"Refresh token: {(connector.UsesOAuth ? (connector.HasRefreshToken ? "available" : "not stored") : "not used")}",
+            $"Redirect: {_connectorRedirectUri}",
+        });
+        ConnectorSetupTitleText.Text = connector.SetupTitle;
+        ConnectorSetupCaptionText.Text = connector.SetupCaption;
+        ConnectorClientIdBox.Header = connector.PrimaryCredentialLabel;
+        ConnectorClientSecretBox.Header = connector.SecondaryCredentialLabel;
+        SaveConnectorClientButton.Content = connector.SaveButtonLabel;
+        ConnectConnectorButton.Content = connector.ConnectionButtonLabel;
+        ConnectConnectorButton.IsEnabled = true;
+        RefreshConnectorButton.IsEnabled = connector.HasRefreshToken && connector.UsesOAuth;
+        DisconnectConnectorButton.IsEnabled = connector.Connected;
+        SaveConnectorClientButton.IsEnabled = true;
+        ConnectorAppsText.Text = connector.WorkspaceApps.Count == 0 ? "-" : string.Join(", ", connector.WorkspaceApps);
+        ConnectorToolsText.Text = connector.ToolHints.Count == 0 ? "-" : string.Join(", ", connector.ToolHints);
+        ConnectorSourceText.Text = connector.CollectorSourceText;
+        ConnectorClientIdBox.Text = connector.ClientId;
+        ConnectorClientSecretBox.Password = "";
+    }
+
+    private async void SaveConnectorClientButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (SelectedConnector is not { } connector)
+        {
+            return;
+        }
+        try
+        {
+            await _api.ConfigureConnectorAsync(connector, ConnectorClientIdBox.Text.Trim(), ConnectorClientSecretBox.Password.Trim(), _connectorRedirectUri);
+            ShowNotice($"{connector.DisplayName} {(connector.UsesOAuth ? "advanced OAuth client" : "credentials")} saved.", InfoBarSeverity.Success);
+            await RefreshConnectorsAsync();
+        }
+        catch (Exception exc)
+        {
+            ShowNotice(exc.Message, InfoBarSeverity.Error);
+        }
+    }
+
+    private async void ConnectConnectorButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (SelectedConnector is not { } connector)
+        {
+            return;
+        }
+        if (!connector.UsesOAuth)
+        {
+            if (connector.Configured)
+            {
+                ConnectorStatusText.Text = $"{connector.DisplayName} is connection-ready for tools and collectors using {connector.AuthModeText}.";
+                ShowNotice($"{connector.DisplayName} connection is ready.", InfoBarSeverity.Success);
+            }
+            else
+            {
+                var required = connector.CredentialFields.Count > 1
+                    ? $"{connector.PrimaryCredentialLabel} and {connector.SecondaryCredentialLabel}"
+                    : connector.PrimaryCredentialLabel;
+                ConnectorStatusText.Text = $"Save {required} first to make {connector.DisplayName} ready for tools and collectors.";
+                ShowNotice($"{connector.DisplayName} needs setup.", InfoBarSeverity.Informational);
+            }
+            return;
+        }
+        if (!connector.ManagedOAuthAvailable && !connector.Configured)
+        {
+            ConnectorStatusText.Text = $"{connector.DisplayName} managed OAuth is not configured for this build. Production builds should provide a product-owned OAuth client or broker. For self-hosted development only, save an advanced OAuth client below.";
+            ShowNotice($"{connector.DisplayName} OAuth is not configured.", InfoBarSeverity.Informational);
+            return;
+        }
+        try
+        {
+            var authorization = await _api.PrepareConnectorAsync(connector);
+            if (Uri.TryCreate(authorization.AuthorizationUrl, UriKind.Absolute, out var uri))
+            {
+                await Launcher.LaunchUriAsync(uri);
+                ConnectorStatusText.Text = $"Browser opened for {authorization.DisplayName}. Finish account authorization, then return and refresh.";
+                ShowNotice($"Opened {authorization.DisplayName} connection.", InfoBarSeverity.Informational);
+            }
+        }
+        catch (Exception exc)
+        {
+            ConnectorStatusText.Text = exc.Message;
+            ShowNotice(exc.Message, InfoBarSeverity.Error);
+        }
+    }
+
+    private async void RefreshConnectorButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (SelectedConnector is not { } connector)
+        {
+            return;
+        }
+        try
+        {
+            await _api.RefreshConnectorAsync(connector);
+            ShowNotice($"{connector.DisplayName} token refreshed.", InfoBarSeverity.Success);
+            await RefreshConnectorsAsync();
+        }
+        catch (Exception exc)
+        {
+            ShowNotice(exc.Message, InfoBarSeverity.Error);
+        }
+    }
+
+    private async void DisconnectConnectorButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (SelectedConnector is not { } connector)
+        {
+            return;
+        }
+        try
+        {
+            await _api.DisconnectConnectorAsync(connector);
+            ShowNotice($"{connector.DisplayName} disconnected.", InfoBarSeverity.Success);
+            await RefreshConnectorsAsync();
+        }
+        catch (Exception exc)
+        {
+            ShowNotice(exc.Message, InfoBarSeverity.Error);
+        }
+    }
+
+    private async void ConnectorDocsButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (SelectedConnector is { } connector && Uri.TryCreate(connector.DocsUrl, UriKind.Absolute, out var uri))
+        {
+            await Launcher.LaunchUriAsync(uri);
+        }
+    }
+
+    private static SolidColorBrush ConnectorBrush(string hex)
+    {
+        var clean = (hex ?? "").Trim().TrimStart('#');
+        if (clean.Length == 6 && uint.TryParse(clean, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value))
+        {
+            var red = (byte)((value >> 16) & 0xFF);
+            var green = (byte)((value >> 8) & 0xFF);
+            var blue = (byte)(value & 0xFF);
+            return new SolidColorBrush(ColorHelper.FromArgb(255, red, green, blue));
+        }
+        return new SolidColorBrush(Colors.SlateGray);
     }
 
     private async Task RefreshSelectedChannelStatusAsync(string channelId)
@@ -1589,6 +2083,9 @@ public sealed partial class MainWindow : Window
             ModelNameBox.Text = _settings.ModelName;
             ModelBaseUrlBox.Text = _settings.ModelBaseUrl;
             ModelApiKeyBox.Password = _settings.ModelApiKey;
+            ActiveModelNameBox.Text = _settings.ActiveModelName;
+            ActiveModelBaseUrlBox.Text = _settings.ActiveModelBaseUrl;
+            ActiveModelApiKeyBox.Password = _settings.ActiveModelApiKey;
             VoiceIdBox.Text = _settings.VoiceId;
             DeepgramApiKeyBox.Password = _settings.DeepgramApiKey;
             ElevenLabsApiKeyBox.Password = _settings.ElevenLabsApiKey;
@@ -1600,6 +2097,7 @@ public sealed partial class MainWindow : Window
             ApproveHighRiskSwitch.IsOn = _settings.ApproveHighRisk;
             SetComboByTag(PlannerBox, _settings.Planner);
             SetComboByTag(ModelProviderBox, _settings.ModelProvider);
+            SetComboByTag(ActiveModelProviderBox, _settings.ActiveModelProvider);
             SetComboByTag(TtsProviderBox, _settings.TtsProvider);
             WorkspaceCaption.Text = ShortenPath(_settings.WorkspacePath);
             _api.SetBaseUrl(_settings.ApiBaseUrl);
@@ -1621,6 +2119,10 @@ public sealed partial class MainWindow : Window
         _settings.ModelName = ModelNameBox.Text.Trim();
         _settings.ModelBaseUrl = ModelBaseUrlBox.Text.Trim();
         _settings.ModelApiKey = ModelApiKeyBox.Password;
+        _settings.ActiveModelProvider = ComboTag(ActiveModelProviderBox, "same-as-main");
+        _settings.ActiveModelName = ActiveModelNameBox.Text.Trim();
+        _settings.ActiveModelBaseUrl = ActiveModelBaseUrlBox.Text.Trim();
+        _settings.ActiveModelApiKey = ActiveModelApiKeyBox.Password;
         _settings.TtsProvider = ComboTag(TtsProviderBox, "system");
         _settings.VoiceId = VoiceIdBox.Text.Trim();
         _settings.DeepgramApiKey = DeepgramApiKeyBox.Password;
@@ -1790,6 +2292,61 @@ public sealed partial class MainWindow : Window
             }
         }
     }
+
+    private void PopulateModelProviderBoxes()
+    {
+        var mainSelection = ComboTag(ModelProviderBox, _settings.ModelProvider);
+        var activeSelection = ComboTag(ActiveModelProviderBox, _settings.ActiveModelProvider);
+        PopulateModelProviderBox(ModelProviderBox, _modelProviders, includeSameAsMain: false, selectedTag: mainSelection);
+        PopulateModelProviderBox(ActiveModelProviderBox, _modelProviders, includeSameAsMain: true, selectedTag: activeSelection);
+    }
+
+    private static void PopulateModelProviderBox(ComboBox box, IReadOnlyList<ModelProviderInfo> providers, bool includeSameAsMain, string selectedTag)
+    {
+        box.Items.Clear();
+        if (includeSameAsMain)
+        {
+            box.Items.Add(new ComboBoxItem { Content = "Same as main agent", Tag = "same-as-main" });
+        }
+        foreach (var provider in providers)
+        {
+            if (string.IsNullOrWhiteSpace(provider.ProviderId))
+            {
+                continue;
+            }
+            box.Items.Add(new ComboBoxItem { Content = provider.DisplayLabel, Tag = provider.ProviderId });
+        }
+        SetComboByTag(box, selectedTag);
+        if (box.SelectedItem is null && box.Items.Count > 0)
+        {
+            box.SelectedIndex = 0;
+        }
+    }
+
+    private static List<ModelProviderInfo> NormalizeModelProviders(IEnumerable<ModelProviderInfo> providers)
+    {
+        var normalized = providers
+            .Where(provider => !string.IsNullOrWhiteSpace(provider.ProviderId))
+            .ToList();
+        if (!normalized.Any(provider => string.Equals(provider.ProviderId, "openai", StringComparison.OrdinalIgnoreCase)))
+        {
+            normalized.Insert(0, OpenAIProviderAlias());
+        }
+        return normalized;
+    }
+
+    private static ModelProviderInfo OpenAIProviderAlias() => new()
+    {
+        ProviderId = "openai",
+        Label = "OpenAI",
+        Transport = "openai_responses",
+        DefaultModel = "gpt-5-mini",
+        ModelEnv = "OPENAI_MODEL",
+        ApiKeyEnvs = ["OPENAI_API_KEY"],
+        BaseUrlEnv = "OPENAI_BASE_URL",
+        DefaultBaseUrl = "https://api.openai.com/v1",
+        Aliases = ["openai-responses"],
+    };
 
     private static Dictionary<string, string> ParseSecretLines(string text)
     {

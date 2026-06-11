@@ -22,6 +22,11 @@ public static class AppRuntimeDefaults
         return string.IsNullOrWhiteSpace(modelName) ? ModelName : modelName.Trim();
     }
 
+    public static string EffectiveActiveModelProvider(string provider)
+    {
+        return string.IsNullOrWhiteSpace(provider) ? "same-as-main" : provider.Trim();
+    }
+
     public static string EffectiveTtsProvider(string provider)
     {
         return string.IsNullOrWhiteSpace(provider) ? TtsProvider : provider.Trim();
@@ -77,6 +82,16 @@ public static class AppRuntimeDefaults
     {
         return EffectiveModelProvider(provider) switch
         {
+            "openai" => "openai-responses",
+            var value => value,
+        };
+    }
+
+    public static string CliActiveModelProvider(string provider)
+    {
+        return EffectiveActiveModelProvider(provider) switch
+        {
+            "same-as-main" => "same-as-main",
             "openai" => "openai-responses",
             var value => value,
         };

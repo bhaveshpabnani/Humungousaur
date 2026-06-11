@@ -20,6 +20,17 @@ For compile-only validation, run:
 swift build --package-path apps/macos
 ```
 
+The package also includes `HumungousaurFileEvents`, a command-line FSEvents helper that emits redacted file/folder collector bridge events into the shared Python runtime spool:
+
+```bash
+script/run_macos_file_events.sh \
+  --workspace <repo-root-or-user-workspace> \
+  --data-dir <humungousaur-data-dir> \
+  --watch <folder-to-watch>
+```
+
+It covers file save/rename/move and folder create/change/rename/move events. Privileged file open/close auditing and Finder-only UI actions such as Quick Look, tags, share sheet, path bar, restore, and empty trash still require separate opt-in helpers.
+
 The app talks to the local daemon at `http://127.0.0.1:8765` by default. It can also start the daemon with:
 
 ```bash

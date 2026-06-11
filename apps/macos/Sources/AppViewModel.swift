@@ -1,4 +1,5 @@
 import AVFoundation
+import AppKit
 import Foundation
 import SwiftUI
 
@@ -11,11 +12,18 @@ final class AppViewModel: ObservableObject {
     @Published var health: HealthPayload?
     @Published var systemStatus: JSONValue = .object([:])
     @Published var toolCatalog = ToolCatalog(toolCount: 0, groups: [], tools: [])
+    @Published var modelProviderCatalog = ModelProviderCatalog.empty
     @Published var runs: [RunItem] = []
     @Published var approvals: [ApprovalItem] = []
     @Published var channels: [ChannelInfo] = []
+    @Published var connectorCatalog = ConnectorCatalog(providerCount: 0, providers: [], redirectUri: "http://127.0.0.1:8765/connectors/callback")
     @Published var outbox = OutboxEnvelope(messages: [])
     @Published var autonomousStatus: JSONValue = .object([:])
+    @Published var activeAgentStatus = ActiveAgentStatusResponse.empty
+    @Published var activeAgentPlannerContext = ActiveAgentPlannerContextPreview.empty
+    @Published var activeAgentStatusText = "Waiting for active-agent status."
+    @Published var collectorStatus = CollectorStatusResponse.empty
+    @Published var collectorStatusText = "Waiting for collector health."
     @Published var voiceStatus: JSONValue = .object([:])
     @Published var updateInfo: UpdateInfo?
     @Published var updateStatusText = "Check for release updates."
@@ -23,7 +31,9 @@ final class AppViewModel: ObservableObject {
     @Published var selectedRun: RunItem?
     @Published var selectedApproval: ApprovalItem?
     @Published var selectedChannelID: String?
+    @Published var selectedConnectorID: String?
     @Published var channelStatusText = "Select a channel to view its connection status."
+    @Published var connectorStatusText = "Select a connector to view setup and connection state."
     @Published var channelListenerText = "Incoming message status appears after channel selection."
     @Published var channelRequirementText = ""
     @Published var channelSetupStepsText = ""
@@ -72,6 +82,7 @@ final class AppViewModel: ObservableObject {
         settings = loaded
         secrets = RuntimeSecrets(
             modelAPIKey: keychain.read("model_api_key"),
+            activeModelAPIKey: keychain.read("active_model_api_key"),
             deepgramAPIKey: keychain.read("deepgram_api_key"),
             elevenLabsAPIKey: keychain.read("elevenlabs_api_key")
         )
@@ -91,11 +102,14 @@ final class AppViewModel: ObservableObject {
         api.setBaseURL(settings.apiBaseURL)
         defer { isRefreshing = false }
         await refreshHealth()
+        await refreshModelProviders()
         await refreshTools()
         await refreshRuns()
         await refreshApprovals()
         await refreshChannels()
+        await refreshConnectors()
         await refreshAutonomy()
+        await refreshActiveAgent()
         await refreshVoice()
     }
 
@@ -116,6 +130,14 @@ final class AppViewModel: ObservableObject {
             toolCatalog = try await api.tools()
         } catch {
             toolCatalog = ToolCatalog(toolCount: 0, groups: [], tools: [])
+        }
+    }
+
+    func refreshModelProviders() async {
+        do {
+            modelProviderCatalog = try await api.modelProviders()
+        } catch {
+            modelProviderCatalog = .empty
         }
     }
 
@@ -157,11 +179,140 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    func refreshConnectors() async {
+        do {
+            connectorCatalog = try await api.connectors()
+            if selectedConnectorID == nil {
+                selectedConnectorID = connectorCatalog.providers.first?.providerId
+            }
+            renderConnectorStatus()
+        } catch {
+            connectorCatalog = ConnectorCatalog(providerCount: 0, providers: [], redirectUri: "http://127.0.0.1:8765/connectors/callback")
+            connectorStatusText = error.localizedDescription
+        }
+    }
+
     func refreshAutonomy() async {
         do {
             autonomousStatus = try await api.autonomousStatus()
         } catch {
             autonomousStatus = .string(error.localizedDescription)
+        }
+    }
+
+    func refreshActiveAgent() async {
+        do {
+            activeAgentPlannerContext = try await api.activeAgentPlannerContext(request: "desktop planner preview")
+            activeAgentStatus = try await api.activeAgentStatus(limit: 20)
+            activeAgentStatusText = "Latest posture: \(activeAgentStatus.latestPosture)."
+        } catch {
+            activeAgentPlannerContext = .empty
+            activeAgentStatus = .empty
+            activeAgentStatusText = error.localizedDescription
+        }
+        await refreshCollectorStatus()
+    }
+
+    func refreshCollectorStatus() async {
+        do {
+            collectorStatus = try await api.collectorStatus(limit: 12)
+            collectorStatusText = "Collectors: \(collectorStatus.statusText). \(collectorStatus.eventCount) events, latest sequence \(collectorStatus.latestSequence)."
+        } catch {
+            collectorStatus = .empty
+            collectorStatusText = error.localizedDescription
+        }
+    }
+
+    func recordActiveAgentCorrection(
+        _ correctionType: String,
+        note: String,
+        taskContext: ActiveAgentTaskContextDraft? = nil,
+        mutedScope: ActiveAgentMutedScopeDraft? = nil
+    ) async {
+        guard let target = activeAgentStatus.latestTarget else {
+            notice = "No active-agent decision to correct yet."
+            return
+        }
+        do {
+            _ = try await api.recordActiveAgentCorrection(
+                correctionType: correctionType,
+                targetType: target.type,
+                targetID: target.id,
+                note: note,
+                taskContext: taskContext,
+                mutedScope: mutedScope
+            )
+            notice = "Active-agent feedback recorded."
+            await refreshActiveAgent()
+        } catch {
+            notice = error.localizedDescription
+        }
+    }
+
+    func declareActiveAgentTaskContext(_ draft: ActiveAgentTaskContextDraft) async {
+        guard draft.hasContext else {
+            notice = "A task goal or summary is required."
+            return
+        }
+        do {
+            _ = try await api.declareActiveAgentTaskContext(draft)
+            notice = "Active task context updated."
+            await refreshActiveAgent()
+        } catch {
+            notice = error.localizedDescription
+        }
+    }
+
+    func createActiveAgentMutedScope(_ draft: ActiveAgentMutedScopeDraft) async {
+        guard draft.hasScope else {
+            notice = "Choose a collector, source, stimulus type, or entity reference to mute."
+            return
+        }
+        do {
+            _ = try await api.createActiveAgentMutedScope(draft)
+            notice = "Muted scope created."
+            await refreshActiveAgent()
+        } catch {
+            notice = error.localizedDescription
+        }
+    }
+
+    func cancelActiveMutedScope(_ scope: ActiveAgentRecord) async {
+        do {
+            _ = try await api.cancelActiveAgentMutedScope(
+                scopeID: scope.id,
+                reason: "Cancelled from macOS Active Agent panel."
+            )
+            notice = "Muted scope cancelled."
+            await refreshActiveAgent()
+        } catch {
+            notice = error.localizedDescription
+        }
+    }
+
+    func approveActiveAgentDeepDive(_ request: ActiveAgentRecord) async {
+        do {
+            _ = try await api.approveActiveAgentDeepDive(
+                requestID: request.id,
+                reason: "Approved from macOS Active Agent panel."
+            )
+            notice = "Deep-dive request approved."
+            await refreshActiveAgent()
+        } catch {
+            notice = error.localizedDescription
+        }
+    }
+
+    func rejectActiveAgentDeepDive(_ request: ActiveAgentRecord) async {
+        do {
+            _ = try await api.rejectActiveAgentDeepDive(
+                requestID: request.id,
+                reason: "Rejected from macOS Active Agent panel."
+            )
+            notice = "Deep-dive request rejected."
+            await refreshActiveAgent()
+        } catch {
+            notice = error.localizedDescription
         }
     }
 
@@ -259,11 +410,51 @@ final class AppViewModel: ObservableObject {
     func saveSettings() {
         settingsStore.save(settings)
         keychain.write(secrets.modelAPIKey, account: "model_api_key")
+        keychain.write(secrets.activeModelAPIKey, account: "active_model_api_key")
         keychain.write(secrets.deepgramAPIKey, account: "deepgram_api_key")
         keychain.write(secrets.elevenLabsAPIKey, account: "elevenlabs_api_key")
         api.setBaseURL(settings.apiBaseURL)
         notice = "Settings saved."
     }
+
+    var modelProviderOptions: [ModelProviderInfo] {
+        if !modelProviderCatalog.providers.isEmpty {
+            var providers = modelProviderCatalog.providers
+            if !providers.contains(where: { $0.providerId == "openai" }) {
+                providers.insert(Self.openAIProviderAlias, at: 0)
+            }
+            return providers
+        }
+        return [
+            Self.openAIProviderAlias,
+            ModelProviderInfo(providerId: "openrouter", label: "OpenRouter", transport: "openai_chat", defaultModel: "anthropic/claude-sonnet-4.6", modelEnv: "OPENROUTER_MODEL", apiKeyEnvs: ["OPENROUTER_API_KEY"], baseUrlEnv: "OPENROUTER_BASE_URL", defaultBaseUrl: "https://openrouter.ai/api/v1", aliases: []),
+            ModelProviderInfo(providerId: "anthropic", label: "Anthropic", transport: "anthropic_messages", defaultModel: "claude-sonnet-4-6", modelEnv: "ANTHROPIC_MODEL", apiKeyEnvs: ["ANTHROPIC_API_KEY"], baseUrlEnv: "ANTHROPIC_BASE_URL", defaultBaseUrl: "https://api.anthropic.com", aliases: []),
+            ModelProviderInfo(providerId: "groq", label: "Groq", transport: "openai_chat", defaultModel: "openai/gpt-oss-120b", modelEnv: "GROQ_MODEL", apiKeyEnvs: ["GROQ_API_KEY"], baseUrlEnv: "GROQ_BASE_URL", defaultBaseUrl: "https://api.groq.com/openai/v1", aliases: []),
+            ModelProviderInfo(providerId: "grok", label: "xAI Grok", transport: "openai_chat", defaultModel: "grok-4.1-fast", modelEnv: "XAI_MODEL", apiKeyEnvs: ["XAI_API_KEY"], baseUrlEnv: "XAI_BASE_URL", defaultBaseUrl: "https://api.x.ai/v1", aliases: ["xai"]),
+            ModelProviderInfo(providerId: "ollama", label: "Ollama", transport: "openai_chat", defaultModel: "llama3.1", modelEnv: "OLLAMA_MODEL", apiKeyEnvs: ["OLLAMA_API_KEY"], baseUrlEnv: "OLLAMA_BASE_URL", defaultBaseUrl: "http://127.0.0.1:11434/v1", aliases: []),
+            ModelProviderInfo(providerId: "local-openai", label: "Local OpenAI-compatible", transport: "openai_chat", defaultModel: "llama3.1", modelEnv: "LOCAL_LLM_MODEL", apiKeyEnvs: ["LOCAL_LLM_API_KEY"], baseUrlEnv: "LOCAL_LLM_BASE_URL", defaultBaseUrl: "http://127.0.0.1:11434/v1", aliases: []),
+        ]
+    }
+
+    func defaultModelName(for providerID: String) -> String {
+        modelProviderOptions.first { $0.providerId == providerID }?.defaultModel ?? "gpt-5-mini"
+    }
+
+    func defaultBaseURL(for providerID: String) -> String {
+        modelProviderOptions.first { $0.providerId == providerID }?.defaultBaseUrl ?? ""
+    }
+
+    private static let openAIProviderAlias = ModelProviderInfo(
+        providerId: "openai",
+        label: "OpenAI",
+        transport: "openai_responses",
+        defaultModel: "gpt-5-mini",
+        modelEnv: "OPENAI_MODEL",
+        apiKeyEnvs: ["OPENAI_API_KEY"],
+        baseUrlEnv: "OPENAI_BASE_URL",
+        defaultBaseUrl: "https://api.openai.com/v1",
+        aliases: ["openai-responses"]
+    )
 
     func saveVoiceSettings() async {
         saveSettings()
@@ -686,6 +877,105 @@ final class AppViewModel: ObservableObject {
 
     var selectedChannel: ChannelInfo? {
         channels.first { $0.channelId == selectedChannelID } ?? channels.first
+    }
+
+    var selectedConnector: ConnectorProvider? {
+        connectorCatalog.providers.first { $0.providerId == selectedConnectorID } ?? connectorCatalog.providers.first
+    }
+
+    func configureConnector(_ connector: ConnectorProvider, clientID: String, clientSecret: String) async {
+        let cleanID = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanID.isEmpty else {
+            notice = "\(connector.primaryCredentialLabel) is required."
+            return
+        }
+        if !connector.usesOAuth, connector.credentialFields.count > 1, clientSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            notice = "\(connector.secondaryCredentialLabel) is required."
+            return
+        }
+        do {
+            _ = try await api.configureConnector(
+                providerID: connector.providerId,
+                clientID: cleanID,
+                clientSecret: clientSecret.trimmingCharacters(in: .whitespacesAndNewlines),
+                redirectURI: connectorCatalog.redirectUri
+            )
+            notice = "\(connector.displayName) \(connector.usesOAuth ? "advanced OAuth client" : "credentials") saved."
+            await refreshConnectors()
+        } catch {
+            connectorStatusText = error.localizedDescription
+            notice = "Connector setup failed."
+        }
+    }
+
+    func connectConnector(_ connector: ConnectorProvider) async {
+        guard connector.usesOAuth else {
+            if connector.configured {
+                connectorStatusText = "\(connector.displayName) is connection-ready for tools and collectors using \(connector.authModeText)."
+                notice = "\(connector.displayName) connection is ready."
+            } else {
+                connectorStatusText = "Save \(connector.primaryCredentialLabel)\(connector.credentialFields.count > 1 ? " and \(connector.secondaryCredentialLabel)" : "") first to make \(connector.displayName) ready for tools and collectors."
+                notice = "\(connector.displayName) needs setup."
+            }
+            return
+        }
+        guard connector.managedOAuthAvailable || connector.configured else {
+            connectorStatusText = "\(connector.displayName) managed OAuth is not configured for this build. Production builds should provide a product-owned OAuth client or broker. For self-hosted development only, save an advanced OAuth client below."
+            notice = "\(connector.displayName) OAuth is not configured."
+            return
+        }
+        do {
+            let authorization = try await api.prepareConnector(providerID: connector.providerId)
+            guard let url = URL(string: authorization.authorizationURL) else {
+                notice = "Connector returned an invalid authorization URL."
+                return
+            }
+            NSWorkspace.shared.open(url)
+            connectorStatusText = "Browser opened for \(authorization.displayName). Finish account authorization, then return here and refresh."
+            notice = "Opened \(authorization.displayName) connection."
+        } catch {
+            connectorStatusText = error.localizedDescription
+            notice = "\(connector.displayName) sign-in could not start."
+        }
+    }
+
+    func refreshConnectorToken(_ connector: ConnectorProvider) async {
+        do {
+            _ = try await api.refreshConnector(providerID: connector.providerId)
+            notice = "\(connector.displayName) token refreshed."
+            await refreshConnectors()
+        } catch {
+            connectorStatusText = error.localizedDescription
+            notice = "Connector refresh failed."
+        }
+    }
+
+    func disconnectConnector(_ connector: ConnectorProvider) async {
+        do {
+            _ = try await api.disconnectConnector(providerID: connector.providerId)
+            notice = "\(connector.displayName) disconnected."
+            await refreshConnectors()
+        } catch {
+            connectorStatusText = error.localizedDescription
+            notice = "Connector disconnect failed."
+        }
+    }
+
+    func renderConnectorStatus() {
+        guard let connector = selectedConnector else {
+            connectorStatusText = "No connector selected."
+            return
+        }
+        connectorStatusText = [
+            "State: \(connector.statusText)",
+            "Auth mode: \(connector.authModeText)",
+            "Managed OAuth: \(connector.managedOAuthAvailable ? "available" : "not configured for this build")",
+            "Advanced OAuth client: \(connector.advancedClientConfigured ? connector.clientId : "not configured")",
+            "Refresh token: \(connector.usesOAuth ? (connector.hasRefreshToken ? "available" : "not stored") : "not used")",
+            "Credential fields: \(connector.credentialFields.map(\.humanizedIdentifier).joined(separator: ", "))",
+            "Apps: \(connector.workspaceApps.joined(separator: ", "))",
+            "Tools: \(connector.toolHints.map(\.humanizedIdentifier).joined(separator: ", "))"
+        ].joined(separator: "\n")
     }
 
     func setup(for channel: ChannelInfo) -> ChannelSetup {

@@ -146,6 +146,11 @@ public sealed class AgentApiClient
         return await GetAsync<ToolCatalog>("tools") ?? new ToolCatalog();
     }
 
+    public async Task<ModelProviderCatalog> GetModelProvidersAsync()
+    {
+        return await GetAsync<ModelProviderCatalog>("model/providers") ?? new ModelProviderCatalog();
+    }
+
     public Task<JsonObject> GetVoiceStatusAsync(AppSettings settings) => PostJsonObjectAsync("voice/status", RuntimePayload(settings));
 
     public Task<JsonObject> StopVoicePlaybackAsync(AppSettings settings)
@@ -157,9 +162,134 @@ public sealed class AgentApiClient
 
     public Task<JsonObject> GetAutonomousStatusAsync() => GetJsonObjectAsync("autonomous/status?limit=8");
 
+    public async Task<ActiveAgentStatusResponse> GetActiveAgentStatusAsync(int limit = 20)
+    {
+        return await GetAsync<ActiveAgentStatusResponse>($"active-agent/status?limit={limit}") ?? new ActiveAgentStatusResponse();
+    }
+
+    public Task<JsonObject> GetActiveAgentPlannerContextAsync(string request = "")
+    {
+        var suffix = string.IsNullOrWhiteSpace(request) ? "" : $"?request={Uri.EscapeDataString(request)}";
+        return GetJsonObjectAsync($"active-agent/planner-context{suffix}");
+    }
+
+    public async Task<CollectorStatusResponse> GetCollectorStatusAsync(int limit = 12)
+    {
+        return await GetAsync<CollectorStatusResponse>($"collectors/status?limit={limit}") ?? new CollectorStatusResponse();
+    }
+
+    public Task<JsonObject> RecordActiveAgentCorrectionAsync(
+        string correctionType,
+        string targetType,
+        string targetId,
+        string note,
+        string userDeclaredGoal = "",
+        string summary = "")
+    {
+        var payload = new JsonObject
+        {
+            ["correction_type"] = correctionType,
+            ["target_type"] = targetType,
+            ["target_id"] = targetId,
+            ["note"] = note,
+            ["source"] = "windows_app",
+        };
+        if (correctionType == "wrong_task" && (!string.IsNullOrWhiteSpace(userDeclaredGoal) || !string.IsNullOrWhiteSpace(summary)))
+        {
+            payload["task_context"] = new JsonObject
+            {
+                ["goal"] = userDeclaredGoal.Trim(),
+                ["summary"] = string.IsNullOrWhiteSpace(summary) ? userDeclaredGoal.Trim() : summary.Trim(),
+                ["source"] = "windows_app",
+                ["privacy_mode"] = "metadata_first",
+            };
+        }
+        return PostJsonObjectAsync("active-agent/corrections", payload);
+    }
+
+    public Task<JsonObject> CreateActiveAgentMutedScopeAsync(
+        string mode,
+        string collector,
+        string source,
+        string stimulusType,
+        IEnumerable<string> entityRefs,
+        string reason)
+    {
+        var payload = new JsonObject
+        {
+            ["mode"] = mode,
+            ["scope_type"] = "windows_app_manual",
+            ["collector"] = collector.Trim(),
+            ["source"] = source.Trim(),
+            ["stimulus_type"] = stimulusType.Trim(),
+            ["entity_refs"] = StringArray(entityRefs),
+            ["reason"] = string.IsNullOrWhiteSpace(reason) ? "User created a scoped mute from the Windows Active Agent panel." : reason.Trim(),
+        };
+        return PostJsonObjectAsync("active-agent/muted-scopes", payload);
+    }
+
+    public Task<JsonObject> CancelActiveAgentMutedScopeAsync(string scopeId, string reason)
+    {
+        return PostJsonObjectAsync("active-agent/muted-scopes/cancel", new JsonObject
+        {
+            ["scope_id"] = scopeId,
+            ["reason"] = reason,
+        });
+    }
+
+    public Task<JsonObject> ApproveActiveAgentDeepDiveAsync(string requestId, string reason)
+    {
+        return PostJsonObjectAsync("active-agent/deep-dives/approve", new JsonObject
+        {
+            ["request_id"] = requestId,
+            ["reason"] = reason,
+        });
+    }
+
+    public Task<JsonObject> RejectActiveAgentDeepDiveAsync(string requestId, string reason)
+    {
+        return PostJsonObjectAsync("active-agent/deep-dives/reject", new JsonObject
+        {
+            ["request_id"] = requestId,
+            ["reason"] = reason,
+        });
+    }
+
     public async Task<OutboxEnvelope> GetOutboxAsync()
     {
         return await GetAsync<OutboxEnvelope>("channels/outbox") ?? new OutboxEnvelope();
+    }
+
+    public async Task<ConnectorCatalog> GetConnectorsAsync()
+    {
+        return await GetAsync<ConnectorCatalog>("connectors") ?? new ConnectorCatalog();
+    }
+
+    public Task<JsonObject> ConfigureConnectorAsync(ConnectorProvider connector, string clientId, string clientSecret, string redirectUri)
+    {
+        return PostJsonObjectAsync("connectors/configure", new JsonObject
+        {
+            ["provider_id"] = connector.ProviderId,
+            ["client_id"] = clientId,
+            ["client_secret"] = clientSecret,
+            ["redirect_uri"] = redirectUri,
+        });
+    }
+
+    public async Task<ConnectorAuthorization> PrepareConnectorAsync(ConnectorProvider connector)
+    {
+        return await PostAsync<ConnectorAuthorization>("connectors/connect", new JsonObject { ["provider_id"] = connector.ProviderId })
+            ?? new ConnectorAuthorization();
+    }
+
+    public Task<JsonObject> RefreshConnectorAsync(ConnectorProvider connector)
+    {
+        return PostJsonObjectAsync("connectors/refresh", new JsonObject { ["provider_id"] = connector.ProviderId });
+    }
+
+    public Task<JsonObject> DisconnectConnectorAsync(ConnectorProvider connector)
+    {
+        return PostJsonObjectAsync("connectors/disconnect", new JsonObject { ["provider_id"] = connector.ProviderId });
     }
 
     public async Task<List<RuntimeRunItem>> GetRunsAsync()
@@ -300,6 +430,20 @@ public sealed class AgentApiClient
         {
             payload["model_base_url"] = settings.ModelBaseUrl;
         }
+        var activeProvider = AppRuntimeDefaults.EffectiveActiveModelProvider(settings.ActiveModelProvider);
+        if (!activeProvider.Equals("same-as-main", StringComparison.OrdinalIgnoreCase))
+        {
+            payload["active_model_provider"] = AppRuntimeDefaults.CliActiveModelProvider(activeProvider);
+            payload["active_model_api_key_env"] = AppRuntimeDefaults.ModelApiKeyName(activeProvider);
+            if (!string.IsNullOrWhiteSpace(settings.ActiveModelName))
+            {
+                payload["active_model"] = settings.ActiveModelName;
+            }
+            if (!string.IsNullOrWhiteSpace(settings.ActiveModelBaseUrl))
+            {
+                payload["active_model_base_url"] = settings.ActiveModelBaseUrl;
+            }
+        }
         var secrets = RuntimeSecrets(settings);
         if (secrets.Count > 0)
         {
@@ -312,6 +456,11 @@ public sealed class AgentApiClient
     {
         var secrets = new JsonObject();
         AddSecret(secrets, AppRuntimeDefaults.ModelApiKeyName(settings.ModelProvider), settings.ModelApiKey);
+        var activeProvider = AppRuntimeDefaults.EffectiveActiveModelProvider(settings.ActiveModelProvider);
+        if (!activeProvider.Equals("same-as-main", StringComparison.OrdinalIgnoreCase))
+        {
+            AddSecret(secrets, AppRuntimeDefaults.ModelApiKeyName(activeProvider), settings.ActiveModelApiKey);
+        }
         AddSecret(secrets, "DEEPGRAM_API_KEY", settings.DeepgramApiKey);
         AddSecret(secrets, "ELEVENLABS_API_KEY", settings.ElevenLabsApiKey);
         AddSecret(secrets, "ELEVENLABS_VOICE_ID", settings.VoiceId);
@@ -401,6 +550,14 @@ public sealed class AgentApiClient
         await EnsureSuccessAsync(response, route);
         var node = await response.Content.ReadFromJsonAsync<JsonObject>(JsonOptions);
         return node ?? [];
+    }
+
+    private async Task<T?> PostAsync<T>(string route, JsonObject payload)
+    {
+        using var content = new StringContent(payload.ToJsonString(JsonOptions), Encoding.UTF8, "application/json");
+        using var response = await _http.PostAsync(new Uri(_baseUri, route), content);
+        await EnsureSuccessAsync(response, route);
+        return await response.Content.ReadFromJsonAsync<T>(JsonOptions);
     }
 
     private static async Task EnsureSuccessAsync(HttpResponseMessage response, string route)
