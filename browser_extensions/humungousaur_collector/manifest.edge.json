@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "Humungousaur Browser Collector - Edge",
+  "description": "Emits privacy-first browser activity metadata into the local Humungousaur collector API.",
+  "version": "0.1.0",
+  "permissions": [
+    "tabs",
+    "windows",
+    "storage",
+    "webNavigation",
+    "downloads",
+    "tabGroups"
+  ],
+  "host_permissions": [
+    "<all_urls>",
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "options_page": "src/options.html",
+  "action": {
+    "default_title": "Humungousaur Collector"
+  },
+  "commands": {
+    "reader-mode-enabled": { "description": "Emit reader mode enabled" },
+    "reader-mode-disabled": { "description": "Emit reader mode disabled" },
+    "find-in-page": { "description": "Emit find-in-page used" },
+    "zoom-changed": { "description": "Emit page zoom changed" },
+    "page-muted": { "description": "Emit page muted" },
+    "page-unmuted": { "description": "Emit page unmuted" },
+    "picture-in-picture-started": { "description": "Emit picture-in-picture started" },
+    "picture-in-picture-stopped": { "description": "Emit picture-in-picture stopped" },
+    "translation-offered": { "description": "Emit translation offered" },
+    "translation-accepted": { "description": "Emit translation accepted" }
+  }
+}
