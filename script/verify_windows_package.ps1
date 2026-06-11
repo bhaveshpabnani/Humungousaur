@@ -111,10 +111,11 @@ try {
   }
 
   $VersionInfo = (Get-Item $AppExe.FullName).VersionInfo
-  if ($VersionInfo.FileVersion -ne $WindowsFileVersion) {
+  $AppFileVersion = ([string]$VersionInfo.FileVersion).Trim()
+  if ($AppFileVersion -ne $WindowsFileVersion) {
     throw "Humungousaur.App.exe FileVersion mismatch. Expected $WindowsFileVersion, got $($VersionInfo.FileVersion)"
   }
-  $ProductVersion = [string]$VersionInfo.ProductVersion
+  $ProductVersion = ([string]$VersionInfo.ProductVersion).Trim()
   if ($ProductVersion -ne $ProjectVersion -and -not $ProductVersion.StartsWith("$ProjectVersion+")) {
     throw "Humungousaur.App.exe ProductVersion mismatch. Expected $ProjectVersion or $ProjectVersion+<source-revision>, got $ProductVersion"
   }
@@ -160,10 +161,11 @@ try {
   }
 
   $InstallerVersion = (Get-Item $InstallerExePath).VersionInfo
-  if ($InstallerVersion.FileVersion -ne $WindowsFileVersion) {
+  $InstallerFileVersion = ([string]$InstallerVersion.FileVersion).Trim()
+  if ($InstallerFileVersion -ne $WindowsFileVersion) {
     throw "Humungousaur-Windows-Setup.exe FileVersion mismatch. Expected $WindowsFileVersion, got $($InstallerVersion.FileVersion)"
   }
-  $InstallerProductVersion = [string]$InstallerVersion.ProductVersion
+  $InstallerProductVersion = ([string]$InstallerVersion.ProductVersion).Trim()
   if ($InstallerProductVersion -ne $ProjectVersion -and -not $InstallerProductVersion.StartsWith("$ProjectVersion+")) {
     throw "Humungousaur-Windows-Setup.exe ProductVersion mismatch. Expected $ProjectVersion or $ProjectVersion+<source-revision>, got $InstallerProductVersion"
   }
