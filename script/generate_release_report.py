@@ -16,7 +16,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_WEBSITE_ROOT = ROOT.parent / "Humungousaur-Website"
 DEFAULT_OUTPUT = ROOT / "artifacts/release/release-readiness.md"
-ASSET_NAMES = ["Humungousaur-Windows.zip", "Humungousaur-macOS.zip", "checksums.txt"]
+ASSET_NAMES = [
+    "Humungousaur-Windows-Setup.zip",
+    "Humungousaur-macOS.pkg",
+    "Humungousaur-Windows.zip",
+    "Humungousaur-macOS.zip",
+    "checksums.txt",
+]
 
 
 def run_command(args: list[str], cwd: Path = ROOT, env: dict[str, str] | None = None) -> tuple[int, str]:
@@ -44,8 +50,9 @@ def artifact_section(release_dir: Path) -> str:
             lines.append(f"- `{name}`: missing")
             continue
         size = path.stat().st_size
-        if path.suffix == ".zip":
+        if path.suffix in {".zip", ".pkg"}:
             lines.append(f"- `{name}`: {size} bytes, sha256 `{sha256(path)}`")
+        if path.suffix == ".zip":
             try:
                 with zipfile.ZipFile(path) as archive:
                     entries = archive.namelist()

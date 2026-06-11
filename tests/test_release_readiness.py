@@ -200,6 +200,8 @@ class ReleaseReadinessTests(unittest.TestCase):
                     [
                         "# Humungousaur Release Readiness",
                         "## Artifact Manifest",
+                        "- `Humungousaur-Windows-Setup.zip`: 1 bytes, sha256 `aaa`",
+                        "- `Humungousaur-macOS.pkg`: 1 bytes, sha256 `bbb`",
                         "- `Humungousaur-Windows.zip`: 1 bytes, sha256 `abc`",
                         "- `Humungousaur-macOS.zip`: 1 bytes, sha256 `def`",
                         "- `checksums.txt`: 1 bytes",
@@ -441,7 +443,7 @@ class ReleaseReadinessTests(unittest.TestCase):
 
         self.assertTrue(any("source-size limit" in error for error in errors), errors)
 
-    def test_collect_release_artifacts_downloads_zips_and_writes_checksums(self) -> None:
+    def test_collect_release_artifacts_downloads_installers_zips_and_writes_checksums(self) -> None:
         module = load_collect_release_artifacts_module()
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -453,8 +455,12 @@ class ReleaseReadinessTests(unittest.TestCase):
             (source / "Humungousaur-macOS").mkdir(parents=True)
             windows_zip = source / "Humungousaur-Windows" / module.WINDOWS_ASSET
             macos_zip = source / "Humungousaur-macOS" / module.MACOS_ASSET
+            windows_installer = source / "Humungousaur-Windows" / module.WINDOWS_INSTALLER_ASSET
+            macos_installer = source / "Humungousaur-macOS" / module.MACOS_INSTALLER_ASSET
             windows_zip.write_bytes(b"windows release bytes")
             macos_zip.write_bytes(b"macos release bytes")
+            windows_installer.write_bytes(b"windows installer bytes")
+            macos_installer.write_bytes(b"macos installer bytes")
             seen_verify: list[list[str]] = []
 
             def fake_run(command, cwd=module.ROOT):
@@ -485,9 +491,13 @@ class ReleaseReadinessTests(unittest.TestCase):
             self.assertEqual(0, exit_code)
             self.assertEqual(windows_zip.read_bytes(), (release_dir / module.WINDOWS_ASSET).read_bytes())
             self.assertEqual(macos_zip.read_bytes(), (release_dir / module.MACOS_ASSET).read_bytes())
+            self.assertEqual(windows_installer.read_bytes(), (release_dir / module.WINDOWS_INSTALLER_ASSET).read_bytes())
+            self.assertEqual(macos_installer.read_bytes(), (release_dir / module.MACOS_INSTALLER_ASSET).read_bytes())
             checksums = (release_dir / module.CHECKSUMS_ASSET).read_text(encoding="utf-8")
             self.assertIn(f"{sha256(windows_zip.read_bytes()).hexdigest()}  {module.WINDOWS_ASSET}", checksums)
             self.assertIn(f"{sha256(macos_zip.read_bytes()).hexdigest()}  {module.MACOS_ASSET}", checksums)
+            self.assertIn(f"{sha256(windows_installer.read_bytes()).hexdigest()}  {module.WINDOWS_INSTALLER_ASSET}", checksums)
+            self.assertIn(f"{sha256(macos_installer.read_bytes()).hexdigest()}  {module.MACOS_INSTALLER_ASSET}", checksums)
             self.assertTrue(seen_verify)
             self.assertIn("--require-assets", seen_verify[0])
             self.assertIn("--release-tag", seen_verify[0])
@@ -645,7 +655,9 @@ class ReleaseReadinessTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             release_dir = Path(temp_dir)
             macos_zip = release_dir / module.MACOS_ASSET
+            macos_installer = release_dir / module.MACOS_INSTALLER_ASSET
             windows_zip = release_dir / module.WINDOWS_ASSET
+            windows_installer = release_dir / module.WINDOWS_INSTALLER_ASSET
             checksums = release_dir / module.CHECKSUMS_ASSET
             version = module.project_version()
 
@@ -686,7 +698,16 @@ class ReleaseReadinessTests(unittest.TestCase):
                 ]))
                 archive.writestr("publish/Humungousaur.App.exe", "")
 
+            macos_installer.write_bytes(b"macos installer")
+            with zipfile.ZipFile(windows_installer, "w") as archive:
+                archive.writestr("Install-Humungousaur.ps1", "InstallPythonWithWinget\nruntime-source\nPlaywright Chromium\nStart Menu/Desktop shortcuts\n")
+                archive.writestr("README.txt", "")
+                archive.writestr("runtime-source/script/bootstrap_runtime.py", "")
+                archive.writestr("app/Humungousaur.App.exe", "")
+
             checksums.write_text(
+                f"{sha256(windows_installer.read_bytes()).hexdigest()}  {module.WINDOWS_INSTALLER_ASSET}\n"
+                f"{sha256(macos_installer.read_bytes()).hexdigest()}  {module.MACOS_INSTALLER_ASSET}\n"
                 f"{sha256(windows_zip.read_bytes()).hexdigest()}  {module.WINDOWS_ASSET}\n"
                 f"{sha256(macos_zip.read_bytes()).hexdigest()}  {module.MACOS_ASSET}\n",
                 encoding="utf-8",
@@ -696,7 +717,9 @@ class ReleaseReadinessTests(unittest.TestCase):
             module.check_artifacts(preflight, release_dir=release_dir, require_assets=True)
 
         self.assertEqual([], preflight.errors)
+        self.assertIn(f"required local release artifact {module.WINDOWS_INSTALLER_ASSET}", preflight.passed)
         self.assertIn(f"required local release artifact {module.WINDOWS_ASSET}", preflight.passed)
+        self.assertIn(f"{module.CHECKSUMS_ASSET} hash matches {module.MACOS_INSTALLER_ASSET}", preflight.passed)
         self.assertIn(f"{module.CHECKSUMS_ASSET} hash matches {module.MACOS_ASSET}", preflight.passed)
         self.assertIn(f"{module.CHECKSUMS_ASSET} hash matches {module.WINDOWS_ASSET}", preflight.passed)
 
@@ -827,7 +850,11 @@ class ReleaseReadinessTests(unittest.TestCase):
         module = load_release_readiness_module()
         windows_bytes = b"windows zip"
         macos_bytes = b"macos zip"
+        windows_installer_bytes = b"windows installer"
+        macos_installer_bytes = b"macos installer"
         assets = [
+            {"name": module.WINDOWS_INSTALLER_ASSET, "size": 111},
+            {"name": module.MACOS_INSTALLER_ASSET, "size": 222},
             {"name": module.WINDOWS_ASSET, "size": 123},
             {"name": module.MACOS_ASSET, "size": 456},
             {"name": module.CHECKSUMS_ASSET, "size": 789},
@@ -847,10 +874,16 @@ class ReleaseReadinessTests(unittest.TestCase):
                 output_dir.mkdir(parents=True, exist_ok=True)
                 if pattern == module.CHECKSUMS_ASSET:
                     (output_dir / module.CHECKSUMS_ASSET).write_text(
+                        f"{sha256(windows_installer_bytes).hexdigest()}  {module.WINDOWS_INSTALLER_ASSET}\n"
+                        f"{sha256(macos_installer_bytes).hexdigest()}  {module.MACOS_INSTALLER_ASSET}\n"
                         f"{sha256(windows_bytes).hexdigest()}  {module.WINDOWS_ASSET}\n"
                         f"{sha256(macos_bytes).hexdigest()}  {module.MACOS_ASSET}\n",
                         encoding="utf-8",
                     )
+                elif pattern == module.WINDOWS_INSTALLER_ASSET:
+                    (output_dir / module.WINDOWS_INSTALLER_ASSET).write_bytes(windows_installer_bytes)
+                elif pattern == module.MACOS_INSTALLER_ASSET:
+                    (output_dir / module.MACOS_INSTALLER_ASSET).write_bytes(macos_installer_bytes)
                 elif pattern == module.WINDOWS_ASSET:
                     (output_dir / module.WINDOWS_ASSET).write_bytes(windows_bytes)
                 elif pattern == module.MACOS_ASSET:
@@ -865,7 +898,9 @@ class ReleaseReadinessTests(unittest.TestCase):
             module.check_github_release(preflight, require_release=True, release_tag="v0.1.0")
 
         self.assertEqual([], preflight.errors)
-        self.assertIn("GitHub v0.1.0 checksums.txt includes both desktop zip rows", preflight.passed)
+        self.assertIn("GitHub v0.1.0 checksums.txt includes desktop installer and package rows", preflight.passed)
+        self.assertIn("GitHub v0.1.0 Humungousaur-Windows-Setup.zip hash matches checksums.txt", preflight.passed)
+        self.assertIn("GitHub v0.1.0 Humungousaur-macOS.pkg hash matches checksums.txt", preflight.passed)
         self.assertIn("GitHub v0.1.0 Humungousaur-Windows.zip hash matches checksums.txt", preflight.passed)
         self.assertIn("GitHub v0.1.0 Humungousaur-macOS.zip hash matches checksums.txt", preflight.passed)
 
@@ -890,6 +925,8 @@ class ReleaseReadinessTests(unittest.TestCase):
         module = load_release_readiness_module()
         macos_bytes = b"macos zip"
         assets = [
+            {"name": module.WINDOWS_INSTALLER_ASSET, "size": 111},
+            {"name": module.MACOS_INSTALLER_ASSET, "size": 222},
             {"name": module.WINDOWS_ASSET, "size": 123},
             {"name": module.MACOS_ASSET, "size": 456},
             {"name": module.CHECKSUMS_ASSET, "size": 789},
@@ -907,6 +944,10 @@ class ReleaseReadinessTests(unittest.TestCase):
                         f"{sha256(macos_bytes).hexdigest()}  {module.MACOS_ASSET}\n",
                         encoding="utf-8",
                     )
+                elif pattern == module.WINDOWS_INSTALLER_ASSET:
+                    (output_dir / module.WINDOWS_INSTALLER_ASSET).write_bytes(b"windows installer")
+                elif pattern == module.MACOS_INSTALLER_ASSET:
+                    (output_dir / module.MACOS_INSTALLER_ASSET).write_bytes(b"macos installer")
                 elif pattern == module.WINDOWS_ASSET:
                     (output_dir / module.WINDOWS_ASSET).write_bytes(b"windows zip")
                 elif pattern == module.MACOS_ASSET:
@@ -926,7 +967,11 @@ class ReleaseReadinessTests(unittest.TestCase):
         module = load_release_readiness_module()
         windows_bytes = b"windows zip"
         macos_bytes = b"macos zip"
+        windows_installer_bytes = b"windows installer"
+        macos_installer_bytes = b"macos installer"
         assets = [
+            {"name": module.WINDOWS_INSTALLER_ASSET, "size": 111},
+            {"name": module.MACOS_INSTALLER_ASSET, "size": 222},
             {"name": module.WINDOWS_ASSET, "size": 123},
             {"name": module.MACOS_ASSET, "size": 456},
             {"name": module.CHECKSUMS_ASSET, "size": 789},
@@ -941,10 +986,16 @@ class ReleaseReadinessTests(unittest.TestCase):
                 output_dir.mkdir(parents=True, exist_ok=True)
                 if pattern == module.CHECKSUMS_ASSET:
                     (output_dir / module.CHECKSUMS_ASSET).write_text(
+                        f"{sha256(windows_installer_bytes).hexdigest()}  {module.WINDOWS_INSTALLER_ASSET}\n"
+                        f"{sha256(macos_installer_bytes).hexdigest()}  {module.MACOS_INSTALLER_ASSET}\n"
                         f"{'0' * 64}  {module.WINDOWS_ASSET}\n"
                         f"{sha256(macos_bytes).hexdigest()}  {module.MACOS_ASSET}\n",
                         encoding="utf-8",
                     )
+                elif pattern == module.WINDOWS_INSTALLER_ASSET:
+                    (output_dir / module.WINDOWS_INSTALLER_ASSET).write_bytes(windows_installer_bytes)
+                elif pattern == module.MACOS_INSTALLER_ASSET:
+                    (output_dir / module.MACOS_INSTALLER_ASSET).write_bytes(macos_installer_bytes)
                 elif pattern == module.WINDOWS_ASSET:
                     (output_dir / module.WINDOWS_ASSET).write_bytes(windows_bytes)
                 elif pattern == module.MACOS_ASSET:

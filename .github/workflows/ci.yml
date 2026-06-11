@@ -26,6 +26,7 @@ jobs:
         run: |
           python -m py_compile \
             script/generate_release_report.py \
+            script/bootstrap_runtime.py \
             script/collect_release_artifacts.py \
             script/verify_desktop_runtime_smoke.py \
             script/verify_release_report.py \
@@ -61,6 +62,7 @@ jobs:
           name: Humungousaur-macOS-ci
           path: |
             artifacts/release/Humungousaur-macOS.zip
+            artifacts/release/Humungousaur-macOS.pkg
             artifacts/release/checksums.txt
 
   windows:
@@ -83,4 +85,5 @@ jobs:
           name: Humungousaur-Windows-ci
           path: |
             artifacts/release/Humungousaur-Windows.zip
+            artifacts/release/Humungousaur-Windows-Setup.zip
             artifacts/release/checksums.txt

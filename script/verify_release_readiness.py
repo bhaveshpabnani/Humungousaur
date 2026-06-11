@@ -19,7 +19,13 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_WEBSITE_ROOT = ROOT.parent / "Humungousaur-Website"
 WINDOWS_ASSET = "Humungousaur-Windows.zip"
 MACOS_ASSET = "Humungousaur-macOS.zip"
+WINDOWS_INSTALLER_ASSET = "Humungousaur-Windows-Setup.zip"
+MACOS_INSTALLER_ASSET = "Humungousaur-macOS.pkg"
 CHECKSUMS_ASSET = "checksums.txt"
+DESKTOP_DOWNLOAD_ASSETS = [WINDOWS_INSTALLER_ASSET, MACOS_INSTALLER_ASSET]
+DESKTOP_PACKAGE_ASSETS = [WINDOWS_ASSET, MACOS_ASSET]
+DESKTOP_HASHED_ASSETS = [WINDOWS_INSTALLER_ASSET, MACOS_INSTALLER_ASSET, WINDOWS_ASSET, MACOS_ASSET]
+REQUIRED_RELEASE_ASSETS = [WINDOWS_INSTALLER_ASSET, MACOS_INSTALLER_ASSET, WINDOWS_ASSET, MACOS_ASSET, CHECKSUMS_ASSET]
 DEFAULT_RELEASE_OWNER = os.environ.get("HUMUNGOUSAUR_RELEASE_OWNER", "bhaveshpabnani")
 DEFAULT_RELEASE_REPO = os.environ.get("HUMUNGOUSAUR_RELEASE_REPO", "Humungousaur")
 DEFAULT_RELEASE_SLUG = os.environ.get("HUMUNGOUSAUR_RELEASE_SLUG", f"{DEFAULT_RELEASE_OWNER}/{DEFAULT_RELEASE_REPO}")
@@ -222,6 +228,7 @@ def declared_env_names() -> set[str]:
         "CHROME_PATH",
         "EDGE_PATH",
         "HUMUNGOUSAUR_MACOS_CODESIGN_IDENTITY",
+        "HUMUNGOUSAUR_MACOS_INSTALLER_IDENTITY",
         "HUMUNGOUSAUR_MACOS_NOTARIZE",
         "APPLE_ID",
         "APPLE_TEAM_ID",
@@ -337,6 +344,7 @@ def check_source_tree(preflight: Preflight) -> None:
         ".github/workflows/ci.yml",
         ".github/workflows/release.yml",
         "script/build_and_run.sh",
+        "script/bootstrap_runtime.py",
         "script/collect_release_artifacts.py",
         "script/generate_release_report.py",
         "script/verify_desktop_runtime_smoke.py",
@@ -345,6 +353,7 @@ def check_source_tree(preflight: Preflight) -> None:
         "script/verify_publication_state.py",
         "script/package_macos.sh",
         "script/package_windows.ps1",
+        "script/install_windows.ps1",
         "script/verify_desktop_parity.py",
         "script/verify_macos_package.sh",
         "script/verify_windows_package.ps1",
@@ -516,6 +525,8 @@ def check_source_tree(preflight: Preflight) -> None:
         [
             WINDOWS_ASSET,
             MACOS_ASSET,
+            WINDOWS_INSTALLER_ASSET,
+            MACOS_INSTALLER_ASSET,
             CHECKSUMS_ASSET,
             "python3 script/verify_publication_state.py --require-website",
             "npm run check:publication",
@@ -540,6 +551,7 @@ def check_source_tree(preflight: Preflight) -> None:
             "npm run build",
             "npm audit --audit-level=moderate",
             "MACOS_CERTIFICATE_P12_BASE64",
+            "MACOS_INSTALLER_IDENTITY",
             "MACOS_NOTARIZE=1",
             "WINDOWS_CERTIFICATE_PFX_BASE64",
             "WINDOWS_SIGN=1",
@@ -553,6 +565,8 @@ def check_source_tree(preflight: Preflight) -> None:
             "artifacts/package/windows/publish",
             WINDOWS_ASSET,
             MACOS_ASSET,
+            WINDOWS_INSTALLER_ASSET,
+            MACOS_INSTALLER_ASSET,
             CHECKSUMS_ASSET,
             "release-readiness.md",
             "gh release view",
@@ -646,6 +660,7 @@ def check_source_tree(preflight: Preflight) -> None:
             "windows-latest",
             "MACOS_CERTIFICATE_P12_BASE64",
             "HUMUNGOUSAUR_MACOS_CODESIGN_IDENTITY",
+            "HUMUNGOUSAUR_MACOS_INSTALLER_IDENTITY",
             "startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.publish_release)",
             "publish_release",
             "Validate manual release dispatch",
@@ -669,6 +684,8 @@ def check_source_tree(preflight: Preflight) -> None:
             "contents: write",
             WINDOWS_ASSET,
             MACOS_ASSET,
+            WINDOWS_INSTALLER_ASSET,
+            MACOS_INSTALLER_ASSET,
             CHECKSUMS_ASSET,
             "verify_macos_package.sh --require-signature --require-notarization",
             "verify_windows_package.ps1 -RequireSignature",
@@ -773,6 +790,11 @@ def check_source_tree(preflight: Preflight) -> None:
         ROOT / "script/package_macos.sh",
         [
             "INSTALL.txt",
+            "Humungousaur-macOS.pkg",
+            "pkgbuild",
+            "productbuild",
+            "humungousaur-bootstrap",
+            "bootstrap_runtime.py",
             "Humungousaur macOS setup",
             'python3 -m pip install -e ".[browser,pdf,ocr,office]"',
             "python3 -m humungousaur serve",
@@ -781,6 +803,7 @@ def check_source_tree(preflight: Preflight) -> None:
             "DEEPGRAM_API_KEY",
             "channels, voice, autonomy, and approvals",
             "HUMUNGOUSAUR_MACOS_CODESIGN_IDENTITY",
+            "HUMUNGOUSAUR_MACOS_INSTALLER_IDENTITY",
             "codesign --force --deep --options runtime --timestamp",
             "xcrun notarytool submit",
             "xcrun stapler staple",
@@ -796,6 +819,10 @@ def check_source_tree(preflight: Preflight) -> None:
             ".NET SDK is required",
             "Remove-Item -Path $PublishDir -Recurse -Force",
             "INSTALL.txt",
+            "Humungousaur-Windows-Setup.zip",
+            "Install-Humungousaur.ps1",
+            "Copy-RuntimeSource",
+            "bootstrap_runtime.py",
             "Humungousaur Windows setup",
             'python -m pip install -e ".[browser,pdf,ocr,office]"',
             "python -m humungousaur serve",
@@ -815,6 +842,7 @@ def check_source_tree(preflight: Preflight) -> None:
         ROOT / "script/verify_macos_package.sh",
         [
             "Humungousaur-macOS.zip",
+            "Humungousaur-macOS.pkg",
             "INSTALL.txt",
             "CFBundleShortVersionString",
             "Version: $PROJECT_VERSION",
@@ -826,6 +854,7 @@ def check_source_tree(preflight: Preflight) -> None:
             "spctl -a -t exec",
             "--require-notarization",
             "xcrun stapler validate",
+            "pkgutil --payload-files",
             "shasum -a 256",
         ],
         "macOS package verifier checks app contents, checksum, and signature mode",
@@ -836,6 +865,7 @@ def check_source_tree(preflight: Preflight) -> None:
             "RuntimeInformation",
             "Windows package verification must run on Windows",
             "Humungousaur-Windows.zip",
+            "Humungousaur-Windows-Setup.zip",
             "INSTALL.txt",
             "Humungousaur.App.exe",
             'Get-ChildItem -Path $TempDir -Filter "*.exe" -Recurse',
@@ -851,6 +881,7 @@ def check_source_tree(preflight: Preflight) -> None:
             "Get-AuthenticodeSignature",
             "TimeStamperCertificate",
             "Get-FileHash",
+            "Install-Humungousaur.ps1",
         ],
         "Windows package verifier checks app contents, checksum, and signature mode",
     )
@@ -894,6 +925,8 @@ def check_source_tree(preflight: Preflight) -> None:
             "Humungousaur-macOS",
             "Humungousaur-Windows.zip",
             "Humungousaur-macOS.zip",
+            "Humungousaur-Windows-Setup.zip",
+            "Humungousaur-macOS.pkg",
             "checksums.txt",
             "verify_release_readiness.py",
             "--require-assets",
@@ -958,11 +991,19 @@ def check_source_tree(preflight: Preflight) -> None:
 
 def check_artifacts(preflight: Preflight, release_dir: Path, require_assets: bool) -> None:
     macos_zip = release_dir / MACOS_ASSET
+    macos_installer = release_dir / MACOS_INSTALLER_ASSET
     windows_zip = release_dir / WINDOWS_ASSET
+    windows_installer = release_dir / WINDOWS_INSTALLER_ASSET
     checksums = release_dir / CHECKSUMS_ASSET
 
     if require_assets:
-        for path, label in [(macos_zip, MACOS_ASSET), (windows_zip, WINDOWS_ASSET), (checksums, CHECKSUMS_ASSET)]:
+        for path, label in [
+            (macos_installer, MACOS_INSTALLER_ASSET),
+            (windows_installer, WINDOWS_INSTALLER_ASSET),
+            (macos_zip, MACOS_ASSET),
+            (windows_zip, WINDOWS_ASSET),
+            (checksums, CHECKSUMS_ASSET),
+        ]:
             preflight.require_file(path, f"required local release artifact {label}")
     elif not release_dir.exists():
         preflight.warn(f"local release artifact directory is absent; package scripts or CI will create release assets: {release_dir}")
@@ -1005,6 +1046,12 @@ def check_artifacts(preflight: Preflight, release_dir: Path, require_assets: boo
                 f"{MACOS_ASSET} Info.plist version metadata",
             )
 
+    if macos_installer.exists():
+        if macos_installer.stat().st_size > 0:
+            preflight.ok(f"{MACOS_INSTALLER_ASSET} is present and non-empty")
+        else:
+            preflight.fail(f"{MACOS_INSTALLER_ASSET} is empty")
+
     if windows_zip.exists():
         with zipfile.ZipFile(windows_zip) as archive:
             check_zip_entries_clean(preflight, archive, WINDOWS_ASSET)
@@ -1033,20 +1080,60 @@ def check_artifacts(preflight: Preflight, release_dir: Path, require_assets: boo
                 f"{WINDOWS_ASSET} setup instructions",
             )
 
+    if windows_installer.exists():
+        with zipfile.ZipFile(windows_installer) as archive:
+            check_zip_entries_clean(preflight, archive, WINDOWS_INSTALLER_ASSET)
+            names = set(archive.namelist())
+            required_names = {
+                "Install-Humungousaur.ps1",
+                "README.txt",
+                "runtime-source/script/bootstrap_runtime.py",
+            }
+            missing = sorted(required_names - names)
+            if missing:
+                preflight.fail(f"{WINDOWS_INSTALLER_ASSET} is missing installer entries {missing}")
+            else:
+                preflight.ok(f"{WINDOWS_INSTALLER_ASSET} contains setup script and runtime source")
+            if any(name.endswith("app/Humungousaur.App.exe") or name.endswith("/Humungousaur.App.exe") for name in names):
+                preflight.ok(f"{WINDOWS_INSTALLER_ASSET} contains the Windows app payload")
+            else:
+                preflight.fail(f"{WINDOWS_INSTALLER_ASSET} is missing app/Humungousaur.App.exe")
+            require_zip_text(
+                preflight,
+                archive,
+                "Install-Humungousaur.ps1",
+                ["InstallPythonWithWinget", "runtime-source", "Playwright Chromium", "Start Menu/Desktop shortcuts"],
+                f"{WINDOWS_INSTALLER_ASSET} installer script",
+            )
+
     if checksums.exists():
         text = checksums.read_text(encoding="utf-8")
-        expected = [name for name, path in [(MACOS_ASSET, macos_zip), (WINDOWS_ASSET, windows_zip)] if path.exists() or require_assets]
+        expected = [
+            name
+            for name, path in [
+                (MACOS_INSTALLER_ASSET, macos_installer),
+                (WINDOWS_INSTALLER_ASSET, windows_installer),
+                (MACOS_ASSET, macos_zip),
+                (WINDOWS_ASSET, windows_zip),
+            ]
+            if path.exists() or require_assets
+        ]
         missing = [name for name in expected if name not in text]
         if missing:
             preflight.fail(f"{CHECKSUMS_ASSET} is missing checksum rows for {missing}")
         else:
-            preflight.ok(f"{CHECKSUMS_ASSET} covers present required zip artifacts")
+            preflight.ok(f"{CHECKSUMS_ASSET} covers present required desktop artifacts")
         rows = {}
         for line in text.splitlines():
             parts = line.strip().split()
             if len(parts) >= 2:
                 rows[parts[-1]] = parts[0].lower()
-        for name, path in [(MACOS_ASSET, macos_zip), (WINDOWS_ASSET, windows_zip)]:
+        for name, path in [
+            (MACOS_INSTALLER_ASSET, macos_installer),
+            (WINDOWS_INSTALLER_ASSET, windows_installer),
+            (MACOS_ASSET, macos_zip),
+            (WINDOWS_ASSET, windows_zip),
+        ]:
             if not path.exists():
                 continue
             expected_hash = rows.get(name, "")
@@ -1099,8 +1186,8 @@ def check_website(preflight: Preflight, website_root: Path, require_website: boo
             "VITE_HUMUNGOUSAUR_RELEASE_REPO",
             "repositoryUrl",
             "releaseBase",
-            f"/download/{WINDOWS_ASSET}",
-            f"/download/{MACOS_ASSET}",
+            f"/download/{WINDOWS_INSTALLER_ASSET}",
+            f"/download/{MACOS_INSTALLER_ASSET}",
             f"/download/{CHECKSUMS_ASSET}",
             "desktopDownloads",
         ],
@@ -1128,7 +1215,7 @@ def check_website(preflight: Preflight, website_root: Path, require_website: boo
     )
     preflight.require_text(
         website_root / "scripts/check-release-assets.mjs",
-        ["HUMUNGOUSAUR_RELEASE_API_BASE", "releases/latest", "Humungousaur-Windows.zip", "Humungousaur-macOS.zip", "checksums.txt", "createHash", "sha256", "actualHash"],
+        ["HUMUNGOUSAUR_RELEASE_API_BASE", "releases/latest", "Humungousaur-Windows-Setup.zip", "Humungousaur-macOS.pkg", "checksums.txt", "createHash", "sha256", "actualHash"],
         "website live release asset verifier",
     )
     preflight.require_text(
@@ -1139,8 +1226,8 @@ def check_website(preflight: Preflight, website_root: Path, require_website: boo
             "missing-row",
             "missing-asset",
             "empty-asset",
-            "SHA-256 mismatch for Humungousaur-Windows.zip",
-            "checksums.txt is missing a valid SHA-256 row for Humungousaur-Windows.zip",
+            "SHA-256 mismatch for Humungousaur-Windows-Setup.zip",
+            "checksums.txt is missing a valid SHA-256 row for Humungousaur-Windows-Setup.zip",
             "is missing required assets",
             "has empty required assets",
             "Release asset checker self-test passed",
@@ -1236,13 +1323,13 @@ def check_github_release(
     payload = json.loads(result.stdout)
     assets = payload.get("assets", [])
     asset_names = {asset.get("name") for asset in assets}
-    missing = {WINDOWS_ASSET, MACOS_ASSET, CHECKSUMS_ASSET} - asset_names
+    missing = set(REQUIRED_RELEASE_ASSETS) - asset_names
     if missing:
         preflight.fail(f"GitHub {release_label} release is missing assets {sorted(missing)}")
         return
 
     preflight.ok(f"GitHub {release_label} release has expected download assets: {payload.get('url')}")
-    for asset_name in [WINDOWS_ASSET, MACOS_ASSET, CHECKSUMS_ASSET]:
+    for asset_name in REQUIRED_RELEASE_ASSETS:
         asset = next((item for item in assets if item.get("name") == asset_name), {})
         size = asset.get("size")
         if isinstance(size, int):
@@ -1255,7 +1342,7 @@ def check_github_release(
 
     with tempfile.TemporaryDirectory(prefix="humungousaur-release-") as temp_dir:
         temp_path = Path(temp_dir)
-        for asset_name in [CHECKSUMS_ASSET, WINDOWS_ASSET, MACOS_ASSET]:
+        for asset_name in [CHECKSUMS_ASSET, *DESKTOP_HASHED_ASSETS]:
             download_command = [
                 "gh",
                 "release",
@@ -1298,12 +1385,12 @@ def check_github_release(
             parts = line.strip().split()
             if len(parts) >= 2:
                 checksum_rows[parts[-1]] = parts[0].lower()
-        missing_checksum_rows = [name for name in [WINDOWS_ASSET, MACOS_ASSET] if name not in checksum_rows]
+        missing_checksum_rows = [name for name in DESKTOP_HASHED_ASSETS if name not in checksum_rows]
         if missing_checksum_rows:
             preflight.fail(f"GitHub {release_label} {CHECKSUMS_ASSET} is missing rows for {missing_checksum_rows}")
         else:
-            preflight.ok(f"GitHub {release_label} {CHECKSUMS_ASSET} includes both desktop zip rows")
-        for asset_name in [WINDOWS_ASSET, MACOS_ASSET]:
+            preflight.ok(f"GitHub {release_label} {CHECKSUMS_ASSET} includes desktop installer and package rows")
+        for asset_name in DESKTOP_HASHED_ASSETS:
             asset_path = temp_path / asset_name
             if not asset_path.is_file():
                 preflight.fail(f"GitHub {release_label} {asset_name} download did not create the expected file")

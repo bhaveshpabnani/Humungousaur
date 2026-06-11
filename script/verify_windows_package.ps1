@@ -1,5 +1,6 @@
 param(
   [string]$ZipPath,
+  [string]$InstallerZipPath,
   [string]$ChecksumPath,
   [switch]$RequireSignature
 )
@@ -23,6 +24,9 @@ $WindowsFileVersion = "$($Matches[1]).$($Matches[2]).$($Matches[3]).0"
 if ([string]::IsNullOrWhiteSpace($ZipPath)) {
   $ZipPath = Join-Path $Root "artifacts/release/Humungousaur-Windows.zip"
 }
+if ([string]::IsNullOrWhiteSpace($InstallerZipPath)) {
+  $InstallerZipPath = Join-Path $Root "artifacts/release/Humungousaur-Windows-Setup.zip"
+}
 if ([string]::IsNullOrWhiteSpace($ChecksumPath)) {
   $ChecksumPath = Join-Path $Root "artifacts/release/checksums.txt"
 }
@@ -30,31 +34,40 @@ if ([string]::IsNullOrWhiteSpace($ChecksumPath)) {
 if (-not (Test-Path $ZipPath)) {
   throw "Missing Windows release zip: $ZipPath"
 }
+if (-not (Test-Path $InstallerZipPath)) {
+  throw "Missing Windows installer zip: $InstallerZipPath"
+}
 
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-$ZipArchive = [IO.Compression.ZipFile]::OpenRead($ZipPath)
-try {
-  foreach ($Entry in $ZipArchive.Entries) {
-    $Name = [string]$Entry.FullName
-    $Normalized = [string]$Name.Replace("\", "/")
-    [string[]]$Parts = @($Normalized.Split("/") | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-    $BaseName = if ($Parts.Count -gt 0) { $Parts[-1] } else { $Normalized }
-    if (
-      $Normalized.StartsWith("/") -or
-      $Normalized.StartsWith("\") -or
-      ($Normalized.Length -ge 2 -and $Normalized[1] -eq ":") -or
-      ($Parts -contains "..") -or
-      ($Parts -contains "__MACOSX") -or
-      $BaseName -eq ".DS_Store" -or
-      $BaseName.StartsWith("._")
-    ) {
-      throw "Windows package contains unsafe or platform metadata zip entry: $Name"
+function Test-ZipEntriesClean {
+  param([string]$Path, [string]$Label)
+  $Archive = [IO.Compression.ZipFile]::OpenRead($Path)
+  try {
+    foreach ($Entry in $Archive.Entries) {
+      $Name = [string]$Entry.FullName
+      $Normalized = [string]$Name.Replace("\", "/")
+      [string[]]$Parts = @($Normalized.Split("/") | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+      $BaseName = if ($Parts.Count -gt 0) { $Parts[-1] } else { $Normalized }
+      if (
+        $Normalized.StartsWith("/") -or
+        $Normalized.StartsWith("\") -or
+        ($Normalized.Length -ge 2 -and $Normalized[1] -eq ":") -or
+        ($Parts -contains "..") -or
+        ($Parts -contains "__MACOSX") -or
+        $BaseName -eq ".DS_Store" -or
+        $BaseName.StartsWith("._")
+      ) {
+        throw "$Label contains unsafe or platform metadata zip entry: $Name"
+      }
     }
   }
+  finally {
+    $Archive.Dispose()
+  }
 }
-finally {
-  $ZipArchive.Dispose()
-}
+
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+Test-ZipEntriesClean -Path $ZipPath -Label "Windows package"
+Test-ZipEntriesClean -Path $InstallerZipPath -Label "Windows installer package"
 
 $TempDir = Join-Path ([IO.Path]::GetTempPath()) ("humungousaur-windows-package-" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force -Path $TempDir | Out-Null
@@ -117,6 +130,15 @@ try {
     if ($ExpectedHash -ne $ActualHash) {
       throw "Windows checksum mismatch. Expected $ExpectedHash, got $ActualHash"
     }
+    $ExpectedInstallerLine = Get-Content $ChecksumPath | Where-Object { $_ -match "\s+Humungousaur-Windows-Setup\.zip$" } | Select-Object -First 1
+    if ([string]::IsNullOrWhiteSpace($ExpectedInstallerLine)) {
+      throw "checksums.txt is missing Humungousaur-Windows-Setup.zip"
+    }
+    $ExpectedInstallerHash = ($ExpectedInstallerLine -split "\s+")[0].ToLowerInvariant()
+    $ActualInstallerHash = (Get-FileHash -Algorithm SHA256 $InstallerZipPath).Hash.ToLowerInvariant()
+    if ($ExpectedInstallerHash -ne $ActualInstallerHash) {
+      throw "Windows installer checksum mismatch. Expected $ExpectedInstallerHash, got $ActualInstallerHash"
+    }
   }
 
   if ($RequireSignature) {
@@ -131,7 +153,35 @@ try {
     }
   }
 
+  $InstallerTempDir = Join-Path ([IO.Path]::GetTempPath()) ("humungousaur-windows-installer-" + [Guid]::NewGuid().ToString("N"))
+  New-Item -ItemType Directory -Force -Path $InstallerTempDir | Out-Null
+  try {
+    Expand-Archive -Path $InstallerZipPath -DestinationPath $InstallerTempDir -Force
+    foreach ($Expected in @(
+      "Install-Humungousaur.ps1",
+      "README.txt",
+      "runtime-source\script\bootstrap_runtime.py"
+    )) {
+      if (-not (Test-Path (Join-Path $InstallerTempDir $Expected))) {
+        throw "Windows installer zip is missing $Expected"
+      }
+    }
+    $InstallerScript = Get-Content -Raw -Path (Join-Path $InstallerTempDir "Install-Humungousaur.ps1")
+    foreach ($ExpectedText in @("InstallPythonWithWinget", "Playwright Chromium", "Start Menu/Desktop shortcuts", "runtime-source")) {
+      if (-not $InstallerScript.Contains($ExpectedText)) {
+        throw "Windows installer script is missing expected setup text: $ExpectedText"
+      }
+    }
+    if ($null -eq (Get-ChildItem -Path (Join-Path $InstallerTempDir "app") -Filter "Humungousaur.App.exe" -Recurse | Select-Object -First 1)) {
+      throw "Windows installer zip is missing app\Humungousaur.App.exe"
+    }
+  }
+  finally {
+    Remove-Item -Path $InstallerTempDir -Recurse -Force -ErrorAction SilentlyContinue
+  }
+
   Write-Host "Verified $ZipPath"
+  Write-Host "Verified $InstallerZipPath"
 }
 finally {
   Remove-Item -Path $TempDir -Recurse -Force -ErrorAction SilentlyContinue

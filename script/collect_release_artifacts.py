@@ -22,7 +22,10 @@ DEFAULT_REPO = (
 DEFAULT_WORKFLOW = "Release Desktop Apps"
 WINDOWS_ASSET = "Humungousaur-Windows.zip"
 MACOS_ASSET = "Humungousaur-macOS.zip"
+WINDOWS_INSTALLER_ASSET = "Humungousaur-Windows-Setup.zip"
+MACOS_INSTALLER_ASSET = "Humungousaur-macOS.pkg"
 CHECKSUMS_ASSET = "checksums.txt"
+HASHED_ASSETS = [WINDOWS_INSTALLER_ASSET, MACOS_INSTALLER_ASSET, WINDOWS_ASSET, MACOS_ASSET]
 
 
 def parse_args() -> argparse.Namespace:
@@ -90,7 +93,7 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def collect_zip(download_root: Path, release_dir: Path, asset_name: str) -> Path:
+def collect_asset(download_root: Path, release_dir: Path, asset_name: str) -> Path:
     matches = sorted(download_root.rglob(asset_name))
     if not matches:
         raise RuntimeError(f"downloaded artifacts do not contain {asset_name}")
@@ -105,7 +108,7 @@ def collect_zip(download_root: Path, release_dir: Path, asset_name: str) -> Path
 def write_checksums(release_dir: Path) -> Path:
     checksum_path = release_dir / CHECKSUMS_ASSET
     rows = []
-    for asset_name in [WINDOWS_ASSET, MACOS_ASSET]:
+    for asset_name in HASHED_ASSETS:
         path = release_dir / asset_name
         if not path.is_file():
             raise RuntimeError(f"cannot write checksums; missing {path}")
@@ -159,8 +162,8 @@ def main() -> int:
             ),
             f"downloading release artifacts from run {run_id}",
         )
-        collect_zip(download_root, release_dir, WINDOWS_ASSET)
-        collect_zip(download_root, release_dir, MACOS_ASSET)
+        for asset_name in HASHED_ASSETS:
+            collect_asset(download_root, release_dir, asset_name)
 
     write_checksums(release_dir)
     if not args.skip_verify:

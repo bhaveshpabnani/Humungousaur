@@ -51,6 +51,8 @@ def main() -> int:
                 [
                     "Humungousaur-Windows.zip",
                     "Humungousaur-macOS.zip",
+                    "Humungousaur-Windows-Setup.zip",
+                    "Humungousaur-macOS.pkg",
                     "checksums.txt",
                     "sha256",
                     "--require-assets",

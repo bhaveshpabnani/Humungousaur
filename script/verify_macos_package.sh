@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ZIP_PATH="$ROOT_DIR/artifacts/release/Humungousaur-macOS.zip"
+PKG_PATH="$ROOT_DIR/artifacts/release/Humungousaur-macOS.pkg"
 CHECKSUM_PATH="$ROOT_DIR/artifacts/release/checksums.txt"
 REQUIRE_SIGNATURE=0
 REQUIRE_NOTARIZATION=0
@@ -20,6 +21,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --checksums)
       CHECKSUM_PATH="$2"
+      shift 2
+      ;;
+    --pkg-path)
+      PKG_PATH="$2"
       shift 2
       ;;
     --require-signature)
@@ -40,6 +45,10 @@ done
 
 if [[ ! -f "$ZIP_PATH" ]]; then
   echo "Missing macOS release zip: $ZIP_PATH" >&2
+  exit 1
+fi
+if [[ ! -f "$PKG_PATH" ]]; then
+  echo "Missing macOS installer pkg: $PKG_PATH" >&2
   exit 1
 fi
 
@@ -111,15 +120,35 @@ if [[ -f "$CHECKSUM_PATH" ]]; then
     echo "macOS checksum mismatch or missing row in $CHECKSUM_PATH" >&2
     exit 1
   fi
+  EXPECTED_PKG_HASH="$(awk '$2 == "Humungousaur-macOS.pkg" { print $1 }' "$CHECKSUM_PATH")"
+  ACTUAL_PKG_HASH="$(shasum -a 256 "$PKG_PATH" | awk '{ print $1 }')"
+  if [[ -z "$EXPECTED_PKG_HASH" || "$EXPECTED_PKG_HASH" != "$ACTUAL_PKG_HASH" ]]; then
+    echo "macOS installer checksum mismatch or missing row in $CHECKSUM_PATH" >&2
+    exit 1
+  fi
 fi
+
+PKG_FILES="$(pkgutil --payload-files "$PKG_PATH")"
+for expected in \
+  "Applications/Humungousaur.app/Contents/MacOS/HumungousaurMac" \
+  "Library/Application Support/Humungousaur/runtime-source/script/bootstrap_runtime.py" \
+  "usr/local/bin/humungousaur-bootstrap"; do
+  if ! grep -Fq "$expected" <<<"$PKG_FILES"; then
+    echo "macOS installer pkg is missing expected payload file: $expected" >&2
+    exit 1
+  fi
+done
 
 if [[ "$REQUIRE_SIGNATURE" == "1" ]]; then
   codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
   spctl -a -t exec -vv "$APP_BUNDLE"
+  pkgutil --check-signature "$PKG_PATH"
 fi
 
 if [[ "$REQUIRE_NOTARIZATION" == "1" ]]; then
   xcrun stapler validate "$APP_BUNDLE"
+  xcrun stapler validate "$PKG_PATH"
 fi
 
 echo "Verified $ZIP_PATH"
+echo "Verified $PKG_PATH"
