@@ -299,6 +299,8 @@ class ToolTests(unittest.TestCase):
         self.assertEqual(tools["memory_summary"].input_schema["required"], ["period"])
         self.assertEqual(tools["memory_summary"].capability_group, "memory")
         self.assertEqual(tools["memory_profile"].capability_group, "memory")
+        self.assertEqual(tools["cognitive_brain_files_refresh"].capability_group, "cognition")
+        self.assertEqual(tools["cognitive_brain_files_status"].capability_group, "cognition")
         self.assertEqual(tools["cognitive_briefing_prepare"].capability_group, "cognition")
         self.assertIn("horizon_hours", tools["cognitive_briefing_prepare"].input_schema["properties"])
         self.assertEqual(tools["cognitive_briefing_status"].capability_group, "cognition")

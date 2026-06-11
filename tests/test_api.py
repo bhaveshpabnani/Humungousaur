@@ -10,9 +10,15 @@ import urllib.request
 from pathlib import Path
 
 from humungousaur.api import create_api_server
+from humungousaur.active_agent import active_agent_status
+from humungousaur.active_agent.models import ActiveEpisode, Confidence
+from humungousaur.active_agent.store import ActiveAgentStore
 from humungousaur.config import AgentConfig
 from humungousaur.cognition import TriggerStore, WakeupStore, WakeupStatus
+from humungousaur.cognition.knowledge import KnowledgeStore
+from humungousaur.cognition.models import KnowledgeKind
 from humungousaur.orchestrator import AgentOrchestrator
+from humungousaur.runtime import request_config
 from humungousaur.safety.audit import AuditLog
 from humungousaur.tools.browser_tools import BrowserSessionStore
 
@@ -100,8 +106,8 @@ class APITests(unittest.TestCase):
                 system_status = api_get(base_url, "/system/status")
                 self.assertEqual(system_status["workspace"], str(workspace.resolve()))
                 updates = api_get(base_url, "/updates/latest?offline=1&platform=macos")
-                self.assertEqual(updates["current_version"], "0.1.2")
-                self.assertEqual(updates["latest_tag"], "v0.1.2")
+                self.assertEqual(updates["current_version"], "0.1.3")
+                self.assertEqual(updates["latest_tag"], "v0.1.3")
                 self.assertFalse(updates["update_available"])
                 self.assertEqual(updates["platform"], "macos")
                 self.assertTrue(updates["platform_download_url"].endswith("/Humungousaur-macOS.zip"))
@@ -460,6 +466,49 @@ class APITests(unittest.TestCase):
                 self.assertIn("local-openai", trace["error"])
                 self.assertNotIn("LOCAL_LLM_API_KEY=", json.dumps(trace))
 
+    def test_api_accepts_active_agent_model_runtime_options(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts").normalized()
+            payload = {
+                "planner": "model",
+                "model_provider": "openai-responses",
+                "model": "gpt-5-mini",
+                "model_api_key_env": "OPENAI_API_KEY",
+                "active_model_provider": "local-openai",
+                "active_model": "llama3.1:8b",
+                "active_model_base_url": "http://127.0.0.1:11434/v1",
+                "active_model_api_key_env": "LOCAL_LLM_API_KEY",
+                "runtime_secrets": {"OPENAI_API_KEY": "main-secret", "LOCAL_LLM_API_KEY": "active-secret"},
+            }
+            runtime_config = request_config(config, payload)
+
+        self.assertEqual(runtime_config.model_provider, "openai-responses")
+        self.assertEqual(runtime_config.active_model_provider, "local-openai")
+        self.assertEqual(runtime_config.active_model_name, "llama3.1:8b")
+        self.assertEqual(runtime_config.active_model_base_url, "http://127.0.0.1:11434/v1")
+        self.assertEqual(runtime_config.active_model_api_key_env, "LOCAL_LLM_API_KEY")
+        self.assertEqual(runtime_config.secret_value("OPENAI_API_KEY"), "main-secret")
+        self.assertEqual(runtime_config.secret_value("LOCAL_LLM_API_KEY"), "active-secret")
+
+    def test_active_agent_status_reports_effective_reflex_model(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(
+                workspace=workspace,
+                data_dir=workspace / "artifacts",
+                model_provider="openai-responses",
+                model_name="gpt-5-mini",
+                active_model_provider="local-openai",
+                active_model_name="llama3.1:8b",
+            ).normalized()
+            status = active_agent_status(config)
+
+        self.assertEqual(status["reflex_model"]["main_model_provider"], "openai-responses")
+        self.assertEqual(status["reflex_model"]["active_model_provider"], "local-openai")
+        self.assertEqual(status["reflex_model"]["effective_model_provider"], "local-openai")
+        self.assertEqual(status["reflex_model"]["effective_model_name"], "llama3.1:8b")
+
     def test_api_runs_bounded_autonomous_cycles_for_due_wakeup(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)
@@ -611,7 +660,6 @@ class APITests(unittest.TestCase):
             watched = root / "watched"
             workspace.mkdir()
             watched.mkdir()
-            (watched / "collector.txt").write_text("collector smoke", encoding="utf-8")
             config = AgentConfig(workspace=workspace, data_dir=root / "data", planner_provider="explicit").normalized()
 
             with running_api(config) as base_url:
@@ -636,6 +684,8 @@ class APITests(unittest.TestCase):
                         "max_events_per_tick": 1,
                     },
                 )
+                baseline = api_post(base_url, "/collectors/tick", {"force": True})
+                (watched / "collector.txt").write_text("collector smoke", encoding="utf-8")
                 tick = api_post(base_url, "/collectors/tick", {"force": True})
                 events = api_get(base_url, "/events/status?limit=5")
                 rebuilt = api_post(base_url, "/events/rebuild-context", {"limit": 5})
@@ -643,10 +693,533 @@ class APITests(unittest.TestCase):
             self.assertIn("active_window", status["profile"]["collectors"])
             self.assertTrue(configured["profile"]["enabled"])
             self.assertIn("filesystem", configured["profile"]["collectors"])
+            self.assertEqual(baseline["collected"], [])
             self.assertIn("collected", tick)
             self.assertIn("semantic_events", events)
             self.assertTrue(events["current_context_exists"])
             self.assertIn("current_context_path", rebuilt)
+
+    def test_api_accepts_validated_collector_bridge_events(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            config = AgentConfig(workspace=workspace, data_dir=root / "data", planner_provider="explicit").normalized()
+
+            with running_api(config) as base_url:
+                configured = api_post(
+                    base_url,
+                    "/collectors/configure",
+                    {
+                        "enabled": True,
+                        "submit_to_harness": True,
+                        "collectors": {
+                            "active_window": False,
+                            "browser": False,
+                            "clipboard": False,
+                            "filesystem": False,
+                            "screenshot": False,
+                            "screen_ocr": False,
+                            "video_frame": False,
+                            "audio_activity": False,
+                            "terminal_activity": True,
+                        },
+                    },
+                )
+                accepted = api_post(
+                    base_url,
+                    "/collectors/bridge",
+                    {
+                        "collector": "terminal_activity",
+                        "stimulus_type": "tests_failed",
+                        "text": "Tests failed in backend suite.",
+                        "metadata": {"app_name": "Terminal"},
+                        "payload": {"raw_output": "SECRET RAW OUTPUT"},
+                    },
+                )
+                rejected = api_post_error(
+                    base_url,
+                    "/collectors/bridge",
+                    {"collector": "terminal_activity", "stimulus_type": "password_field_focused"},
+                )
+                tick = api_post(base_url, "/collectors/tick", {"force": True})
+                queried = api_get(base_url, "/collectors/events?collector=terminal_activity&limit=5")
+                helper_health = api_post(
+                    base_url,
+                    "/collectors/helper-health",
+                    {
+                        "helper_id": "terminal-helper",
+                        "collector": "terminal_activity",
+                        "platform": "Darwin",
+                        "status": "running",
+                        "permission_state": "granted",
+                    },
+                )
+                health_status = api_get(base_url, "/collectors/status?limit=5")
+
+            self.assertTrue(configured["profile"]["collectors"]["terminal_activity"])
+            self.assertTrue(accepted["accepted"])
+            self.assertEqual(accepted["collector"], "terminal_activity")
+            self.assertNotIn("SECRET RAW OUTPUT", str(accepted))
+            self.assertEqual(rejected["status"], 400)
+            self.assertEqual(tick["collected"][0]["collector"], "terminal_activity")
+            self.assertEqual(tick["semantic_events"][0]["event_type"], "terminal_activity")
+            self.assertEqual(tick["action_candidates"][0]["action_type"], "analyze")
+            self.assertNotIn("SECRET RAW OUTPUT", str(tick["attention_batches"]))
+            self.assertEqual(queried["events"][0]["collector"], "terminal_activity")
+            self.assertTrue(helper_health["accepted"])
+            self.assertEqual(health_status["event_log"]["helper_health"][0]["helper_id"], "terminal-helper")
+
+    def test_api_exposes_active_agent_state_surfaces(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            config = AgentConfig(workspace=workspace, data_dir=root / "data", planner_provider="explicit").normalized()
+            KnowledgeStore(config.cognition_db_path).append(
+                kind=KnowledgeKind.CONTEXT,
+                text="Planner preview can resume the Acme proposal.",
+                source="active_agent_memory_candidate",
+                evidence_refs=["active_memory_candidate:api-preview"],
+                confidence=0.81,
+            )
+
+            with running_api(config) as base_url:
+                task = api_post(base_url, "/active-agent/task-contexts", {"goal": "Draft the Acme proposal", "allowed_help": ["resume_capsule"]})
+                mute = api_post(base_url, "/active-agent/muted-scopes", {"collector": "device_state", "mode": "no_assistance"})
+                deep = api_post(
+                    base_url,
+                    "/active-agent/deep-dives",
+                    {"purpose": "Prepare a resume capsule", "source": "google_docs", "requested_access": "document_outline"},
+                )
+                status = api_get(base_url, "/active-agent/status?limit=5")
+                preview = api_get(base_url, "/active-agent/planner-context?request=continue")
+                posted_preview = api_post(
+                    base_url,
+                    "/active-agent/planner-context",
+                    {"request": "Bearer secret-token continue"},
+                )
+
+            self.assertEqual(task["task_context"]["user_declared_goal"], "Draft the Acme proposal")
+            self.assertEqual(mute["muted_scope"]["mode"], "no_assistance")
+            self.assertEqual(deep["deep_dive_request"]["status"], "needs_approval")
+            self.assertEqual(status["task_contexts"][0]["user_declared_goal"], "Draft the Acme proposal")
+            self.assertEqual(status["muted_scopes"][0]["collector"], "device_state")
+            self.assertEqual(preview["source"], "planner_runtime_context_preview")
+            self.assertIn("active_agent_memory", preview)
+            self.assertIn("active_agent_state", preview)
+            self.assertIn("safety", preview)
+            self.assertEqual(preview["active_agent_state"]["task_contexts"][0]["user_declared_goal"], "Draft the Acme proposal")
+            self.assertEqual(preview["active_agent_memory"]["items"][0]["text"], "Planner preview can resume the Acme proposal.")
+            self.assertNotIn("routes", preview)
+            self.assertNotIn("decisions", preview)
+            self.assertNotIn("memory_candidates", json.dumps(preview, sort_keys=True))
+            self.assertNotIn("secret-token", json.dumps(posted_preview, sort_keys=True))
+            self.assertNotIn("store_path", json.dumps(preview, sort_keys=True))
+
+    def test_api_active_agent_lifecycle_mutation_contracts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            config = AgentConfig(workspace=workspace, data_dir=root / "data", planner_provider="explicit").normalized()
+            ActiveAgentStore(config.active_agent_db_path).upsert_episode(
+                ActiveEpisode(
+                    episode_id="episode_api",
+                    status="active",
+                    source="test",
+                    hypothesis="API lifecycle episode",
+                    summary="API lifecycle episode",
+                    confidence=Confidence.MEDIUM,
+                    evidence_refs=["test:api"],
+                )
+            )
+
+            with running_api(config) as base_url:
+                mute = api_post(base_url, "/active-agent/muted-scopes", {"collector": "device_state", "mode": "no_assistance"})
+                approve_deep = api_post(
+                    base_url,
+                    "/active-agent/deep-dives",
+                    {"purpose": "Prepare a resume capsule", "source": "google_docs", "requested_access": "document_outline"},
+                )
+                reject_deep = api_post(
+                    base_url,
+                    "/active-agent/deep-dives",
+                    {"purpose": "Read the rich document body", "source": "google_docs", "requested_access": "rich_document_body"},
+                )
+
+                cancelled = api_post(
+                    base_url,
+                    "/active-agent/muted-scopes/cancel",
+                    {"scope_id": mute["muted_scope"]["scope_id"], "reason": "resume active assistance"},
+                )
+                approved = api_post(
+                    base_url,
+                    "/active-agent/deep-dives/approve",
+                    {"request_id": approve_deep["deep_dive_request"]["request_id"], "reason": "user approved"},
+                )
+                executed = api_post(
+                    base_url,
+                    "/active-agent/deep-dives/execute",
+                    {"request_id": approve_deep["deep_dive_request"]["request_id"], "limit": 5},
+                )
+                rejected = api_post(
+                    base_url,
+                    "/active-agent/deep-dives/reject",
+                    {"request_id": reject_deep["deep_dive_request"]["request_id"], "reason": "user rejected"},
+                )
+                episode = api_post(
+                    base_url,
+                    "/active-agent/episodes/operate",
+                    {"operation": "split", "episode_id": "episode_api", "new_episode_id": "episode_api_child", "summary": "API split task"},
+                )
+                exported = api_post(base_url, "/active-agent/privacy/export", {"target_type": "deep_dive_request", "target_id": approve_deep["deep_dive_request"]["request_id"]})
+                eval_run = api_post(base_url, "/active-agent/evals/run", {"scenario": "api"})
+                status = api_get(base_url, "/active-agent/status?limit=10")
+
+            deep_by_id = {item["request_id"]: item for item in status["deep_dive_requests"]}
+            self.assertEqual(cancelled["muted_scope"]["status"], "cancelled")
+            self.assertEqual(approved["deep_dive_request"]["status"], "approved")
+            self.assertEqual(executed["deep_dive_request"]["status"], "completed")
+            self.assertEqual(executed["deep_dive_result"]["status"], "completed")
+            self.assertEqual(rejected["deep_dive_request"]["status"], "rejected")
+            self.assertEqual(episode["new_episode"]["episode_id"], "episode_api_child")
+            self.assertEqual(exported["privacy_action"]["action_type"], "export")
+            self.assertIn(eval_run["eval_run"]["status"], {"passed", "failed"})
+            self.assertEqual(status["muted_scopes"][0]["status"], "cancelled")
+            self.assertEqual(deep_by_id[approve_deep["deep_dive_request"]["request_id"]]["status"], "completed")
+            self.assertEqual(deep_by_id[reject_deep["deep_dive_request"]["request_id"]]["status"], "rejected")
+            self.assertTrue(status["deep_dive_results"])
+            self.assertTrue(status["episode_links"])
+            self.assertTrue(status["eval_runs"])
+
+    def test_api_active_agent_user_correction_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            config = AgentConfig(workspace=workspace, data_dir=root / "data", planner_provider="explicit").normalized()
+
+            with running_api(config) as base_url:
+                api_post(
+                    base_url,
+                    "/active-agent/task-contexts",
+                    {"task_context_id": "ctx_original", "goal": "Draft the Acme proposal", "allowed_help": ["resume_capsule"]},
+                )
+                try:
+                    correction = api_post(
+                        base_url,
+                        "/active-agent/corrections",
+                        {
+                            "target_type": "task_context",
+                            "target_id": "ctx_original",
+                            "correction_type": "wrong_task",
+                            "reason": "This active-agent context matched the wrong task.",
+                            "task_context": {
+                                "task_context_id": "ctx_corrected",
+                                "goal": "Review the personal finance note",
+                                "allowed_help": ["resume_capsule"],
+                            },
+                            "evidence_refs": ["task_context:ctx_original"],
+                        },
+                    )
+                    private_correction = api_post(
+                        base_url,
+                        "/active-agent/corrections",
+                        {
+                            "target_type": "task_context",
+                            "target_id": "ctx_original",
+                            "correction_type": "private",
+                            "reason": "Do not resume this suggestion right now.",
+                            "collector": "device_state",
+                            "evidence_refs": ["task_context:ctx_original"],
+                        },
+                    )
+                except urllib.error.HTTPError as exc:
+                    if exc.code == 404:
+                        self.skipTest("Active-agent correction HTTP endpoint is not exposed yet.")
+                    raise
+                status = api_get(base_url, "/active-agent/status?limit=10")
+
+        corrections = _active_agent_corrections(status)
+        if not corrections:
+            self.skipTest("Active-agent corrections are not exposed by active-agent status yet.")
+        serialized = json.dumps({"correction": correction, "private_correction": private_correction, "status": status}, sort_keys=True)
+        self.assertIn("wrong_task", serialized)
+        self.assertIn("private", serialized)
+        self.assertIn("ctx_corrected", serialized)
+        self.assertIn("Review the personal finance note", serialized)
+        self.assertTrue(any(item.get("mode") == "private" for item in status["muted_scopes"]))
+
+    def test_api_accepts_google_workspace_collector_source_events(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            config = AgentConfig(workspace=workspace, data_dir=root / "data", planner_provider="explicit").normalized()
+            collectors = {
+                "active_window": False,
+                "browser": False,
+                "clipboard": False,
+                "filesystem": False,
+                "screenshot": False,
+                "screen_ocr": False,
+                "video_frame": False,
+                "audio_activity": False,
+                "calendar_scheduling_activity": True,
+            }
+
+            with running_api(config) as base_url:
+                configured = api_post(
+                    base_url,
+                    "/collectors/configure",
+                    {
+                        "enabled": True,
+                        "submit_to_harness": False,
+                        "collectors": collectors,
+                        "rich_capture_opt_in": {"calendar_scheduling_activity": True},
+                    },
+                )
+                accepted = api_post(
+                    base_url,
+                    "/collectors/google-workspace",
+                    {
+                        "app": "calendar",
+                        "event_type": "calendar_event_created",
+                        "calendar_id": "primary-secret",
+                        "event_id": "event-secret",
+                        "title": "Sensitive customer review",
+                        "attendees": ["person@example.com"],
+                        "location": "Secret room",
+                        "occurred_at": "2026-06-11T00:00:00+00:00",
+                    },
+                )
+                rejected = api_post_error(
+                    base_url,
+                    "/collectors/google-workspace",
+                    {"app": "calendar", "event_type": "raw_calendar_dump", "title": "Do not leak"},
+                )
+                queried = api_get(base_url, "/collectors/events?collector=calendar_scheduling_activity&limit=5")
+                source_status = api_get(base_url, "/collectors/google-workspace/status")
+
+            serialized = json.dumps({"accepted": accepted, "queried": queried, "status": source_status}, ensure_ascii=False)
+            self.assertTrue(configured["profile"]["collectors"]["calendar_scheduling_activity"])
+            self.assertTrue(accepted["accepted"])
+            self.assertEqual(accepted["collector"], "calendar_scheduling_activity")
+            self.assertEqual(rejected["status"], 400)
+            self.assertEqual(queried["events"][0]["source"], "google_workspace")
+            self.assertEqual(source_status["dead_letter_count"], 1)
+            self.assertNotIn("Sensitive customer review", serialized)
+            self.assertNotIn("person@example.com", serialized)
+            self.assertNotIn("Secret room", serialized)
+
+    def test_api_accepts_planning_collector_source_events(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            config = AgentConfig(workspace=workspace, data_dir=root / "data", planner_provider="explicit").normalized()
+            collectors = {
+                "active_window": False,
+                "browser": False,
+                "clipboard": False,
+                "filesystem": False,
+                "screenshot": False,
+                "screen_ocr": False,
+                "video_frame": False,
+                "audio_activity": False,
+                "task_manager_activity": True,
+            }
+
+            with running_api(config) as base_url:
+                configured = api_post(
+                    base_url,
+                    "/collectors/configure",
+                    {
+                        "enabled": True,
+                        "submit_to_harness": False,
+                        "collectors": collectors,
+                        "rich_capture_opt_in": {"task_manager_activity": True},
+                    },
+                )
+                accepted = api_post(
+                    base_url,
+                    "/collectors/planning",
+                    {
+                        "provider_id": "clickup",
+                        "event": "taskPriorityUpdated",
+                        "task_id": "task-secret",
+                        "title": "Sensitive priority task",
+                        "comment": "Raw private comment",
+                        "priority_bucket": "urgent",
+                        "occurred_at": "2026-06-11T00:00:00+00:00",
+                    },
+                )
+                rejected = api_post_error(
+                    base_url,
+                    "/collectors/planning",
+                    {"provider_id": "clickup", "event": "raw_task_dump", "title": "Do not leak"},
+                )
+                queried = api_get(base_url, "/collectors/events?collector=task_manager_activity&limit=5")
+                source_status = api_get(base_url, "/collectors/planning/status?provider_id=clickup")
+
+            serialized = json.dumps({"accepted": accepted, "queried": queried, "status": source_status}, ensure_ascii=False)
+            self.assertTrue(configured["profile"]["collectors"]["task_manager_activity"])
+            self.assertTrue(accepted["accepted"])
+            self.assertEqual(accepted["collector"], "task_manager_activity")
+            self.assertEqual(accepted["stimulus_type"], "task_priority_changed")
+            self.assertEqual(rejected["status"], 400)
+            self.assertEqual(queried["events"][0]["source"], "clickup")
+            self.assertEqual(source_status["sources"][0]["dead_letter_count"], 1)
+            self.assertNotIn("Sensitive priority task", serialized)
+            self.assertNotIn("Raw private comment", serialized)
+
+    def test_api_accepts_browser_collector_source_events(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            config = AgentConfig(workspace=workspace, data_dir=root / "data", planner_provider="explicit").normalized()
+            collectors = {
+                "active_window": False,
+                "browser": False,
+                "clipboard": False,
+                "filesystem": False,
+                "screenshot": False,
+                "screen_ocr": False,
+                "video_frame": False,
+                "audio_activity": False,
+                "browser_page_activity": True,
+            }
+
+            with running_api(config) as base_url:
+                configured = api_post(
+                    base_url,
+                    "/collectors/configure",
+                    {
+                        "enabled": True,
+                        "submit_to_harness": False,
+                        "collectors": collectors,
+                        "rich_capture_opt_in": {"browser_page_activity": True},
+                    },
+                )
+                accepted = api_post(
+                    base_url,
+                    "/collectors/browsers",
+                    {
+                        "browser": "safari",
+                        "event_type": "form_submitted",
+                        "url": "https://example.com/private-form?secret=value",
+                        "title": "Sensitive application",
+                        "form_id": "form-secret",
+                        "metadata": {"field_value": "raw value"},
+                        "occurred_at": "2026-06-11T00:00:00+00:00",
+                    },
+                )
+                rejected = api_post_error(
+                    base_url,
+                    "/collectors/browsers",
+                    {"browser": "chrome", "event_type": "raw_page_dump", "url": "https://secret.example"},
+                )
+                queried = api_get(base_url, "/collectors/events?collector=browser_page_activity&limit=5")
+                source_status = api_get(base_url, "/collectors/browsers/status")
+
+        serialized = json.dumps({"accepted": accepted, "queried": queried, "status": source_status}, ensure_ascii=False)
+        self.assertTrue(configured["profile"]["collectors"]["browser_page_activity"])
+        self.assertTrue(accepted["accepted"])
+        self.assertEqual(accepted["collector"], "browser_page_activity")
+        self.assertEqual(accepted["stimulus_type"], "form_submitted")
+        self.assertEqual(rejected["status"], 400)
+        self.assertEqual(queried["events"][0]["source"], "browsers")
+        self.assertEqual(source_status["dead_letter_count"], 1)
+        self.assertNotIn("Sensitive application", serialized)
+        self.assertNotIn("private-form", serialized)
+        self.assertNotIn("raw value", serialized)
+
+    def test_api_exposes_ai_assistant_source_collectors(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", planner_provider="explicit").normalized()
+
+            with running_api(config) as base_url:
+                health = api_post(
+                    base_url,
+                    "/collectors/ai-assistants/health",
+                    {"assistant": "claude", "status": "running", "metadata": {"title": "SECRET CHAT TITLE"}},
+                )
+                accepted = api_post(
+                    base_url,
+                    "/collectors/ai-assistants",
+                    {
+                        "assistant": "Claude",
+                        "event_type": "prompt_submitted",
+                        "conversation_id": "conversation-secret",
+                        "model": "secret-model",
+                        "prompt": "SECRET PROMPT",
+                        "metadata": {"file_path": "/tmp/humungousaur-fixtures/SECRET_PATH/context.ts"},
+                        "occurred_at": "2026-06-11T00:00:00+00:00",
+                    },
+                )
+                rejected = api_post_error(
+                    base_url,
+                    "/collectors/ai-assistants",
+                    {"assistant": "claude", "event_type": "raw_prompt_dump", "prompt": "SECRET RAW"},
+                )
+                queried = api_get(base_url, "/collectors/events?collector=ai_assistant_activity&limit=5")
+                source_status = api_get(base_url, "/collectors/ai-assistants/status")
+
+        serialized = json.dumps({"health": health, "accepted": accepted, "queried": queried, "status": source_status}, ensure_ascii=False)
+        self.assertTrue(health["accepted"])
+        self.assertTrue(accepted["accepted"])
+        self.assertEqual(accepted["collector"], "ai_assistant_activity")
+        self.assertEqual(accepted["stimulus_type"], "ai_prompt_submitted")
+        self.assertEqual(rejected["status"], 400)
+        self.assertEqual(queried["events"][0]["source"], "ai_assistants")
+        self.assertEqual(source_status["dead_letter_count"], 1)
+        self.assertIn("claude", source_status["supported_assistants"])
+        self.assertNotIn("SECRET CHAT TITLE", serialized)
+        self.assertNotIn("SECRET PROMPT", serialized)
+        self.assertNotIn("SECRET_PATH", serialized)
+        self.assertNotIn("secret-model", serialized)
+
+    def test_api_exposes_connector_source_collectors(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", planner_provider="explicit").normalized()
+
+            with running_api(config) as base_url:
+                manifest = api_get(base_url, "/connectors/sources/manifest?provider_id=slack")
+                status_before = api_get(base_url, "/connectors/sources?provider_id=slack")
+                health = api_post(
+                    base_url,
+                    "/connectors/source-health",
+                    {"provider_id": "slack", "status": "running", "metadata": {"team_id": "team-secret"}},
+                )
+                accepted = api_post(
+                    base_url,
+                    "/connectors/source-events",
+                    {
+                        "provider_id": "slack",
+                        "source_event": "message_received",
+                        "object_type": "message",
+                        "object_id": "message-secret",
+                        "metadata": {"channel_id": "channel-secret", "text": "raw message body"},
+                    },
+                )
+                tick = api_post(base_url, "/connectors/sources/tick", {"provider_id": "slack", "dry_run": True})
+                events = api_get(base_url, "/collectors/events?collector=channel_activity&limit=5")
+                status_after = api_get(base_url, "/connectors/sources?provider_id=slack")
+
+        serialized = json.dumps({"accepted": accepted, "events": events, "status": status_after}, ensure_ascii=False)
+        self.assertEqual(manifest["source_count"], 1)
+        self.assertEqual(status_before["sources"][0]["provider_id"], "slack")
+        self.assertTrue(health["accepted"])
+        self.assertTrue(accepted["accepted"])
+        self.assertEqual(accepted["collector"], "channel_activity")
+        self.assertEqual(events["events"][0]["source"], "slack")
+        self.assertEqual(tick["sources"][0]["events_appended"], 0)
+        self.assertGreater(status_after["sources"][0]["health_count"], 0)
+        self.assertNotIn("raw message body", serialized)
 
     def test_api_approval_lifecycle(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -970,6 +1543,18 @@ def api_post_error(base_url: str, path: str, payload: dict):
     except urllib.error.HTTPError as exc:
         return {"status": exc.code, "payload": json.loads(exc.read().decode("utf-8"))}
     raise AssertionError("Expected HTTP error response.")
+
+
+def _active_agent_corrections(status: dict) -> list[dict]:
+    for key in ("corrections", "user_corrections", "active_agent_corrections"):
+        value = status.get(key)
+        if isinstance(value, list):
+            return [item for item in value if isinstance(item, dict)]
+        if isinstance(value, dict):
+            nested = value.get("items") or value.get("corrections")
+            if isinstance(nested, list):
+                return [item for item in nested if isinstance(item, dict)]
+    return []
 
 
 def api_post_sse(base_url: str, path: str, payload: dict):

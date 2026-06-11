@@ -31,6 +31,8 @@ from humungousaur.cognition import (
     InteractionReviewStore,
     KnowledgeStore,
     LearningStore,
+    cognitive_markdown_status,
+    refresh_cognitive_markdown,
     ModelBriefingProvider,
     ModelCommitmentReviewProvider,
     ModelCurationProvider,
@@ -150,6 +152,7 @@ class CognitiveStateTool(Tool):
             "recent_priority_reviews": [asdict(record) for record in priority_reviews],
             "scheduled_wakeups": [asdict(wakeup) for wakeup in wakeups],
             "active_triggers": [asdict(trigger) for trigger in triggers],
+            "brain_files": cognitive_markdown_status(config),
         }
         return ToolResult(
             self.name,
@@ -157,6 +160,67 @@ class CognitiveStateTool(Tool):
             self.risk_level,
             f"Cognitive state: {len(payload['active_goals'])} active goals, {len(payload['active_tasks'])} active tasks, {len(payload['knowledge'])} knowledge records, {len(payload['skills'])} skills, {len(payload['specialists'])} specialists, {len(payload['consolidations'])} consolidations, {len(payload['wakeups'])} wakeups, {len(payload['triggers'])} triggers, {len(payload['recoveries'])} recoveries, {len(payload['briefings'])} briefings, {len(payload['curations'])} curations, {len(payload['skill_evolutions'])} skill evolutions, {len(payload['persona_evolutions'])} persona evolutions, {len(payload['self_reviews'])} self-reviews, {len(payload['interaction_reviews'])} interaction reviews, {len(payload['commitments'])} commitments, {len(payload['commitment_reviews'])} commitment reviews, {len(payload['environment'])} environment records, {len(payload['environment_reviews'])} environment reviews, {len(payload['priority_reviews'])} priority reviews.",
             payload,
+        )
+
+
+class CognitiveBrainFilesRefreshTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="cognitive_brain_files_refresh",
+            description="Refresh persona.md, soul.md, sold.md, conscious.md, and subconscious.md from durable cognitive state.",
+            risk_level=RiskLevel.MEDIUM,
+            input_schema=object_input_schema(
+                {
+                    "include_state": {"type": "boolean", "description": "Attach the bounded raw cognitive state used for the refresh."},
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 20},
+                }
+            ),
+            capability_group="cognition",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        limit = min(int(tool_input.get("limit") or 8), 20)
+        snapshot = CognitiveRecorder(config).snapshot()
+        if config.dry_run:
+            return ToolResult(
+                self.name,
+                ActionStatus.SKIPPED,
+                self.risk_level,
+                "Dry run: would refresh cognitive brain markdown files.",
+                {"state": _snapshot_payload(snapshot, limit=limit)},
+            )
+        refresh = refresh_cognitive_markdown(config, snapshot)
+        payload: dict[str, Any] = {"brain_files": refresh}
+        if bool(tool_input.get("include_state", False)):
+            payload["state"] = _snapshot_payload(snapshot, limit=limit)
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Refreshed {len(refresh['files'])} cognitive brain markdown file(s).",
+            payload,
+        )
+
+
+class CognitiveBrainFilesStatusTool(Tool):
+    def __init__(self) -> None:
+        super().__init__(
+            name="cognitive_brain_files_status",
+            description="Inspect generated cognitive brain markdown files and their local paths.",
+            risk_level=RiskLevel.LOW,
+            input_schema=object_input_schema({}),
+            capability_group="cognition",
+        )
+
+    def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
+        status = cognitive_markdown_status(config)
+        existing = sum(1 for item in status["files"].values() if item["exists"])
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            f"Found {existing} cognitive brain markdown file(s).",
+            {"brain_files": status},
         )
 
 
@@ -1358,7 +1422,14 @@ class CognitivePersonaUpdateTool(Tool):
             return ToolResult(self.name, ActionStatus.SKIPPED, self.risk_level, "Dry run: would update persona.", {"kind": kind, "text": text})
         store = PersonaStore(config.persona_path)
         profile = store.add_fact(text) if kind == "fact" else store.add_preference(text)
-        return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, "Updated assistant persona.", {"persona": asdict(profile)})
+        refresh = refresh_cognitive_markdown(config, CognitiveRecorder(config).snapshot())
+        return ToolResult(
+            self.name,
+            ActionStatus.SUCCEEDED,
+            self.risk_level,
+            "Updated assistant persona.",
+            {"persona": asdict(profile), "brain_files": refresh},
+        )
 
 
 class CognitivePersonaEvolveTool(Tool):
@@ -1396,7 +1467,8 @@ class CognitivePersonaEvolveTool(Tool):
             provider=_build_persona_evolution_provider(config),
         )
         evolution = engine.evolve(snapshot=snapshot, purpose=purpose)
-        payload: dict[str, Any] = {"persona_evolution": asdict(evolution)}
+        refresh = refresh_cognitive_markdown(config, CognitiveRecorder(config).snapshot())
+        payload: dict[str, Any] = {"persona_evolution": asdict(evolution), "brain_files": refresh}
         if bool(tool_input.get("include_state", False)) or evolution.status.value == "skipped":
             payload["state"] = _snapshot_payload(snapshot, limit=limit)
         return ToolResult(
@@ -2383,6 +2455,8 @@ def default_cognition_tools() -> dict[str, Tool]:
         AutonomousQueueStatusTool(),
         AutonomousTaskGraphCreateTool(),
         AutonomousCycleRunTool(),
+        CognitiveBrainFilesRefreshTool(),
+        CognitiveBrainFilesStatusTool(),
     ]
     return {tool.name: tool for tool in tools}
 

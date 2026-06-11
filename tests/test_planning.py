@@ -1384,6 +1384,94 @@ class ModelPlanProviderTests(unittest.TestCase):
         self.assertIn('"url"', prompt)
         self.assertIn("retrieved data", prompt)
 
+    def test_model_prompt_includes_active_agent_memory_with_evidence(self) -> None:
+        provider = ModelPlanProvider(
+            StaticModelClient('{"steps":[]}'),
+            allowed_tools={"conversation_response_prepare"},
+            tool_catalog={
+                "conversation_response_prepare": {
+                    "description": "Prepare a concise response.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {"type": "object", "properties": {"response": {"type": "string"}}, "required": ["response"]},
+                    "capability_group": "conversation",
+                }
+            },
+            fallback=ExplicitFallbackPlanProvider(),
+        )
+
+        prompt = provider._build_prompt(
+            "what was I doing?",
+            {
+                "active_agent_memory": {
+                    "source": "active_agent_memory_candidate",
+                    "limit": 5,
+                    "privacy": "safe summaries only",
+                    "items": [
+                        {
+                            "knowledge_id": "knowledge-1",
+                            "kind": "context",
+                            "text": "User was drafting the Acme proposal.",
+                            "confidence": 0.82,
+                            "evidence_refs": ["active_memory_candidate:mem-1", "collector_event:42"],
+                            "created_at": "2026-06-11T00:00:00+00:00",
+                            "updated_at": "2026-06-11T00:01:00+00:00",
+                        }
+                    ],
+                }
+            },
+        )
+
+        self.assertIn("active_agent_memory", prompt)
+        self.assertIn("User was drafting the Acme proposal.", prompt)
+        self.assertIn("active_memory_candidate:mem-1", prompt)
+        self.assertIn("safe summaries only", prompt)
+
+    def test_model_prompt_includes_active_agent_state_without_harness_output(self) -> None:
+        provider = ModelPlanProvider(
+            StaticModelClient('{"steps":[]}'),
+            allowed_tools={"conversation_response_prepare"},
+            tool_catalog={
+                "conversation_response_prepare": {
+                    "description": "Prepare a concise response.",
+                    "risk_level": "low",
+                    "requires_approval": False,
+                    "input_schema": {"type": "object", "properties": {"response": {"type": "string"}}, "required": ["response"]},
+                    "capability_group": "conversation",
+                }
+            },
+            fallback=ExplicitFallbackPlanProvider(),
+        )
+
+        prompt = provider._build_prompt(
+            "continue the current work",
+            {
+                "active_agent_state": {
+                    "source": "active_agent_runtime",
+                    "privacy": "safe active-agent summaries only",
+                    "task_contexts": [{"task_context_id": "ctx-1", "summary": "Drafting Acme proposal.", "evidence_refs": ["correction:helpful"]}],
+                    "activations": [
+                        {
+                            "activation_id": "act-1",
+                            "status": "prepared",
+                            "posture": "prepare",
+                            "agent_stimulus": "Prepare resume capsule.",
+                            "evidence_refs": ["collector_event:12"],
+                            "harness_result": {"response": "private result should not be present"},
+                        }
+                    ],
+                    "resume_capsules": [{"capsule_id": "cap-1", "summary": "Resume Acme proposal.", "event_sequence": 12}],
+                }
+            },
+        )
+
+        self.assertIn("active_agent_state", prompt)
+        self.assertIn("Drafting Acme proposal.", prompt)
+        self.assertIn("collector_event:12", prompt)
+        self.assertIn("Resume Acme proposal.", prompt)
+        self.assertNotIn("harness_result", prompt)
+        self.assertNotIn("private result should not be present", prompt)
+
     def test_model_prompt_templates_are_loaded_from_bundled_resource(self) -> None:
         templates = load_prompt_templates()
         expected_templates = {

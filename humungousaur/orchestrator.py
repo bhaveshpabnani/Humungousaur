@@ -5,9 +5,11 @@ from dataclasses import asdict
 from datetime import datetime
 import json
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
+from humungousaur.active_agent.store import ActiveAgentStore
 from humungousaur.cognition import CognitiveRecorder
+from humungousaur.cognition.knowledge import KnowledgeStore
 from humungousaur.config import AgentConfig
 from humungousaur.env import load_workspace_environment
 from humungousaur.executor import Executor
@@ -74,6 +76,17 @@ class AgentOrchestrator:
 
     def _build_model_client(self) -> ModelClient:
         return build_model_client(self.config)
+
+    def active_agent_planner_context_preview(self, request: str = "") -> dict[str, object]:
+        context = self._planning_context(request=request)
+        return {
+            "source": "planner_runtime_context_preview",
+            "request": redact_secrets(" ".join(str(request or "").split()))[:500],
+            "privacy": "redacted preview of planner-visible active-agent lanes; raw status/debug payloads are excluded",
+            "active_agent_memory": context.get("active_agent_memory", {}),
+            "active_agent_state": context.get("active_agent_state", {}),
+            "safety": context.get("safety", {}),
+        }
 
     def run(
         self,
@@ -467,6 +480,8 @@ class AgentOrchestrator:
             "activity_policy": self._activity_policy_context(),
             "user_profile": compact_user_profile(build_user_profile(self.memory, limit=100), per_section=3),
             "cognition": self._cognitive_context(),
+            "active_agent_memory": self._active_agent_memory_context(),
+            "active_agent_state": self._active_agent_state_context(),
             "browser_sessions": self._browser_context(),
             "available_workspace_skills": workspace_skills,
             "active_workspace_skills": self._selected_workspace_skill_context(request, workspace_skills),
@@ -721,12 +736,274 @@ class AgentOrchestrator:
         policy = ActivityPolicyStore(activity_policy_path(self.config)).load()
         visible: list[dict[str, object]] = []
         for event in self.memory.tail(limit=15):
+            if _active_agent_internal_memory_event(event):
+                continue
             if event.get("event_type") == "activity_event" and not _activity_event_visible(event, policy):
                 continue
             visible.append(event)
             if len(visible) >= 5:
                 break
         return visible
+
+    def _active_agent_memory_context(self) -> dict[str, object]:
+        try:
+            records = KnowledgeStore(self.config.cognition_db_path).list(
+                limit=5,
+                source="active_agent_memory_candidate",
+                min_confidence=0.5,
+            )
+        except Exception:
+            records = []
+        return {
+            "source": "active_agent_memory_candidate",
+            "limit": 5,
+            "min_confidence": 0.5,
+            "recency": "most_recent_updated_at",
+            "privacy": "safe summaries only; raw collector payloads are not included",
+            "items": [
+                {
+                    "knowledge_id": record.knowledge_id,
+                    "kind": record.kind.value,
+                    "text": record.text[:1_000],
+                    "confidence": record.confidence,
+                    "evidence_refs": record.evidence_refs[:12],
+                    "created_at": record.created_at,
+                    "updated_at": record.updated_at,
+                }
+                for record in records
+            ],
+        }
+
+    def _active_agent_state_context(self) -> dict[str, object]:
+        try:
+            store = ActiveAgentStore(self.config.active_agent_db_path)
+            task_contexts = [
+                self._active_agent_task_context_item(item)
+                for item in store.task_contexts(limit=6)
+                if str(item.get("status") or "") in {"active", "waiting", "paused"}
+            ][:4]
+            episodes = [
+                self._active_agent_episode_item(item)
+                for item in store.episodes(limit=6)
+                if str(item.get("status") or "") in {"active", "waiting", "paused"}
+            ][:4]
+            activations = [
+                self._active_agent_activation_item(item)
+                for item in store.activations(limit=8)
+                if str(item.get("status") or "") in {"prepared", "pending", "submitted", "failed"}
+            ][:4]
+            resume_capsules = [
+                self._active_agent_resume_capsule_item(item)
+                for item in store.resume_capsules(limit=6)
+                if str(item.get("status") or "") == "active"
+            ][:3]
+            deep_dive_requests = [
+                self._active_agent_deep_dive_item(item)
+                for item in store.deep_dive_requests(limit=6)
+                if str(item.get("status") or "") in {"needs_approval", "approved", "blocked_by_policy"}
+            ][:3]
+            deep_dive_results = [
+                self._active_agent_deep_dive_result_item(item)
+                for item in store.deep_dive_results(limit=6)
+                if str(item.get("status") or "") == "completed"
+            ][:3]
+            activation_responses = [self._active_agent_activation_response_item(item) for item in store.activation_responses(limit=6)][:3]
+            episode_links = [self._active_agent_episode_link_item(item) for item in store.episode_links(limit=6)][:3]
+            muted_scopes = [
+                self._active_agent_muted_scope_item(item)
+                for item in store.muted_scopes(limit=6)
+                if str(item.get("status") or "") == "active"
+            ][:3]
+            explanations = [self._active_agent_explanation_item(item) for item in store.explanations(limit=4)][:4]
+        except Exception:
+            task_contexts = []
+            episodes = []
+            activations = []
+            resume_capsules = []
+            deep_dive_requests = []
+            deep_dive_results = []
+            activation_responses = []
+            episode_links = []
+            muted_scopes = []
+            explanations = []
+        return {
+            "source": "active_agent_runtime",
+            "privacy": "safe active-agent summaries and evidence refs only; raw collector payloads are not included",
+            "recency": "most_recent_updated_at_or_event_sequence",
+            "limits": {
+                "task_contexts": 4,
+                "episodes": 4,
+                "activations": 4,
+                "resume_capsules": 3,
+                "deep_dive_requests": 3,
+                "deep_dive_results": 3,
+                "activation_responses": 3,
+                "episode_links": 3,
+                "muted_scopes": 3,
+                "explanations": 4,
+            },
+            "task_contexts": task_contexts,
+            "episodes": episodes,
+            "activations": activations,
+            "resume_capsules": resume_capsules,
+            "deep_dive_requests": deep_dive_requests,
+            "deep_dive_results": deep_dive_results,
+            "activation_responses": activation_responses,
+            "episode_links": episode_links,
+            "muted_scopes": muted_scopes,
+            "explanations": explanations,
+        }
+
+    def _active_agent_episode_item(self, item: dict[str, Any]) -> dict[str, object]:
+        return {
+            "episode_id": _safe_context_text(item.get("episode_id"), limit=160),
+            "status": _safe_context_text(item.get("status"), limit=80),
+            "source": _safe_context_text(item.get("source"), limit=120),
+            "hypothesis": _safe_context_text(item.get("hypothesis"), limit=1_000),
+            "summary": _safe_context_text(item.get("summary"), limit=1_000),
+            "confidence": _safe_context_text(item.get("confidence"), limit=80),
+            "task_context_id": _safe_context_text(item.get("task_context_id"), limit=160),
+            "primary_entities": _compact_entity_refs(item.get("primary_entities"), count=6),
+            "supporting_entities": _compact_entity_refs(item.get("supporting_entities"), count=6),
+            "correction_refs": _safe_context_list(item.get("correction_refs"), limit=240, count=8),
+            "deep_dive_refs": _safe_context_list(item.get("deep_dive_refs"), limit=240, count=8),
+            "evidence_refs": _safe_context_list(item.get("evidence_refs"), limit=240, count=12),
+            "last_event_sequence": int(item.get("last_event_sequence") or 0),
+            "event_count": int(item.get("event_count") or 0),
+            "updated_at": _safe_context_text(item.get("updated_at"), limit=120),
+        }
+
+    def _active_agent_task_context_item(self, item: dict[str, Any]) -> dict[str, object]:
+        return {
+            "task_context_id": _safe_context_text(item.get("task_context_id"), limit=160),
+            "status": _safe_context_text(item.get("status"), limit=80),
+            "source": _safe_context_text(item.get("source"), limit=120),
+            "summary": _safe_context_text(item.get("summary"), limit=1_000),
+            "user_declared_goal": _safe_context_text(item.get("user_declared_goal"), limit=1_000),
+            "episode_id": _safe_context_text(item.get("episode_id"), limit=160),
+            "assistant_mode": _safe_context_text(item.get("assistant_mode"), limit=120),
+            "privacy_mode": _safe_context_text(item.get("privacy_mode"), limit=120),
+            "allowed_help": _safe_context_list(item.get("allowed_help"), limit=120, count=12),
+            "primary_entities": _compact_entity_refs(item.get("primary_entities"), count=6),
+            "evidence_refs": _safe_context_list(item.get("evidence_refs"), limit=240, count=12),
+            "updated_at": _safe_context_text(item.get("updated_at"), limit=120),
+        }
+
+    def _active_agent_activation_item(self, item: dict[str, Any]) -> dict[str, object]:
+        return {
+            "activation_id": _safe_context_text(item.get("activation_id"), limit=160),
+            "decision_id": _safe_context_text(item.get("decision_id"), limit=160),
+            "route_id": _safe_context_text(item.get("route_id"), limit=160),
+            "event_sequence": int(item.get("event_sequence") or 0),
+            "posture": _safe_context_text(item.get("posture"), limit=80),
+            "status": _safe_context_text(item.get("status"), limit=80),
+            "response_mode": _safe_context_text(item.get("response_mode"), limit=80),
+            "should_interrupt_user": bool(item.get("should_interrupt_user")),
+            "user_visible_text": _safe_context_text(item.get("user_visible_text"), limit=1_000),
+            "agent_stimulus": _safe_context_text(item.get("agent_stimulus"), limit=1_000),
+            "reason": _safe_context_text(item.get("reason"), limit=1_000),
+            "allowed_actions": _safe_context_list(item.get("allowed_actions"), limit=160, count=12),
+            "forbidden_actions": _safe_context_list(item.get("forbidden_actions"), limit=160, count=12),
+            "evidence_refs": _safe_context_list(item.get("evidence_refs"), limit=240, count=12),
+            "updated_at": _safe_context_text(item.get("updated_at"), limit=120),
+        }
+
+    def _active_agent_resume_capsule_item(self, item: dict[str, Any]) -> dict[str, object]:
+        evidence = item.get("evidence") if isinstance(item.get("evidence"), dict) else {}
+        boundary = evidence.get("boundary") if isinstance(evidence.get("boundary"), dict) else {}
+        return {
+            "capsule_id": _safe_context_text(item.get("capsule_id"), limit=160),
+            "boundary_id": _safe_context_text(item.get("boundary_id"), limit=240),
+            "status": _safe_context_text(item.get("status"), limit=80),
+            "summary": _safe_context_text(item.get("summary"), limit=1_000),
+            "event_sequence": int(evidence.get("event_sequence") or boundary.get("event_sequence") or 0),
+            "posture": _safe_context_text(evidence.get("posture"), limit=80),
+            "decision_id": _safe_context_text(evidence.get("decision_id"), limit=160),
+            "boundary_type": _safe_context_text(boundary.get("boundary_type"), limit=120),
+            "boundary_reason": _safe_context_text(boundary.get("reason"), limit=500),
+            "updated_at": _safe_context_text(item.get("updated_at"), limit=120),
+        }
+
+    def _active_agent_deep_dive_item(self, item: dict[str, Any]) -> dict[str, object]:
+        return {
+            "request_id": _safe_context_text(item.get("request_id"), limit=160),
+            "episode_id": _safe_context_text(item.get("episode_id"), limit=160),
+            "status": _safe_context_text(item.get("status"), limit=80),
+            "purpose": _safe_context_text(item.get("purpose"), limit=1_000),
+            "source": _safe_context_text(item.get("source"), limit=120),
+            "requested_access": _safe_context_text(item.get("requested_access"), limit=240),
+            "privacy_tier": _safe_context_text(item.get("privacy_tier"), limit=120),
+            "requires_user_approval": bool(item.get("requires_user_approval")),
+            "evidence_refs": _safe_context_list(item.get("evidence_refs"), limit=240, count=12),
+            "updated_at": _safe_context_text(item.get("updated_at"), limit=120),
+        }
+
+    def _active_agent_deep_dive_result_item(self, item: dict[str, Any]) -> dict[str, object]:
+        evidence = item.get("evidence") if isinstance(item.get("evidence"), dict) else {}
+        return {
+            "result_id": _safe_context_text(item.get("result_id"), limit=160),
+            "request_id": _safe_context_text(item.get("request_id"), limit=160),
+            "episode_id": _safe_context_text(item.get("episode_id"), limit=160),
+            "status": _safe_context_text(item.get("status"), limit=80),
+            "executor": _safe_context_text(item.get("executor"), limit=120),
+            "summary": _safe_context_text(item.get("summary"), limit=1_000),
+            "collector_event_count": len(evidence.get("collector_events", [])) if isinstance(evidence.get("collector_events"), list) else 0,
+            "raw_content_included": bool(evidence.get("raw_content_included", False)),
+            "safety_notes": _safe_context_list(item.get("safety_notes"), limit=240, count=6),
+            "evidence_refs": _safe_context_list(item.get("evidence_refs"), limit=240, count=12),
+            "created_at": _safe_context_text(item.get("created_at"), limit=120),
+        }
+
+    def _active_agent_activation_response_item(self, item: dict[str, Any]) -> dict[str, object]:
+        return {
+            "response_id": _safe_context_text(item.get("response_id"), limit=160),
+            "activation_id": _safe_context_text(item.get("activation_id"), limit=160),
+            "response_type": _safe_context_text(item.get("response_type"), limit=80),
+            "action_taken": _safe_context_text(item.get("action_taken"), limit=120),
+            "task_context_id": _safe_context_text(item.get("task_context_id"), limit=160),
+            "muted_scope_id": _safe_context_text(item.get("muted_scope_id"), limit=160),
+            "text": _safe_context_text(item.get("text"), limit=500),
+            "evidence_refs": _safe_context_list(item.get("evidence_refs"), limit=240, count=12),
+            "created_at": _safe_context_text(item.get("created_at"), limit=120),
+        }
+
+    def _active_agent_episode_link_item(self, item: dict[str, Any]) -> dict[str, object]:
+        return {
+            "link_id": _safe_context_text(item.get("link_id"), limit=160),
+            "source_episode_id": _safe_context_text(item.get("source_episode_id"), limit=160),
+            "target_episode_id": _safe_context_text(item.get("target_episode_id"), limit=160),
+            "relation": _safe_context_text(item.get("relation"), limit=120),
+            "status": _safe_context_text(item.get("status"), limit=80),
+            "reason": _safe_context_text(item.get("reason"), limit=500),
+            "evidence_refs": _safe_context_list(item.get("evidence_refs"), limit=240, count=12),
+            "updated_at": _safe_context_text(item.get("updated_at"), limit=120),
+        }
+
+    def _active_agent_muted_scope_item(self, item: dict[str, Any]) -> dict[str, object]:
+        return {
+            "scope_id": _safe_context_text(item.get("scope_id"), limit=160),
+            "mode": _safe_context_text(item.get("mode"), limit=80),
+            "scope_type": _safe_context_text(item.get("scope_type"), limit=120),
+            "collector": _safe_context_text(item.get("collector"), limit=120),
+            "source": _safe_context_text(item.get("source"), limit=120),
+            "stimulus_type": _safe_context_text(item.get("stimulus_type"), limit=120),
+            "entity_refs": _safe_context_list(item.get("entity_refs"), limit=240, count=8),
+            "do_not_store": bool(item.get("do_not_store")),
+            "reason": _safe_context_text(item.get("reason"), limit=500),
+            "expires_at": _safe_context_text(item.get("expires_at"), limit=120),
+        }
+
+    def _active_agent_explanation_item(self, item: dict[str, Any]) -> dict[str, object]:
+        return {
+            "explanation_id": _safe_context_text(item.get("explanation_id"), limit=160),
+            "route_id": _safe_context_text(item.get("route_id"), limit=160),
+            "event_sequence": int(item.get("event_sequence") or 0),
+            "explanation_type": _safe_context_text(item.get("explanation_type"), limit=120),
+            "posture": _safe_context_text(item.get("posture"), limit=80),
+            "summary": _safe_context_text(item.get("summary"), limit=1_000),
+            "evidence_refs": _safe_context_list(item.get("evidence_refs"), limit=240, count=12),
+            "created_at": _safe_context_text(item.get("created_at"), limit=120),
+        }
 
     def _activity_policy_context(self) -> dict[str, object]:
         policy = ActivityPolicyStore(activity_policy_path(self.config)).load()
@@ -1190,6 +1467,39 @@ def _skill_domain(relative_path: str) -> str:
     return ""
 
 
+def _safe_context_text(value: object, *, limit: int) -> str:
+    return redact_secrets(" ".join(str(value or "").split()))[: max(1, int(limit))]
+
+
+def _safe_context_list(value: object, *, limit: int, count: int) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [_safe_context_text(item, limit=limit) for item in value[: max(0, int(count))] if _safe_context_text(item, limit=limit)]
+
+
+def _compact_entity_refs(value: object, *, count: int) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+    compact: list[dict[str, object]] = []
+    for item in value[: max(0, int(count))]:
+        if not isinstance(item, dict):
+            continue
+        entry: dict[str, object] = {}
+        for key, raw in item.items():
+            if isinstance(raw, (dict, list)):
+                continue
+            cleaned_key = _safe_context_text(key, limit=80)
+            if not _entity_field_allowed(cleaned_key, raw):
+                continue
+            if cleaned_key:
+                entry[cleaned_key] = _safe_context_text(raw, limit=240) if isinstance(raw, str) else raw
+            if len(entry) >= 8:
+                break
+        if entry:
+            compact.append(entry)
+    return compact
+
+
 def _compact_active_workspace_skills(value: object) -> list[dict[str, object]]:
     if not isinstance(value, list):
         return []
@@ -1208,6 +1518,27 @@ def _compact_active_workspace_skills(value: object) -> list[dict[str, object]]:
             }
         )
     return compact
+
+
+def _entity_field_allowed(key: str, value: object) -> bool:
+    normalized = str(key or "").strip().lower()
+    if normalized in {"kind", "type"}:
+        return True
+    if "hash" in normalized:
+        return True
+    if normalized in {"ref", "entity_ref", "id"}:
+        return _looks_safe_entity_ref(value)
+    return False
+
+
+def _looks_safe_entity_ref(value: object) -> bool:
+    text = str(value or "").strip().lower()
+    return "_hash:" in text or text.startswith(("document_id_hash:", "workspace_hash:", "entity_hash:", "url_hash:", "file_hash:", "app_hash:"))
+
+
+def _active_agent_internal_memory_event(event: dict[str, object]) -> bool:
+    event_type = str(event.get("event_type") or "")
+    return event_type.startswith("active_agent_")
 
 
 def _workspace_skill_ancestor_ids(skill_id: str, by_id: dict[str, object]) -> list[str]:

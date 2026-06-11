@@ -17,10 +17,62 @@ from urllib.parse import parse_qs, urlparse
 from urllib.request import Request, urlopen
 
 from humungousaur import __version__
+from humungousaur.active_agent import (
+    active_agent_status,
+    active_agent_privacy_delete,
+    active_agent_privacy_export,
+    apply_episode_operation,
+    approve_deep_dive_request,
+    cancel_muted_scope,
+    create_deep_dive_request,
+    create_muted_scope,
+    declare_task_context,
+    execute_deep_dive_request,
+    reject_deep_dive_request,
+    record_user_correction,
+    respond_to_activation,
+    run_active_agent_eval,
+)
 from humungousaur.config import AgentConfig
 from humungousaur.collectors import (
+    ai_assistant_source_status,
+    append_ai_assistant_event,
+    append_ai_assistant_health,
+    append_browser_event,
+    append_browser_health,
+    append_bridge_event,
+    append_cloud_file_event,
+    append_communication_event,
+    append_communication_health,
+    append_connector_source_event,
+    append_data_analytics_event,
+    append_data_analytics_health,
+    append_design_event,
+    append_design_health,
+    append_google_workspace_event,
+    append_google_workspace_health,
+    append_knowledge_base_event,
+    append_knowledge_base_health,
+    append_planning_event,
+    append_planning_health,
+    append_operations_event,
+    append_operations_health,
     collector_status,
+    browser_source_status,
+    cloud_file_source_status,
+    connector_source_manifest_records,
+    connector_source_status,
+    data_analytics_source_status,
+    design_source_status,
+    google_workspace_source_status,
+    knowledge_base_source_status,
+    operations_source_status,
+    planning_source_status,
     load_collector_profile,
+    query_collector_events,
+    record_connector_source_health,
+    record_collector_helper_health,
+    run_connector_source_tick,
     run_collector_tick,
     save_collector_profile,
 )
@@ -44,6 +96,15 @@ from humungousaur.integrations.channels import (
     prepare_outbound_message,
     save_channel_setup,
     send_outbound_message,
+)
+from humungousaur.integrations.workspace_connectors import (
+    complete_connector_authorization,
+    configure_connector_client,
+    connector_catalog,
+    connector_status,
+    disconnect_connector,
+    prepare_connector_authorization,
+    refresh_connector_token,
 )
 from humungousaur.planning.model_providers import MODEL_PROVIDER_REGISTRY
 from humungousaur.indexing import FileIndex
@@ -302,6 +363,33 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                 if path == "/channels":
                     self._send_json(load_channel_catalog())
                     return
+                if path == "/connectors":
+                    self._send_json(connector_catalog(effective_config()))
+                    return
+                if path == "/connectors/status":
+                    self._send_json(connector_status(effective_config(), provider_id=_str_arg(query, "provider_id") or None))
+                    return
+                if path == "/connectors/sources":
+                    self._send_json(connector_source_status(effective_config(), provider_id=_str_arg(query, "provider_id") or None))
+                    return
+                if path == "/connectors/sources/manifest":
+                    self._send_json(connector_source_manifest_records(_str_arg(query, "provider_id") or None))
+                    return
+                if path == "/connectors/callback":
+                    error = _str_arg(query, "error")
+                    if error:
+                        self._send_text(f"Humungousaur connector authorization failed: {error}", HTTPStatus.BAD_REQUEST)
+                        return
+                    code = _str_arg(query, "connector_grant") or _str_arg(query, "code")
+                    state = _str_arg(query, "state")
+                    if not code or not state:
+                        self._send_text("Humungousaur connector callback is missing connector grant/code or state.", HTTPStatus.BAD_REQUEST)
+                        return
+                    result = complete_connector_authorization(effective_config(), state=state, code=code)
+                    self._send_text(
+                        f"{result['display_name']} is connected. You can close this browser tab and return to Humungousaur."
+                    )
+                    return
                 if path == "/channels/status":
                     self._send_json(channel_setup_status(effective_config(), channel_id=_str_arg(query, "channel_id") or None))
                     return
@@ -334,6 +422,54 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                     return
                 if path == "/collectors/status":
                     self._send_json(collector_status(effective_config(), limit=_int_arg(query, "limit", 10)))
+                    return
+                if path == "/collectors/events":
+                    self._send_json(
+                        query_collector_events(
+                            effective_config(),
+                            limit=_int_arg(query, "limit", 100),
+                            collector=_str_arg(query, "collector") or None,
+                            stimulus_type=_str_arg(query, "stimulus_type") or None,
+                            since_sequence=_int_arg(query, "since_sequence", 0),
+                        )
+                    )
+                    return
+                if path == "/active-agent/status":
+                    self._send_json(active_agent_status(effective_config(), limit=_int_arg(query, "limit", 20)))
+                    return
+                if path == "/active-agent/planner-context":
+                    self._send_json(
+                        AgentOrchestrator(effective_config()).active_agent_planner_context_preview(
+                            request=_str_arg(query, "request"),
+                        )
+                    )
+                    return
+                if path == "/collectors/google-workspace/status":
+                    self._send_json(google_workspace_source_status(effective_config()))
+                    return
+                if path == "/collectors/knowledge-bases/status":
+                    self._send_json(knowledge_base_source_status(effective_config()))
+                    return
+                if path == "/collectors/planning/status":
+                    self._send_json(planning_source_status(effective_config(), provider_id=_str_arg(query, "provider_id") or None))
+                    return
+                if path == "/collectors/cloud-files/status":
+                    self._send_json(cloud_file_source_status(effective_config(), provider_id=_str_arg(query, "provider_id") or None))
+                    return
+                if path == "/collectors/design/status":
+                    self._send_json(design_source_status(effective_config(), provider_id=_str_arg(query, "provider_id") or None))
+                    return
+                if path == "/collectors/data-analytics/status":
+                    self._send_json(data_analytics_source_status(effective_config(), provider_id=_str_arg(query, "provider_id") or None))
+                    return
+                if path == "/collectors/operations/status":
+                    self._send_json(operations_source_status(effective_config(), provider_id=_str_arg(query, "provider_id") or None))
+                    return
+                if path == "/collectors/browsers/status":
+                    self._send_json(browser_source_status(effective_config()))
+                    return
+                if path == "/collectors/ai-assistants/status":
+                    self._send_json(ai_assistant_source_status(effective_config()))
                     return
                 if path == "/events/status":
                     self._send_json(semantic_events_status(effective_config(), limit=_int_arg(query, "limit", 20)))
@@ -572,6 +708,98 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                     setup = save_channel_setup(effective_config(), channel_id, payload)
                     self._send_json({"setup": setup, **channel_setup_status(effective_config(), channel_id=channel_id)}, HTTPStatus.CREATED)
                     return
+                if path == "/connectors/configure":
+                    try:
+                        result = configure_connector_client(
+                            effective_config(),
+                            str(payload.get("provider_id") or "").strip(),
+                            client_id=str(payload.get("client_id") or "").strip(),
+                            client_secret=str(payload.get("client_secret") or "").strip(),
+                            redirect_uri=str(payload.get("redirect_uri") or "").strip(),
+                        )
+                    except (KeyError, ValueError) as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/connectors/connect":
+                    raw_scopes = payload.get("scopes")
+                    try:
+                        result = prepare_connector_authorization(
+                            effective_config(),
+                            str(payload.get("provider_id") or "").strip(),
+                            scopes=[str(item) for item in raw_scopes] if isinstance(raw_scopes, list) else None,
+                            redirect_uri=str(payload.get("redirect_uri") or "").strip(),
+                        )
+                    except (KeyError, ValueError) as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/connectors/refresh":
+                    try:
+                        result = refresh_connector_token(
+                            effective_config(),
+                            str(payload.get("provider_id") or "").strip(),
+                        )
+                    except (KeyError, ValueError) as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/connectors/disconnect":
+                    try:
+                        result = disconnect_connector(
+                            effective_config(),
+                            str(payload.get("provider_id") or "").strip(),
+                        )
+                    except (KeyError, ValueError) as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/connectors/sources/tick":
+                    run_config = request_config(effective_config(), payload)
+                    result = run_connector_source_tick(
+                        run_config,
+                        provider_id=str(payload.get("provider_id") or "").strip() or None,
+                        dry_run=_payload_bool(payload, "dry_run", False),
+                    )
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/connectors/source-events":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = append_connector_source_event(
+                            run_config,
+                            provider_id=str(payload.get("provider_id") or "").strip(),
+                            source_event=str(payload.get("source_event") or "").strip(),
+                            object_type=str(payload.get("object_type") or "").strip(),
+                            object_id=str(payload.get("object_id") or "").strip(),
+                            metadata=payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {},
+                            payload=payload.get("payload") if isinstance(payload.get("payload"), dict) else {},
+                            occurred_at=str(payload.get("occurred_at") or "").strip(),
+                        )
+                    except (KeyError, ValueError) as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/connectors/source-health":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = record_connector_source_health(
+                            run_config,
+                            provider_id=str(payload.get("provider_id") or "").strip(),
+                            status=str(payload.get("status") or "").strip(),
+                            message=str(payload.get("message") or "").strip(),
+                            metadata=payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {},
+                        )
+                    except (KeyError, ValueError) as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
                 if path == "/runs/async":
                     request = str(payload.get("request", "")).strip()
                     if not request:
@@ -616,6 +844,311 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                         dry_run=_payload_bool(payload, "dry_run", False),
                     )
                     self._send_json(asdict(result), HTTPStatus.CREATED)
+                    return
+                if path == "/collectors/bridge":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = append_bridge_event(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/active-agent/task-contexts":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = declare_task_context(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/active-agent/muted-scopes":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = create_muted_scope(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/active-agent/muted-scopes/cancel":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = cancel_muted_scope(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result)
+                    return
+                if path == "/active-agent/deep-dives":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = create_deep_dive_request(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/active-agent/deep-dives/approve":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = approve_deep_dive_request(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result)
+                    return
+                if path == "/active-agent/deep-dives/execute":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = execute_deep_dive_request(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result)
+                    return
+                if path == "/active-agent/deep-dives/reject":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = reject_deep_dive_request(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result)
+                    return
+                if path == "/active-agent/corrections":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = record_user_correction(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/active-agent/activations/respond":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = respond_to_activation(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/active-agent/episodes/operate":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = apply_episode_operation(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/active-agent/privacy/export":
+                    run_config = request_config(effective_config(), payload)
+                    self._send_json(active_agent_privacy_export(run_config, payload), HTTPStatus.CREATED)
+                    return
+                if path == "/active-agent/privacy/delete":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = active_agent_privacy_delete(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/active-agent/evals/run":
+                    run_config = request_config(effective_config(), payload)
+                    self._send_json(run_active_agent_eval(run_config, payload), HTTPStatus.CREATED)
+                    return
+                if path == "/active-agent/planner-context":
+                    run_config = request_config(effective_config(), payload)
+                    self._send_json(
+                        AgentOrchestrator(run_config).active_agent_planner_context_preview(
+                            request=str(payload.get("request") or ""),
+                        ),
+                        HTTPStatus.CREATED,
+                    )
+                    return
+                if path == "/collectors/google-workspace":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = append_google_workspace_event(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/collectors/google-workspace/health":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = append_google_workspace_health(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/collectors/cloud-files":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = append_cloud_file_event(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/collectors/design":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = append_design_event(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/collectors/design/health":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = append_design_health(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/collectors/data-analytics":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = append_data_analytics_event(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/collectors/data-analytics/health":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = append_data_analytics_health(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/collectors/operations":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = append_operations_event(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/collectors/operations/health":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = append_operations_health(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/collectors/knowledge-bases":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = append_knowledge_base_event(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/collectors/knowledge-bases/health":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = append_knowledge_base_health(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/collectors/planning":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = append_planning_event(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/collectors/planning/health":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = append_planning_health(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/collectors/communication":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = append_communication_event(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/collectors/communication/health":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = append_communication_health(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/collectors/browsers":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = append_browser_event(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/collectors/browsers/health":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = append_browser_health(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/collectors/ai-assistants":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = append_ai_assistant_event(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/collectors/ai-assistants/health":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = append_ai_assistant_health(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/collectors/helper-health":
+                    run_config = request_config(effective_config(), payload)
+                    try:
+                        result = record_collector_helper_health(run_config, payload)
+                    except ValueError as exc:
+                        self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
+                        return
+                    self._send_json(result, HTTPStatus.CREATED)
                     return
                 if path == "/events/rebuild-context":
                     run_config = request_config(effective_config(), payload)

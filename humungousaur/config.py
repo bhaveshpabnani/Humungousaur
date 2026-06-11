@@ -17,6 +17,10 @@ class AgentConfig:
     model_name: str = "gpt-5-mini"
     model_base_url: str | None = None
     model_api_key_env: str | None = None
+    active_model_provider: str = ""
+    active_model_name: str = ""
+    active_model_base_url: str | None = None
+    active_model_api_key_env: str | None = None
     model_timeout_seconds: float = 45.0
     runtime_secrets: Mapping[str, str] = field(default_factory=dict)
     allowed_read_roots: tuple[Path, ...] = field(default_factory=tuple)
@@ -38,6 +42,10 @@ class AgentConfig:
             model_name=self.model_name,
             model_base_url=self.model_base_url,
             model_api_key_env=self.model_api_key_env,
+            active_model_provider=self.active_model_provider,
+            active_model_name=self.active_model_name,
+            active_model_base_url=self.active_model_base_url,
+            active_model_api_key_env=self.active_model_api_key_env,
             model_timeout_seconds=self.model_timeout_seconds,
             runtime_secrets={
                 str(key).strip(): str(value)
@@ -68,6 +76,10 @@ class AgentConfig:
         return self.data_dir / "memory.sqlite3"
 
     @property
+    def collector_events_db_path(self) -> Path:
+        return self.data_dir / "collector_events.sqlite3"
+
+    @property
     def approvals_db_path(self) -> Path:
         return self.data_dir / "approvals.sqlite3"
 
@@ -88,8 +100,36 @@ class AgentConfig:
         return self.data_dir / "cognition.sqlite3"
 
     @property
+    def active_agent_db_path(self) -> Path:
+        return self.data_dir / "active_agent.sqlite3"
+
+    @property
     def persona_path(self) -> Path:
         return self.data_dir / "persona.json"
+
+    @property
+    def cognitive_markdown_dir(self) -> Path:
+        return self.data_dir / "brain"
+
+    @property
+    def persona_markdown_path(self) -> Path:
+        return self.cognitive_markdown_dir / "persona.md"
+
+    @property
+    def soul_markdown_path(self) -> Path:
+        return self.cognitive_markdown_dir / "soul.md"
+
+    @property
+    def sold_markdown_path(self) -> Path:
+        return self.cognitive_markdown_dir / "sold.md"
+
+    @property
+    def conscious_markdown_path(self) -> Path:
+        return self.cognitive_markdown_dir / "conscious.md"
+
+    @property
+    def subconscious_markdown_path(self) -> Path:
+        return self.cognitive_markdown_dir / "subconscious.md"
 
     @property
     def skill_library_path(self) -> Path:

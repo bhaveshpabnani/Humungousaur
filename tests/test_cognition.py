@@ -124,6 +124,8 @@ from humungousaur.tools.cognition_tools import (
     AutomationDaemonTickTool,
     CognitiveBriefingPrepareTool,
     CognitiveBriefingStatusTool,
+    CognitiveBrainFilesRefreshTool,
+    CognitiveBrainFilesStatusTool,
     CognitiveCommitmentRecordTool,
     CognitiveCommitmentReviewTool,
     CognitiveCommitmentStatusTool,
@@ -260,6 +262,44 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertEqual(skill.confidence, 0.8)
             self.assertEqual(WakeupStore(db).scheduled()[0].wakeup_id, wakeup.wakeup_id)
             self.assertEqual(TriggerStore(db).active()[0].trigger_id, trigger.trigger_id)
+
+    def test_cognitive_brain_markdown_files_refresh_from_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", planner_provider="explicit").normalized()
+
+            preference = CognitivePersonaUpdateTool().execute(
+                {"kind": "preference", "text": "Prefer concise progress updates with evidence."},
+                config,
+            )
+            goal = CognitiveGoalCreateTool().execute(
+                {"title": "Prepare project briefing", "success_criteria": ["Briefing is evidence-backed."]},
+                config,
+            )
+            CognitiveFocusUpdateTool().execute(
+                {
+                    "mode": "deep_work",
+                    "active_goal_id": goal.output["goal"]["goal_id"],
+                    "summary": "Preparing a project briefing.",
+                },
+                config,
+            )
+            refresh = CognitiveBrainFilesRefreshTool().execute({"include_state": True, "limit": 5}, config)
+            status = CognitiveBrainFilesStatusTool().execute({}, config)
+
+            self.assertEqual(preference.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(refresh.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(status.status, ActionStatus.SUCCEEDED)
+            files = refresh.output["brain_files"]["files"]
+            for name in ("persona", "soul", "sold", "conscious", "subconscious"):
+                self.assertTrue(Path(files[name]).exists())
+            self.assertIn(
+                "Prefer concise progress updates with evidence.",
+                Path(files["persona"]).read_text(encoding="utf-8"),
+            )
+            self.assertIn("Preparing a project briefing.", Path(files["conscious"]).read_text(encoding="utf-8"))
+            self.assertIn("compatibility alias", Path(files["sold"]).read_text(encoding="utf-8"))
+            self.assertTrue(status.output["brain_files"]["files"]["subconscious"]["exists"])
 
     def test_wakeup_store_tracks_due_fire_and_cancel(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -562,6 +602,7 @@ class CognitiveStoreTests(unittest.TestCase):
                 "recovery_planning",
                 "environment_review",
                 "commitment_review",
+                "reflex_interpretation",
             },
         )
         self.assertIn("Global intelligence rule", templates["cognitive_decision"])
@@ -1512,6 +1553,8 @@ class CognitiveStoreTests(unittest.TestCase):
                 config,
             )
             state = CognitiveStateTool().execute({"limit": 5}, config)
+            brain_refresh = CognitiveBrainFilesRefreshTool().execute({"limit": 5}, config)
+            brain_status = CognitiveBrainFilesStatusTool().execute({}, config)
             trigger_cancel = CognitiveTriggerCancelTool().execute(
                 {"trigger_id": trigger.output["trigger"]["trigger_id"], "reason": "covered in test"},
                 config,
@@ -1525,7 +1568,9 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertEqual(focus.status, ActionStatus.SUCCEEDED)
             self.assertEqual(knowledge.status, ActionStatus.SUCCEEDED)
             self.assertEqual(persona.status, ActionStatus.SUCCEEDED)
+            self.assertIn("brain_files", persona.output)
             self.assertEqual(persona_evolution.status, ActionStatus.SUCCEEDED)
+            self.assertIn("brain_files", persona_evolution.output)
             self.assertEqual(persona_evolution_status.status, ActionStatus.SUCCEEDED)
             self.assertEqual(self_review.status, ActionStatus.SUCCEEDED)
             self.assertEqual(self_review_status.status, ActionStatus.SUCCEEDED)
@@ -1560,8 +1605,12 @@ class CognitiveStoreTests(unittest.TestCase):
             self.assertEqual(skill_evolution_status.status, ActionStatus.SUCCEEDED)
             self.assertEqual(specialist.status, ActionStatus.SUCCEEDED)
             self.assertEqual(state.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(brain_refresh.status, ActionStatus.SUCCEEDED)
+            self.assertEqual(brain_status.status, ActionStatus.SUCCEEDED)
             self.assertEqual(forgotten.status, ActionStatus.SUCCEEDED)
             self.assertEqual(len(state.output["active_goals"]), 1)
+            self.assertIn("brain_files", state.output)
+            self.assertTrue(brain_status.output["brain_files"]["files"]["persona"]["exists"])
             self.assertEqual(state.output["focus"]["mode"], "monitoring")
             self.assertEqual(state.output["consolidations"], [])
             self.assertEqual(state.output["recoveries"], [])

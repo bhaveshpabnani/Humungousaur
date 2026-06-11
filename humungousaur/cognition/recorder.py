@@ -21,6 +21,7 @@ from .goals import GoalStore
 from .interaction_review import InteractionReviewStore
 from .knowledge import KnowledgeStore
 from .learning import LearningEngine, LearningStore
+from .markdown_brain import refresh_cognitive_markdown
 from .models import (
     CognitiveDecision,
     CognitiveEvent,
@@ -214,6 +215,13 @@ class CognitiveRecorder:
                 "voice_response_id": (voice_result or {}).get("response_id", ""),
             },
         )
+        try:
+            refresh_cognitive_markdown(self.config, self.snapshot())
+        except OSError:
+            self.memory.append(
+                "cognitive_markdown_refresh_failed",
+                {"event_id": event_id, "reason": "filesystem_error"},
+            )
 
 
 def _task_status(run: AgentRunResult | None) -> TaskStatus:

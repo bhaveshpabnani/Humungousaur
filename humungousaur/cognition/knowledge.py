@@ -41,6 +41,7 @@ class KnowledgeStore:
                 """
             )
             connection.execute("CREATE INDEX IF NOT EXISTS idx_cognitive_knowledge_kind ON cognitive_knowledge(kind, archived_at)")
+            connection.execute("CREATE INDEX IF NOT EXISTS idx_cognitive_knowledge_source ON cognitive_knowledge(source, archived_at, updated_at)")
             connection.commit()
 
     def append(
@@ -84,8 +85,25 @@ class KnowledgeStore:
             connection.commit()
         return record
 
-    def list(self, limit: int = 20, include_archived: bool = False) -> list[KnowledgeRecord]:
-        where = "" if include_archived else "WHERE archived_at = ''"
+    def list(
+        self,
+        limit: int = 20,
+        include_archived: bool = False,
+        source: str = "",
+        min_confidence: float | None = None,
+    ) -> list[KnowledgeRecord]:
+        filters: list[str] = []
+        params: list[object] = []
+        if not include_archived:
+            filters.append("archived_at = ''")
+        cleaned_source = _clean(source, limit=120)
+        if cleaned_source:
+            filters.append("source = ?")
+            params.append(cleaned_source)
+        if min_confidence is not None:
+            filters.append("confidence >= ?")
+            params.append(max(0.0, min(float(min_confidence), 1.0)))
+        where = f"WHERE {' AND '.join(filters)}" if filters else ""
         with closing(self._connect()) as connection:
             connection.row_factory = sqlite3.Row
             rows = connection.execute(
@@ -96,7 +114,7 @@ class KnowledgeStore:
                 ORDER BY updated_at DESC
                 LIMIT ?
                 """,
-                (max(1, min(limit, 200)),),
+                (*params, max(1, min(limit, 200))),
             ).fetchall()
         return [self._row_to_record(row) for row in rows]
 

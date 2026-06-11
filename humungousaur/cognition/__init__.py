@@ -46,6 +46,7 @@ from .interaction_review import (
 from .knowledge import KnowledgeStore
 from .learning import LearningEngine, LearningStore
 from .loop import AutonomousLoopResult, AutonomousLoopRunner, autonomous_loop_result_to_dict, autonomous_status
+from .markdown_brain import cognitive_markdown_paths, cognitive_markdown_status, refresh_cognitive_markdown
 from .models import (
     CognitiveDecision,
     CognitiveEvent,
@@ -214,6 +215,9 @@ __all__ = [
     "LearningEngine",
     "LearningRecord",
     "LearningStore",
+    "cognitive_markdown_paths",
+    "cognitive_markdown_status",
+    "refresh_cognitive_markdown",
     "AutonomousLoopResult",
     "AutonomousLoopRunner",
     "ModelCognitiveDecisionProvider",

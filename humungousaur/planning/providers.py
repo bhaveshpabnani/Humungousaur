@@ -1171,6 +1171,13 @@ def _context_for_prompt(context: dict[str, Any]) -> dict[str, Any]:
     compact = dict(context)
     if isinstance(compact.get("recent_memory"), list):
         compact["recent_memory"] = [_compact_context_item(item) for item in compact["recent_memory"][:3]]
+    if isinstance(compact.get("active_agent_memory"), dict):
+        memory = dict(compact["active_agent_memory"])
+        if isinstance(memory.get("items"), list):
+            memory["items"] = [_compact_active_agent_memory_item(item) for item in memory["items"][:5]]
+        compact["active_agent_memory"] = memory
+    if isinstance(compact.get("active_agent_state"), dict):
+        compact["active_agent_state"] = _compact_active_agent_state(compact["active_agent_state"])
     if isinstance(compact.get("browser_sessions"), list):
         compact["browser_sessions"] = compact["browser_sessions"][:3]
     if isinstance(compact.get("available_workspace_skills"), list):
@@ -1208,6 +1215,8 @@ def _selector_context_for_prompt(context: dict[str, Any]) -> dict[str, Any]:
         "browser_sessions": compact.get("browser_sessions", []),
         "screen_captures": compact.get("screen_captures", {}),
         "activity_policy": compact.get("activity_policy", {}),
+        "active_agent_memory": compact.get("active_agent_memory", {}),
+        "active_agent_state": compact.get("active_agent_state", {}),
         "available_workspace_skills": compact.get("available_workspace_skills", []),
         "active_workspace_skills": compact.get("active_workspace_skills", []),
         "cognition": {
@@ -1245,6 +1254,65 @@ def _compact_context_item(item: Any) -> Any:
     if isinstance(item, str):
         return item[:240]
     return item
+
+
+def _compact_active_agent_memory_item(item: Any) -> Any:
+    if not isinstance(item, dict):
+        return _compact_context_item(item)
+    compact: dict[str, Any] = {}
+    for key in ("knowledge_id", "kind", "text", "confidence", "created_at", "updated_at"):
+        if key in item:
+            value = item[key]
+            compact[key] = value[:1_000] if key == "text" and isinstance(value, str) else value
+    evidence_refs = item.get("evidence_refs")
+    if isinstance(evidence_refs, list):
+        compact["evidence_refs"] = [str(ref)[:240] for ref in evidence_refs[:8] if str(ref)]
+    return compact
+
+
+def _compact_active_agent_state(state: Any) -> dict[str, Any]:
+    if not isinstance(state, dict):
+        return {}
+    compact: dict[str, Any] = {}
+    for key in ("source", "privacy", "recency"):
+        if key in state:
+            compact[key] = _compact_context_item(state[key])
+    limits = state.get("limits")
+    if isinstance(limits, dict):
+        compact["limits"] = {str(key): value for key, value in limits.items() if isinstance(value, (int, float, str, bool))}
+    for key, limit in (
+        ("task_contexts", 4),
+        ("activations", 4),
+        ("resume_capsules", 3),
+        ("deep_dive_requests", 3),
+        ("deep_dive_results", 3),
+        ("activation_responses", 3),
+        ("episode_links", 3),
+        ("muted_scopes", 3),
+        ("explanations", 4),
+    ):
+        value = state.get(key)
+        if isinstance(value, list):
+            compact[key] = [_compact_active_agent_state_item(item) for item in value[:limit]]
+    return compact
+
+
+def _compact_active_agent_state_item(item: Any) -> Any:
+    if not isinstance(item, dict):
+        return _compact_context_item(item)
+    compact: dict[str, Any] = {}
+    for key, value in item.items():
+        if isinstance(value, list):
+            compact[key] = [str(entry)[:240] if not isinstance(entry, dict) else _compact_context_item(entry) for entry in value[:8]]
+        elif isinstance(value, dict):
+            continue
+        elif isinstance(value, str):
+            compact[key] = value[:1_000] if key in {"summary", "user_visible_text", "agent_stimulus", "purpose", "reason"} else value[:240]
+        else:
+            compact[key] = value
+        if len(compact) >= 18:
+            break
+    return compact
 
 
 def _compact_skill_context_item(item: Any) -> Any:
