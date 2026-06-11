@@ -1,0 +1,14 @@
+[workspace]
+members = [
+    "crates/collector-host",
+    "crates/event-writer"
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+version = "0.1.0"
+license = "MIT"
+
+[workspace.dependencies]
+event-writer = { path = "crates/event-writer" }

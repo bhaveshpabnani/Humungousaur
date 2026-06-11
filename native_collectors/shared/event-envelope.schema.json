@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://humungousaur.local/schemas/collector-event-envelope.json",
+  "title": "Humungousaur Collector Event Envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_id",
+    "schema_version",
+    "collector",
+    "source",
+    "platform",
+    "stimulus_type",
+    "privacy_tier",
+    "occurred_at",
+    "signature",
+    "text",
+    "metadata",
+    "payload",
+    "redaction"
+  ],
+  "properties": {
+    "event_id": {"type": "string", "minLength": 1},
+    "schema_version": {"type": "integer", "const": 1},
+    "collector": {"type": "string", "minLength": 1},
+    "source": {"type": "string", "minLength": 1},
+    "platform": {"type": "string", "enum": ["macos", "windows", "linux", "darwin", "Darwin", "Windows", "Linux"]},
+    "stimulus_type": {"type": "string", "minLength": 1},
+    "privacy_tier": {
+      "type": "string",
+      "enum": ["metadata", "sensitive_metadata", "rich_capture", "blocked"]
+    },
+    "occurred_at": {"type": "string", "minLength": 1},
+    "received_at": {"type": "string"},
+    "signature": {"type": "string", "minLength": 1},
+    "text": {"type": "string"},
+    "metadata": {"type": "object"},
+    "payload": {"type": "object"},
+    "redaction": {
+      "type": "object",
+      "required": ["raw_content_included", "attention_safe", "payload_compacted_before_llm"],
+      "properties": {
+        "raw_content_included": {"type": "boolean"},
+        "attention_safe": {"type": "boolean"},
+        "paths_redacted": {"type": "boolean"},
+        "payload_compacted_before_llm": {"type": "boolean"},
+        "privacy_tier": {"type": "string"}
+      },
+      "additionalProperties": true
+    }
+  }
+}

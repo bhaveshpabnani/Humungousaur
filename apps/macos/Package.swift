@@ -8,7 +8,8 @@ let package = Package(
         .macOS(.v14)
     ],
     products: [
-        .executable(name: "HumungousaurMac", targets: ["HumungousaurMac"])
+        .executable(name: "HumungousaurMac", targets: ["HumungousaurMac"]),
+        .executable(name: "HumungousaurFileEvents", targets: ["HumungousaurFileEvents"])
     ],
     targets: [
         .executableTarget(
@@ -17,6 +18,10 @@ let package = Package(
             resources: [
                 .process("Resources")
             ]
+        ),
+        .executableTarget(
+            name: "HumungousaurFileEvents",
+            path: "FileEventsHelper"
         )
     ]
 )
