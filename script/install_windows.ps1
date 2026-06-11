@@ -115,6 +115,7 @@ $ShortcutTargets = @(
   Join-Path ([Environment]::GetFolderPath("StartMenu")) "Programs\Humungousaur.lnk",
   Join-Path ([Environment]::GetFolderPath("Desktop")) "Humungousaur.lnk"
 )
+Write-Step "Creating Start Menu/Desktop shortcuts."
 $Shell = New-Object -ComObject WScript.Shell
 foreach ($ShortcutPath in $ShortcutTargets) {
   New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ShortcutPath) | Out-Null
