@@ -178,6 +178,9 @@ public sealed class ConnectorProvider
     [JsonPropertyName("advanced_client_configured")]
     public bool AdvancedClientConfigured { get; set; }
 
+    [JsonPropertyName("supports_pkce")]
+    public bool SupportsPkce { get; set; } = true;
+
     [JsonPropertyName("default_scopes")]
     public List<string> DefaultScopes { get; set; } = [];
 
