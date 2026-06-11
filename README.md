@@ -37,10 +37,6 @@ If you want a hackable, inspectable assistant that can grow from local CLI runs 
   <sub>Janus turns collectors, connectors, model routes, and approval-gated actions into one active cognitive loop.</sub>
 </p>
 
-<p align="center">
-  <sub>README visuals and motion variants are repo-owned under <code>docs/assets/readme/</code>.</sub>
-</p>
-
 ## What It Can Do
 
 | Real-world capability | What that means in practice |
