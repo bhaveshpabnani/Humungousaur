@@ -92,7 +92,10 @@ Copy-Item -Path $PayloadRuntime -Destination $RuntimeSourceDir -Recurse -Force
 $Bootstrap = Join-Path $RuntimeSourceDir "script\bootstrap_runtime.py"
 $BootstrapArgs = @($Bootstrap, "--source", $RuntimeSourceDir, "--data-root", $DataRoot)
 if ($SkipPlaywright) {
+  Write-Step "Skipping Playwright Chromium install."
   $BootstrapArgs += "--skip-playwright"
+} else {
+  Write-Step "Installing Playwright Chromium during runtime bootstrap."
 }
 if ($Quiet) {
   $BootstrapArgs += "--quiet"
