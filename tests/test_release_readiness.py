@@ -815,7 +815,7 @@ class ReleaseReadinessTests(unittest.TestCase):
         module = load_release_readiness_module()
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
-            developer_path = "/" + "Users/example/Documents/" + "bhaveshpabnani/Umang"
+            developer_path = "/" + "Users/example/Documents/" + "bhaveshpabnani/private-checkout"
             (root / "app.py").write_text(f'WORKSPACE = "{developer_path}"\n', encoding="utf-8")
 
             preflight = module.Preflight()

@@ -1294,8 +1294,8 @@ class ToolTests(unittest.TestCase):
     def test_native_toolsets_mcp_provider_and_hook_surfaces(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)
-            toolset_dir = workspace / ".umang" / "toolsets"
-            mcp_dir = workspace / ".umang" / "mcp"
+            toolset_dir = workspace / ".humungousaur" / "toolsets"
+            mcp_dir = workspace / ".humungousaur" / "mcp"
             toolset_dir.mkdir(parents=True)
             mcp_dir.mkdir(parents=True)
             (toolset_dir / "custom.json").write_text(
@@ -1536,7 +1536,7 @@ class ToolTests(unittest.TestCase):
     def test_plugin_manifest_discovery_registers_blocked_declared_tools(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)
-            plugin_dir = workspace / ".umang" / "plugins" / "notes"
+            plugin_dir = workspace / ".humungousaur" / "plugins" / "notes"
             plugin_dir.mkdir(parents=True)
             (plugin_dir / "plugin.json").write_text(
                 json.dumps(

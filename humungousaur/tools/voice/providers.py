@@ -424,7 +424,7 @@ def _local_whisper_model_path(model: str | None = None) -> Path:
         return Path(configured).expanduser().resolve()
     model_name = model or os.environ.get("HUMUNGOUSAUR_LOCAL_WHISPER_MODEL") or os.environ.get("LOCAL_WHISPER_MODEL") or "tiny.en"
     repo_dir = f"Systran--faster-whisper-{model_name}"
-    return (_home_path() / "Desktop" / "Umang" / "voice-wakeup" / "artifacts" / "models" / repo_dir).resolve()
+    return (_home_path() / ".humungousaur" / "voice-wakeup" / "artifacts" / "models" / repo_dir).resolve()
 
 
 def _faster_whisper_model_class():
@@ -433,7 +433,7 @@ def _faster_whisper_model_class():
 
         return WhisperModel
     except ImportError:
-        site_packages = _home_path() / "Desktop" / "Umang" / "voice-wakeup" / ".venv" / "Lib" / "site-packages"
+        site_packages = _home_path() / ".humungousaur" / "voice-wakeup" / ".venv" / "Lib" / "site-packages"
         if site_packages.exists():
             sys.path.append(str(site_packages))
         try:

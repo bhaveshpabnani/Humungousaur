@@ -77,7 +77,7 @@ class ActivityIngestTool(Tool):
         super().__init__(
             name="activity_ingest",
             description=(
-                "Record a local activity-memory event using Umang's native Screenpipe-inspired schema. "
+                "Record a local activity-memory event using Janus' native Screenpipe-inspired schema. "
                 "Use for OCR text, accessibility text, audio transcript snippets, browser context, or active-window context."
             ),
             risk_level=RiskLevel.MEDIUM,

@@ -1158,7 +1158,7 @@ class CognitiveStoreTests(unittest.TestCase):
                                 "environment_id": existing.environment_id,
                                 "kind": "workspace",
                                 "title": "Humungousaur assistant repo",
-                                "summary": "The current workspace is the Humungousaur assistant platform repo under Umang.",
+                                "summary": "The current workspace is the Humungousaur assistant platform repo.",
                                 "evidence_refs": [f"goal:{goal.goal_id}", f"task:{task.task_id}"],
                                 "confidence": 0.86,
                             }
@@ -2023,7 +2023,7 @@ class CognitiveStoreTests(unittest.TestCase):
             memory_skills = SkillStore(config.skill_library_path).list(limit=5)
 
             self.assertEqual(result.status, ActionStatus.SUCCEEDED)
-            self.assertIn(".umang/skills", result.output["pack"]["relative_path"])
+            self.assertIn(".humungousaur/skills", result.output["pack"]["relative_path"])
             self.assertTrue(Path(result.output["pack"]["path"]).exists())
             self.assertEqual(packs.output["packs"][0]["display_name"], "Voice follow-up loop")
             self.assertEqual(memory_skills[0].name, "Voice follow-up loop")

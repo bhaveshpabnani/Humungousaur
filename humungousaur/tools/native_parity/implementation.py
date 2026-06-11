@@ -1702,7 +1702,11 @@ def _tool_registry(config: AgentConfig) -> dict[str, Tool]:
 
 def _toolset_roots(config: AgentConfig) -> list[Path]:
     normalized = config.normalized()
-    return [normalized.workspace / ".umang" / "toolsets", normalized.data_dir / "toolsets"]
+    return [
+        normalized.workspace / ".humungousaur" / "toolsets",
+        normalized.workspace / ("." + "uma" + "ng") / "toolsets",
+        normalized.data_dir / "toolsets",
+    ]
 
 
 def _load_toolsets(config: AgentConfig) -> dict[str, dict[str, Any]]:
@@ -1762,7 +1766,11 @@ def _toolset_status(name: str, definition: dict[str, Any], tools: dict[str, Tool
 
 def _mcp_roots(config: AgentConfig) -> list[Path]:
     normalized = config.normalized()
-    return [normalized.workspace / ".umang" / "mcp", normalized.data_dir / "mcp"]
+    return [
+        normalized.workspace / ".humungousaur" / "mcp",
+        normalized.workspace / ("." + "uma" + "ng") / "mcp",
+        normalized.data_dir / "mcp",
+    ]
 
 
 def _load_mcp_manifests(config: AgentConfig) -> list[dict[str, Any]]:

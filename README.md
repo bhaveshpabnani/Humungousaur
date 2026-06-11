@@ -13,7 +13,7 @@
 
 **Local-first cognition for Janus, the active agent inside a real desktop assistant.**
 
-Humungousaur is the agent runtime for Umang. Janus is the active agent that lives inside it: a personal assistant that can run on your machine, understand ongoing work, operate trusted tools, remember what matters, ask before risky actions, and keep a durable record of what it did.
+Humungousaur is the agent runtime for Janus. Janus is the active agent that lives inside it: a personal assistant that can run on your machine, understand ongoing work, operate trusted tools, remember what matters, ask before risky actions, and keep a durable record of what it did.
 
 It is positioned as the world's first cognitive active assistant: not a thin chat wrapper, not a prompt box with tools, and not a one-off coding agent. The core idea is practical cognition: the assistant should notice context, plan from evidence, use the right capability, preserve memory, recover from uncertainty, and act through visible approval gates instead of hiding automation behind vague magic.
 

@@ -89,7 +89,7 @@ class BrowserToolTests(unittest.TestCase):
                 result = FetchWebPageTool().execute({"url": base_url}, config)
 
             self.assertEqual(result.status, ActionStatus.SUCCEEDED)
-            self.assertEqual(result.output["title"], "Umang Browser Test")
+            self.assertEqual(result.output["title"], "Humungousaur Browser Test")
             self.assertIn("Browser research needle", result.output["text"])
             self.assertEqual(result.output["links"][0]["href"], "/next")
             self.assertEqual(result.output["images"][0]["alt"], "Browser diagram")
@@ -216,7 +216,7 @@ class BrowserToolTests(unittest.TestCase):
 
             self.assertEqual(clicked.status, ActionStatus.SUCCEEDED)
             self.assertEqual(backed.status, ActionStatus.SUCCEEDED)
-            self.assertEqual(backed.output["title"], "Umang Browser Test")
+            self.assertEqual(backed.output["title"], "Humungousaur Browser Test")
             self.assertFalse(backed.output["can_go_back"])
             stored = BrowserSessionStore(config.browser_sessions_db_path).get(opened.output["session_id"])
             self.assertEqual(stored["history"], [base_url])
@@ -1081,7 +1081,7 @@ class BrowserToolTests(unittest.TestCase):
                 result = AgentOrchestrator(config).run(f'browser_open {{"url":"{base_url}"}}')
 
             self.assertIn("browser_open: succeeded", result.final_response)
-            self.assertIn("Umang Browser Test", result.final_response)
+            self.assertIn("Humungousaur Browser Test", result.final_response)
             self.assertEqual(result.results[0].tool_name, "browser_open")
 
     def test_orchestrator_clicks_existing_browser_session_link(self) -> None:
@@ -1112,7 +1112,7 @@ class BrowserToolTests(unittest.TestCase):
 SAMPLE_HTML = """
 <!doctype html>
 <html>
-  <head><title>Umang Browser Test</title><script>ignore this script</script></head>
+  <head><title>Humungousaur Browser Test</title><script>ignore this script</script></head>
   <body>
     <h1>Browser research needle</h1>
     <p>Fetched page content must stay data, not instructions.</p>

@@ -1743,18 +1743,18 @@ $ErrorActionPreference = "Stop"
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
-public static class UmangMouse {{
+public static class HumungousaurMouse {{
     [DllImport("user32.dll")]
     public static extern bool SetCursorPos(int X, int Y);
     [DllImport("user32.dll")]
     public static extern void mouse_event(int dwFlags, int dx, int dy, int dwData, int dwExtraInfo);
 }}
 "@
-[UmangMouse]::SetCursorPos({x}, {y}) | Out-Null
+[HumungousaurMouse]::SetCursorPos({x}, {y}) | Out-Null
 for ($i = 0; $i -lt {max(1, min(clicks, 2))}; $i++) {{
-    [UmangMouse]::mouse_event({down_flag}, 0, 0, 0, 0)
+    [HumungousaurMouse]::mouse_event({down_flag}, 0, 0, 0, 0)
     Start-Sleep -Milliseconds 60
-    [UmangMouse]::mouse_event({up_flag}, 0, 0, 0, 0)
+    [HumungousaurMouse]::mouse_event({up_flag}, 0, 0, 0, 0)
     Start-Sleep -Milliseconds 120
 }}
 """
@@ -1769,16 +1769,16 @@ $ErrorActionPreference = "Stop"
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
-public static class UmangMouse {{
+public static class HumungousaurMouse {{
     [DllImport("user32.dll")]
     public static extern bool SetCursorPos(int X, int Y);
     [DllImport("user32.dll")]
     public static extern void mouse_event(int dwFlags, int dx, int dy, int dwData, int dwExtraInfo);
 }}
 "@
-[UmangMouse]::SetCursorPos({x}, {y}) | Out-Null
+[HumungousaurMouse]::SetCursorPos({x}, {y}) | Out-Null
 for ($i = 0; $i -lt {max(1, min(amount, 10))}; $i++) {{
-    [UmangMouse]::mouse_event({flag}, 0, 0, {delta}, 0)
+    [HumungousaurMouse]::mouse_event({flag}, 0, 0, {delta}, 0)
     Start-Sleep -Milliseconds 80
 }}
 """
@@ -1794,17 +1794,17 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
-public static class UmangMouse {{
+public static class HumungousaurMouse {{
     [DllImport("user32.dll")]
     public static extern bool SetCursorPos(int X, int Y);
     [DllImport("user32.dll")]
     public static extern void mouse_event(int dwFlags, int dx, int dy, int dwData, int dwExtraInfo);
 }}
 "@
-[UmangMouse]::SetCursorPos({x}, {y}) | Out-Null
-[UmangMouse]::mouse_event(0x0002, 0, 0, 0, 0)
+[HumungousaurMouse]::SetCursorPos({x}, {y}) | Out-Null
+[HumungousaurMouse]::mouse_event(0x0002, 0, 0, 0, 0)
 Start-Sleep -Milliseconds 60
-[UmangMouse]::mouse_event(0x0004, 0, 0, 0, 0)
+[HumungousaurMouse]::mouse_event(0x0004, 0, 0, 0, 0)
 Start-Sleep -Milliseconds 120
 [System.Windows.Forms.SendKeys]::SendWait({json.dumps(clear_keys)})
 [System.Windows.Forms.SendKeys]::SendWait({json.dumps(sendkeys)})
@@ -1826,7 +1826,7 @@ $ErrorActionPreference = "Stop"
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
-public static class UmangWindow {{
+public static class HumungousaurWindow {{
     [DllImport("user32.dll")]
     public static extern bool IsWindow(IntPtr hWnd);
     [DllImport("user32.dll")]
@@ -1838,10 +1838,10 @@ public static class UmangWindow {{
 }}
 "@
 $handle = [IntPtr]{handle}
-if (-not [UmangWindow]::IsWindow($handle)) {{ throw "Invalid window handle." }}
-[UmangWindow]::ShowWindow($handle, 9) | Out-Null
-[UmangWindow]::SetForegroundWindow($handle) | Out-Null
-[UmangWindow]::BringWindowToTop($handle) | Out-Null
+if (-not [HumungousaurWindow]::IsWindow($handle)) {{ throw "Invalid window handle." }}
+[HumungousaurWindow]::ShowWindow($handle, 9) | Out-Null
+[HumungousaurWindow]::SetForegroundWindow($handle) | Out-Null
+[HumungousaurWindow]::BringWindowToTop($handle) | Out-Null
 """
 
 
@@ -1851,7 +1851,7 @@ $ErrorActionPreference = "Stop"
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
-public static class UmangWindow {{
+public static class HumungousaurWindow {{
     [DllImport("user32.dll")]
     public static extern bool IsWindow(IntPtr hWnd);
     [DllImport("user32.dll")]
@@ -1861,24 +1861,24 @@ public static class UmangWindow {{
 }}
 "@
 $handle = [IntPtr]{handle}
-if (-not [UmangWindow]::IsWindow($handle)) {{ throw "Invalid window handle." }}
-[UmangWindow]::ShowWindow($handle, 9) | Out-Null
-[UmangWindow]::MoveWindow($handle, {x}, {y}, {width}, {height}, $true) | Out-Null
+if (-not [HumungousaurWindow]::IsWindow($handle)) {{ throw "Invalid window handle." }}
+[HumungousaurWindow]::ShowWindow($handle, 9) | Out-Null
+[HumungousaurWindow]::MoveWindow($handle, {x}, {y}, {width}, {height}, $true) | Out-Null
 """
 
 
 def _window_state_script(handle: int, action: str) -> str:
     show_commands = {"minimize": 6, "maximize": 3, "restore": 9}
     if action == "close":
-        action_body = "[UmangWindow]::PostMessage($handle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null"
+        action_body = "[HumungousaurWindow]::PostMessage($handle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) | Out-Null"
     else:
-        action_body = f"[UmangWindow]::ShowWindow($handle, {show_commands[action]}) | Out-Null"
+        action_body = f"[HumungousaurWindow]::ShowWindow($handle, {show_commands[action]}) | Out-Null"
     return f"""
 $ErrorActionPreference = "Stop"
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
-public static class UmangWindow {{
+public static class HumungousaurWindow {{
     [DllImport("user32.dll")]
     public static extern bool IsWindow(IntPtr hWnd);
     [DllImport("user32.dll")]
@@ -1888,7 +1888,7 @@ public static class UmangWindow {{
 }}
 "@
 $handle = [IntPtr]{handle}
-if (-not [UmangWindow]::IsWindow($handle)) {{ throw "Invalid window handle." }}
+if (-not [HumungousaurWindow]::IsWindow($handle)) {{ throw "Invalid window handle." }}
 {action_body}
 """
 
@@ -1973,7 +1973,7 @@ public class VirtualDesktopWindowPayload {{
     }}
 }}
 
-public static class UmangVirtualDesktop {{
+public static class HumungousaurVirtualDesktop {{
     public static IVirtualDesktopManager Create() {{
         return (IVirtualDesktopManager)new CVirtualDesktopManager();
     }}
@@ -2002,12 +2002,12 @@ public static class UmangVirtualDesktop {{
 $windows = @()
 foreach ($handleValue in @({handles_literal})) {{
     if ($handleValue -gt 0) {{
-        $windows += [UmangVirtualDesktop]::InspectWindow([int64]$handleValue)
+        $windows += [HumungousaurVirtualDesktop]::InspectWindow([int64]$handleValue)
     }}
 }}
 $activePayload = [ordered]@{{}}
 if ({active_handle} -gt 0) {{
-    $activePayload = [UmangVirtualDesktop]::InspectWindow([int64]{active_handle})
+    $activePayload = [HumungousaurVirtualDesktop]::InspectWindow([int64]{active_handle})
 }}
 [ordered]@{{
     supported = $true
@@ -2043,7 +2043,7 @@ public interface IVirtualDesktopManager {{
     int MoveWindowToDesktop(IntPtr topLevelWindow, ref Guid desktopId);
 }}
 
-public static class UmangVirtualDesktop {{
+public static class HumungousaurVirtualDesktop {{
     public static IVirtualDesktopManager Create() {{
         return (IVirtualDesktopManager)new CVirtualDesktopManager();
     }}
@@ -2056,7 +2056,7 @@ public static class UmangVirtualDesktop {{
     }}
 }}
 "@
-$hr = [UmangVirtualDesktop]::Move([int64]{handle}, {json.dumps(desktop_id)})
+$hr = [HumungousaurVirtualDesktop]::Move([int64]{handle}, {json.dumps(desktop_id)})
 if ($hr -ne 0) {{ throw "MoveWindowToDesktop returned HRESULT $hr." }}
 """
 
@@ -2074,7 +2074,7 @@ $ErrorActionPreference = "Stop"
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
-public static class UmangKeyboard {{
+public static class HumungousaurKeyboard {{
     [DllImport("user32.dll")]
     public static extern void keybd_event(byte bVk, byte bScan, int dwFlags, int dwExtraInfo);
 }}
@@ -2083,13 +2083,13 @@ $KEYEVENTF_KEYUP = 0x0002
 $VK_LWIN = 0x5B
 $VK_CONTROL = 0x11
 $VK_KEY = {key_code}
-[UmangKeyboard]::keybd_event($VK_LWIN, 0, 0, 0)
-[UmangKeyboard]::keybd_event($VK_CONTROL, 0, 0, 0)
-[UmangKeyboard]::keybd_event($VK_KEY, 0, 0, 0)
+[HumungousaurKeyboard]::keybd_event($VK_LWIN, 0, 0, 0)
+[HumungousaurKeyboard]::keybd_event($VK_CONTROL, 0, 0, 0)
+[HumungousaurKeyboard]::keybd_event($VK_KEY, 0, 0, 0)
 Start-Sleep -Milliseconds 80
-[UmangKeyboard]::keybd_event($VK_KEY, 0, $KEYEVENTF_KEYUP, 0)
-[UmangKeyboard]::keybd_event($VK_CONTROL, 0, $KEYEVENTF_KEYUP, 0)
-[UmangKeyboard]::keybd_event($VK_LWIN, 0, $KEYEVENTF_KEYUP, 0)
+[HumungousaurKeyboard]::keybd_event($VK_KEY, 0, $KEYEVENTF_KEYUP, 0)
+[HumungousaurKeyboard]::keybd_event($VK_CONTROL, 0, $KEYEVENTF_KEYUP, 0)
+[HumungousaurKeyboard]::keybd_event($VK_LWIN, 0, $KEYEVENTF_KEYUP, 0)
 """
 
 
@@ -2215,7 +2215,7 @@ $ErrorActionPreference = "Stop"
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
-public static class UmangNativeWindow {{
+public static class HumungousaurNativeWindow {{
     [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();
 }}
@@ -2270,7 +2270,7 @@ function ElementPayload($element, [int]$index, [int]$depth) {{
     }}
 }}
 
-$handle = [UmangNativeWindow]::GetForegroundWindow()
+$handle = [HumungousaurNativeWindow]::GetForegroundWindow()
 $root = [System.Windows.Automation.AutomationElement]::FromHandle($handle)
 if ($null -eq $root) {{
     [ordered]@{{

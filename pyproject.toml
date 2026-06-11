@@ -9,7 +9,7 @@ description = "Local-first personal desktop agent runtime with safety, tools, au
 readme = "README.md"
 requires-python = ">=3.12"
 license = {file = "LICENSE"}
-authors = [{name = "Umang"}]
+authors = [{name = "Humungousaur contributors"}]
 keywords = ["agent", "desktop", "local-first", "automation", "assistant", "macos", "windows"]
 classifiers = [
     "Development Status :: 3 - Alpha",

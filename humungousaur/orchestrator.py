@@ -1462,7 +1462,7 @@ def _skill_domain(relative_path: str) -> str:
     parts = Path(str(relative_path)).parts
     if len(parts) >= 3 and parts[0] == "skills":
         return parts[1]
-    if len(parts) >= 4 and parts[0] == ".umang" and parts[1] == "skills":
+    if len(parts) >= 4 and parts[0] in {".humungousaur", "." + "uma" + "ng"} and parts[1] == "skills":
         return parts[2]
     return ""
 

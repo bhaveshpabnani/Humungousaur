@@ -11,7 +11,7 @@
     <FileVersion>0.1.3.0</FileVersion>
     <InformationalVersion>0.1.3</InformationalVersion>
     <Product>Humungousaur</Product>
-    <Company>Umang</Company>
+    <Company>Humungousaur</Company>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\Humungousaur.ico</ApplicationIcon>
     <UseWinUI>true</UseWinUI>

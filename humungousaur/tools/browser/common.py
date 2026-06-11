@@ -232,7 +232,7 @@ def _open_with_resolved_host(opener: urllib.request.OpenerDirector, request: url
 
 
 def _fetch_page(url: str, max_bytes: int) -> dict[str, Any]:
-    request = urllib.request.Request(url, headers={"User-Agent": "UmangLocalAssistant/0.1"})
+    request = urllib.request.Request(url, headers={"User-Agent": "JanusLocalAssistant/0.1"})
     try:
         with _open_url(request, timeout=WEB_TIMEOUT_SECONDS, allow_redirects=True) as response:
             content_type = response.headers.get("content-type", "")
@@ -280,7 +280,7 @@ def _submit_form(url: str, method: str, values: dict[str, str], max_bytes: int) 
         url,
         data=encoded,
         headers={
-            "User-Agent": "UmangLocalAssistant/0.1",
+            "User-Agent": "JanusLocalAssistant/0.1",
             "Content-Type": "application/x-www-form-urlencoded",
         },
         method="POST",

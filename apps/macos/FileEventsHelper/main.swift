@@ -144,7 +144,7 @@ final class BridgeWriter {
 final class FileEventMonitor {
     private let options: Options
     private let writer: BridgeWriter
-    private let eventQueue = DispatchQueue(label: "com.umang.humungousaur.file-events")
+    private let eventQueue = DispatchQueue(label: "dev.humungousaur.file-events")
     private var snapshot: [String: FileInfo]
     private var stream: FSEventStreamRef?
     private let ignoredParts: Set<String> = [".git", ".venv", "node_modules", ".build", "__pycache__", "artifacts", ".codex"]

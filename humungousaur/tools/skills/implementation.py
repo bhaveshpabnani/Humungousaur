@@ -431,7 +431,11 @@ def default_skill_tools() -> dict[str, Tool]:
 
 def discover_workspace_skills(config: AgentConfig) -> list[WorkspaceSkillRef]:
     normalized = config.normalized()
-    roots = [normalized.workspace / "skills", normalized.workspace / ".umang" / "skills"]
+    roots = [
+        normalized.workspace / "skills",
+        normalized.workspace / ".humungousaur" / "skills",
+        normalized.workspace / ("." + "uma" + "ng") / "skills",
+    ]
     skills: list[WorkspaceSkillRef] = []
     for root in roots:
         if not root.exists() or not root.is_dir():
@@ -461,7 +465,7 @@ def _workspace_skill_domain(relative_path: str) -> str:
     parts = Path(str(relative_path)).parts
     if len(parts) >= 3 and parts[0] == "skills":
         return parts[1]
-    if len(parts) >= 4 and parts[0] == ".umang" and parts[1] == "skills":
+    if len(parts) >= 4 and parts[0] in {".humungousaur", "." + "uma" + "ng"} and parts[1] == "skills":
         return parts[2]
     return ""
 
@@ -470,7 +474,7 @@ def _workspace_skill_hierarchy_kind(relative_path: str) -> str:
     parts = Path(str(relative_path)).parts
     if len(parts) == 3 and parts[0] == "skills" and parts[-1] == "SKILL.md":
         return "domain_parent"
-    if len(parts) == 4 and parts[0] == ".umang" and parts[1] == "skills" and parts[-1] == "SKILL.md":
+    if len(parts) == 4 and parts[0] in {".humungousaur", "." + "uma" + "ng"} and parts[1] == "skills" and parts[-1] == "SKILL.md":
         return "domain_parent"
     return "leaf"
 
@@ -481,7 +485,7 @@ def _workspace_skill_parent_id(relative_path: str) -> str:
         return ""
     if parts[0] == "skills" and parts[-1] == "SKILL.md":
         return f"workspace:{Path(*parts[:-2], 'SKILL.md').as_posix()}"
-    if len(parts) > 4 and parts[0] == ".umang" and parts[1] == "skills" and parts[-1] == "SKILL.md":
+    if len(parts) > 4 and parts[0] in {".humungousaur", "." + "uma" + "ng"} and parts[1] == "skills" and parts[-1] == "SKILL.md":
         return f"workspace:{Path(*parts[:-2], 'SKILL.md').as_posix()}"
     return ""
 

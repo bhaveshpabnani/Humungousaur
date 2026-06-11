@@ -468,7 +468,7 @@ class SkillForgeDraftTool(Tool):
             name="skill_forge_draft",
             description=(
                 "Create a model-led reusable SKILL.md pack from task, tool, web, or runtime evidence. "
-                "Writes to .umang/skills when requested and can import the result into durable skill memory."
+                "Writes to .humungousaur/skills when requested and can import the result into durable skill memory."
             ),
             risk_level=RiskLevel.MEDIUM,
             input_schema=object_input_schema(
@@ -482,7 +482,7 @@ class SkillForgeDraftTool(Tool):
                     },
                     "available_tools": {"type": "array", "items": {"type": "string"}, "maxItems": 80},
                     "max_steps": {"type": "integer", "minimum": 1, "maximum": 30},
-                    "write_pack": {"type": "boolean", "description": "Write the generated SKILL.md under .umang/skills."},
+                    "write_pack": {"type": "boolean", "description": "Write the generated SKILL.md under .humungousaur/skills."},
                     "import_memory": {"type": "boolean", "description": "Also upsert the forged skill into durable cognitive skill memory."},
                     "include_proposal": {"type": "boolean", "description": "Include the model proposal in the output."},
                 },
@@ -543,7 +543,7 @@ class SkillForgePacksTool(Tool):
     def __init__(self) -> None:
         super().__init__(
             name="skill_forge_packs",
-            description="List SKILL.md packs forged under the workspace .umang/skills folder.",
+            description="List SKILL.md packs forged under the workspace .humungousaur/skills folder.",
             risk_level=RiskLevel.LOW,
             input_schema=object_input_schema({"limit": {"type": "integer", "minimum": 1, "maximum": 100}}),
             capability_group="skills",

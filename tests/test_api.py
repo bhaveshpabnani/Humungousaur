@@ -404,7 +404,7 @@ class APITests(unittest.TestCase):
     def test_api_reports_local_plugin_manifests_and_declared_tools(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)
-            plugin_dir = workspace / ".umang" / "plugins" / "demo"
+            plugin_dir = workspace / ".humungousaur" / "plugins" / "demo"
             plugin_dir.mkdir(parents=True)
             (plugin_dir / "plugin.json").write_text(
                 json.dumps(

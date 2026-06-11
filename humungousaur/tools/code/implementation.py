@@ -868,9 +868,9 @@ def _session_replay_code(config: AgentConfig, session: dict[str, Any], current_c
         except OSError:
             continue
         run_id = str(run.get("run_id", "unknown"))
-        cells.append(f"\n# --- Umang replay cell: {run_id} ---\n{cell}\n")
+        cells.append(f"\n# --- Janus replay cell: {run_id} ---\n{cell}\n")
         replayed_run_ids.append(run_id)
-    cells.append(f"\n# --- Umang current cell ---\n{current_code}\n")
+    cells.append(f"\n# --- Janus current cell ---\n{current_code}\n")
     return "".join(cells), replayed_run_ids
 
 

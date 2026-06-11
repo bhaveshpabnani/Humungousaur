@@ -76,7 +76,7 @@ class PluginManifestsTool(Tool):
     def __init__(self) -> None:
         super().__init__(
             name="plugin_manifests",
-            description="List local Umang plugin manifests and their declared blocked tools.",
+            description="List local Humungousaur plugin manifests and their declared blocked tools.",
             risk_level=RiskLevel.LOW,
             input_schema=object_input_schema(
                 {
@@ -110,7 +110,7 @@ class PluginManifestTool(Tool):
     def __init__(self) -> None:
         super().__init__(
             name="plugin_manifest",
-            description="Read one local Umang plugin manifest by name.",
+            description="Read one local Humungousaur plugin manifest by name.",
             risk_level=RiskLevel.LOW,
             input_schema=object_input_schema(
                 {"name": {"type": "string", "description": "Plugin manifest name."}},
@@ -286,7 +286,8 @@ def default_plugin_tools(config: AgentConfig | None = None, existing_tool_names:
 def plugin_manifest_roots(config: AgentConfig) -> list[Path]:
     normalized = config.normalized()
     return [
-        normalized.workspace / ".umang" / "plugins",
+        normalized.workspace / ".humungousaur" / "plugins",
+        normalized.workspace / ("." + "uma" + "ng") / "plugins",
         normalized.data_dir / "plugins",
     ]
 

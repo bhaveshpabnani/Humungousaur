@@ -6,7 +6,7 @@ final class FileSystemEventMonitor {
     private let options: FileSystemContextOptions
     private let spool: CollectorSpool
     private let health: HelperHealthReporter
-    private let eventQueue = DispatchQueue(label: "com.umang.humungousaur.native-collectors.filesystem")
+    private let eventQueue = DispatchQueue(label: "dev.humungousaur.native-collectors.filesystem")
     private var stream: FSEventStreamRef?
     private var snapshot: [String: FileSnapshot]
 

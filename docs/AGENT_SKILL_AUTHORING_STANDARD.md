@@ -1,6 +1,6 @@
 # Agent Skill Authoring Standard
 
-Humungousaur skills must follow the Agent Skills format used by the `skills/` workspace library and by forged `.umang/skills/` packs.
+Humungousaur skills must follow the Agent Skills format used by the `skills/` workspace library and by forged `.humungousaur/skills/` packs.
 
 This is the required contract for every new or updated agent skill. It applies to hand-written skills, model-forged skills, external reference adaptations, and the planned 100+ personal-assistant skill buildout based on capability analysis from external reference Agent, Anthropic Skills, and external references.
 

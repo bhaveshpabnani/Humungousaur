@@ -459,7 +459,7 @@ class running_screenpipe_api:
                             "content_type": query.get("content_type", ["all"])[0],
                             "timestamp": "2026-06-01T12:00:00Z",
                             "app_name": "Code",
-                            "window_name": "Umang",
+                            "window_name": "Humungousaur",
                             "content": "project deadline " + ("x" * 2000),
                             "score": 0.9,
                         }

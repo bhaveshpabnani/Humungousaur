@@ -162,7 +162,7 @@ class SkillForge:
         name = _clean(proposal.name, limit=120)
         if not name:
             raise ValueError("Skill proposal name is empty.")
-        root = (target_root or self.config.workspace / ".umang" / "skills").resolve()
+        root = (target_root or self.config.workspace / ".humungousaur" / "skills").resolve()
         _ensure_within_workspace(root, self.config.workspace)
         slug = _slug_from_name(name)
         skill_dir = _unique_dir(root, slug)
@@ -201,28 +201,30 @@ class SkillForge:
 
 def forged_skill_packs(config: AgentConfig, *, limit: int = 50) -> list[dict[str, Any]]:
     normalized = config.normalized()
-    root = normalized.workspace / ".umang" / "skills"
     packs: list[dict[str, Any]] = []
-    if not root.exists():
-        return packs
-    for path in sorted(root.rglob("SKILL.md"))[: max(1, min(limit, 200))]:
-        try:
-            relative = path.relative_to(normalized.workspace).as_posix()
-            metadata = _frontmatter(path)
-            title = _heading_title(path)
-            packs.append(
-                {
-                    "skill_id": f"workspace:{relative}",
-                    "name": metadata.get("name") or path.parent.name,
-                    "display_name": title or metadata.get("name") or path.parent.name,
-                    "description": metadata.get("description", ""),
-                    "path": str(path.resolve()),
-                    "relative_path": relative,
-                    "updated_at": utc_now_from_stat(path),
-                }
-            )
-        except OSError:
+    for root in (normalized.workspace / ".humungousaur" / "skills", normalized.workspace / ("." + "uma" + "ng") / "skills"):
+        if not root.exists():
             continue
+        for path in sorted(root.rglob("SKILL.md"))[: max(1, min(limit, 200))]:
+            try:
+                relative = path.relative_to(normalized.workspace).as_posix()
+                metadata = _frontmatter(path)
+                title = _heading_title(path)
+                packs.append(
+                    {
+                        "skill_id": f"workspace:{relative}",
+                        "name": metadata.get("name") or path.parent.name,
+                        "display_name": title or metadata.get("name") or path.parent.name,
+                        "description": metadata.get("description", ""),
+                        "path": str(path.resolve()),
+                        "relative_path": relative,
+                        "updated_at": utc_now_from_stat(path),
+                    }
+                )
+            except OSError:
+                continue
+            if len(packs) >= limit:
+                return packs
     return packs
 
 

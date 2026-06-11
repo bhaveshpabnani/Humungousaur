@@ -3418,7 +3418,7 @@ def _validate_loopback_base_url(base_url: str) -> str | None:
 
 
 def _get_json(url: str, timeout: float = 5.0) -> Any:
-    request = urllib.request.Request(url, headers={"User-Agent": "UmangLocalAssistant/0.1"})
+    request = urllib.request.Request(url, headers={"User-Agent": "JanusLocalAssistant/0.1"})
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             raw = response.read(SCREENPIPE_RESPONSE_BYTES + 1)
