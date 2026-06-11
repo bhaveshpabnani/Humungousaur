@@ -25,7 +25,35 @@ INPUT_STIMULUS_TYPES = {
     "trackpad_gesture",
     "keyboard_shortcut_pressed",
 }
-BROWSER_BRIDGE_STIMULUS_TYPES = {"browser_tab_opened", "browser_tab_closed", "browser_tab_switched", "browser_download_finished"}
+APP_LIFECYCLE_BRIDGE_STIMULUS_TYPES = {
+    "app_opened",
+    "app_closed",
+    "app_focused",
+    "app_hidden",
+    "app_crashed",
+    "app_not_responding",
+    "permission_prompt_shown",
+}
+WINDOW_LIFECYCLE_BRIDGE_STIMULUS_TYPES = {
+    "window_opened",
+    "window_closed",
+    "window_focused",
+    "window_moved",
+    "window_resized",
+    "window_minimized",
+    "window_title_changed",
+}
+BROWSER_BRIDGE_STIMULUS_TYPES = {
+    "browser_tab_observed",
+    "browser_url_changed",
+    "browser_title_changed",
+    "browser_tab_opened",
+    "browser_tab_closed",
+    "browser_tab_switched",
+    "browser_reloaded",
+    "browser_back",
+    "browser_forward",
+}
 MAX_LIFECYCLE_EVENTS_PER_TICK = 10
 
 
@@ -39,18 +67,18 @@ def collect_input_device(config: AgentConfig, profile: CollectorProfile, state: 
 
 
 def collect_app_lifecycle(config: AgentConfig, profile: CollectorProfile, state: dict[str, Any]) -> list[CollectorEvent]:
-    del config, profile
+    del profile
+    events = read_bridge_events(config, state, "app_lifecycle", APP_LIFECYCLE_BRIDGE_STIMULUS_TYPES, source="activity")
     current = _process_names()
     lifecycle = state.setdefault("app_lifecycle", {})
     previous = set(str(item) for item in lifecycle.get("process_names", []) if str(item))
     lifecycle["process_names"] = sorted(current)
     lifecycle["last_seen_at"] = utc_now()
     if not previous:
-        return []
+        return events[:MAX_LIFECYCLE_EVENTS_PER_TICK]
 
     opened = sorted(current - previous)[:5]
     closed = sorted(previous - current)[:5]
-    events: list[CollectorEvent] = []
     for name in opened:
         events.append(
             CollectorEvent(
@@ -75,25 +103,26 @@ def collect_app_lifecycle(config: AgentConfig, profile: CollectorProfile, state:
                 signature=f"app_closed:{name}:{int(time.time() // 5)}",
             )
         )
-    return events
+    return events[:MAX_LIFECYCLE_EVENTS_PER_TICK]
 
 
 def collect_window_lifecycle(config: AgentConfig, profile: CollectorProfile, state: dict[str, Any]) -> list[CollectorEvent]:
-    del config, profile
+    del profile
+    events = read_bridge_events(config, state, "window_lifecycle", WINDOW_LIFECYCLE_BRIDGE_STIMULUS_TYPES, source="activity")
     snapshot = active_window_snapshot()
     app = str(snapshot.get("app_name") or snapshot.get("process") or "").strip()
     title = str(snapshot.get("title") or "").strip()
     if not (app or title):
-        return []
+        return events[:MAX_LIFECYCLE_EVENTS_PER_TICK]
     signature = f"{app}\t{title}"
     lifecycle = state.setdefault("window_lifecycle", {})
     previous = str(lifecycle.get("active_signature") or "")
     lifecycle["active_signature"] = signature
     lifecycle["last_seen_at"] = utc_now()
     if not previous:
-        return []
+        return events[:MAX_LIFECYCLE_EVENTS_PER_TICK]
     stimulus_type = "window_title_changed" if previous.split("\t", 1)[0] == app else "window_focused"
-    return [
+    events.append(
         CollectorEvent(
             collector="window_lifecycle",
             source="activity",
@@ -103,7 +132,8 @@ def collect_window_lifecycle(config: AgentConfig, profile: CollectorProfile, sta
             payload={"snapshot": snapshot, "previous_signature": previous},
             signature=f"{stimulus_type}:{signature}",
         )
-    ]
+    )
+    return events[:MAX_LIFECYCLE_EVENTS_PER_TICK]
 
 
 def collect_browser_lifecycle(config: AgentConfig, profile: CollectorProfile, state: dict[str, Any]) -> list[CollectorEvent]:

@@ -4,8 +4,9 @@ from typing import Any
 
 from humungousaur.config import AgentConfig
 
-from .bridge import read_bridge_events
-from .models import CollectorEvent, CollectorProfile
+from ..bridge import read_bridge_events
+from ..models import CollectorEvent, CollectorProfile
+from ..sources.google_workspace import read_google_workspace_events
 
 
 ACCESSIBILITY_STIMULUS_TYPES = {
@@ -100,7 +101,9 @@ def collect_notification_activity(config: AgentConfig, profile: CollectorProfile
 
 def collect_calendar_activity(config: AgentConfig, profile: CollectorProfile, state: dict[str, Any]) -> list[CollectorEvent]:
     del profile
-    return read_bridge_events(config, state, "calendar_activity", CALENDAR_STIMULUS_TYPES, source="system")
+    return read_google_workspace_events(config, state, "calendar_activity", CALENDAR_STIMULUS_TYPES) + read_bridge_events(
+        config, state, "calendar_activity", CALENDAR_STIMULUS_TYPES, source="system"
+    )
 
 
 def collect_communication_activity(config: AgentConfig, profile: CollectorProfile, state: dict[str, Any]) -> list[CollectorEvent]:
@@ -110,12 +113,16 @@ def collect_communication_activity(config: AgentConfig, profile: CollectorProfil
 
 def collect_mail_activity(config: AgentConfig, profile: CollectorProfile, state: dict[str, Any]) -> list[CollectorEvent]:
     del profile
-    return read_bridge_events(config, state, "mail_activity", MAIL_STIMULUS_TYPES, source="activity")
+    return read_google_workspace_events(config, state, "mail_activity", MAIL_STIMULUS_TYPES) + read_bridge_events(
+        config, state, "mail_activity", MAIL_STIMULUS_TYPES, source="activity"
+    )
 
 
 def collect_document_activity(config: AgentConfig, profile: CollectorProfile, state: dict[str, Any]) -> list[CollectorEvent]:
     del profile
-    return read_bridge_events(config, state, "document_activity", DOCUMENT_STIMULUS_TYPES, source="activity")
+    return read_google_workspace_events(config, state, "document_activity", DOCUMENT_STIMULUS_TYPES) + read_bridge_events(
+        config, state, "document_activity", DOCUMENT_STIMULUS_TYPES, source="activity"
+    )
 
 
 def collect_creative_activity(config: AgentConfig, profile: CollectorProfile, state: dict[str, Any]) -> list[CollectorEvent]:

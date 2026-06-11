@@ -4,8 +4,8 @@ from typing import Any
 
 from humungousaur.config import AgentConfig
 
-from .bridge import read_bridge_events
-from .models import CollectorEvent, CollectorProfile
+from ..bridge import read_bridge_events
+from ..models import CollectorEvent, CollectorProfile
 
 
 BROWSER_PAGE_STIMULUS_TYPES = {
