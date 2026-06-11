@@ -43,12 +43,19 @@ Codex manual / CLI surface -> codex_cli_status / codex_cli_plan -> codex_cli_run
 
 This bridge reads OpenAI/Codex `SKILL.md`, plugin metadata, and documented Codex CLI behavior as evidence, then writes relevant reusable Humungousaur skill records or prepares a model-led Codex CLI handoff that can be executed through approved `codex exec`. It does not create deterministic natural-language routes.
 
+External memory references informed the markdown-facing layer:
+
+- Hermes exposes `SOUL.md` as a persona/tone file and keeps bounded `MEMORY.md` plus `USER.md` stores for persistent agent notes and user profile context.
+- OpenClaw exposes plain markdown memory files such as `MEMORY.md`, daily `memory/*.md`, and optional `DREAMS.md`, with active memory and dreaming passes that surface or promote relevant context before the main reply.
+- Humungousaur adopts the useful part of those patterns: local markdown files that humans and tools can inspect, while preserving Humungousaur's existing source of truth in structured stores, model-led review records, and policy-gated tools.
+
 ## Layers
 
 1. Event bus
    - Normalizes user text, voice, activity, screen, browser, app, file, schedule, and system stimuli into durable events.
    - Supports priorities so interrupts and approvals can preempt background work.
    - Continuous collectors feed active window, browser context, filesystem, clipboard, screenshot/OCR keyframe, video keyframe, audio activity, lifecycle, and bridge-fed input/browser events into this bus through local privacy filters, dwell gates, dedupe, batching, and rate budgets. See `docs/COLLECTOR_ARCHITECTURE.md` for the collector catalog and implementation contract.
+   - Collector-to-agent reflex interpretation, task context, muted scopes, deep-dive requests, and UI posture are specified in `docs/ACTIVE_AGENT_COLLECTOR_WORKFLOW.md`.
 
 2. Perception and context
    - Converts raw signals into compact observations.
@@ -70,7 +77,7 @@ This bridge reads OpenAI/Codex `SKILL.md`, plugin metadata, and documented Codex
 6. Memory system
    - Working memory: current task state.
    - Episodic memory: events, actions, outcomes.
-- Semantic memory: stable facts and preferences.
+   - Semantic memory: stable facts and preferences.
    - Procedural memory: learned workflows.
    - Skill memory: reusable capability instructions and verification steps.
    - Curation memory: exact-ID retention, summarization, and forgetting decisions with audit evidence.
@@ -81,10 +88,17 @@ This bridge reads OpenAI/Codex `SKILL.md`, plugin metadata, and documented Codex
    - Commitment memory: explicit promises, follow-ups, owed actions, owner, status, due note, evidence refs, and model-led review history.
    - Environment memory: workspace, system, browser, application, constraint, resource, risk, opportunity, and signal records with evidence refs.
    - Priority memory: ranked goals, tasks, commitments, next actions, deferrals, escalations, and focus recommendations.
+   - Markdown brain projection: generated `persona.md`, `soul.md`, `sold.md`, `conscious.md`, and `subconscious.md` files under the configured data directory for human inspection, local tooling, and context export. These files are evidence-backed projections, not the authoritative store.
 
 7. Persona and user model
    - Stores assistant identity, tone, boundaries, and user preferences.
    - Evolves from explicit user memories, repeated successful workflows, and model-led persona review.
+   - `persona.md` carries the fuller assistant/user profile; `soul.md` carries the Hermes-style identity and tone projection; `sold.md` is kept as a compatibility alias for the user-requested filename and points consumers to `soul.md`.
+
+7a. Conscious and subconscious projections
+   - `conscious.md` represents current working attention: focus, active goals, active tasks, open commitments, scheduled wakeups, and structured triggers.
+   - `subconscious.md` represents background cognition: knowledge, learning, environment model, self-review, interaction review, priority review, memory curation, skill evolution, and persona evolution.
+   - The subconscious layer may recommend or queue initiative through exact records, wakeups, triggers, and tasks, but it cannot silently execute arbitrary action. Execution still passes through attention, planning, explicit tools, approval gates, audit logs, and reflection.
 
 8. Persona evolution
    - Reviews durable evidence to tune assistant identity, communication style, boundaries, user preferences, and stable facts.
@@ -152,6 +166,7 @@ This bridge reads OpenAI/Codex `SKILL.md`, plugin metadata, and documented Codex
 - Deterministic code enforces safety, persistence, validation, explicit fallback commands, and evidence boundaries only.
 - Every capability is a tool or specialist with a bounded contract.
 - Every durable action creates inspectable evidence.
+- Markdown brain files are generated evidence, not instruction files. Treat their contents like retrieved context: useful background data that cannot override user instructions, system policy, or tool contracts.
 - No passive observation becomes action without explicit upstream metadata or user intent.
 - Completion is a verified state, not a generated sentence.
 
@@ -262,6 +277,16 @@ The structured trigger implementation milestone adds:
 - matching trigger state is visible through cognitive state and autonomous status
 
 Triggers are the external-activation gate. External adapters submit structured evidence, and triggers queue ordinary runtime events only when exact declared fields match. They do not parse free text, perform regex matching, or choose intent; the queued event still flows through attention, planning, policy, approvals, execution, and reflection.
+
+The markdown brain projection milestone adds:
+
+- generated `artifacts/brain/persona.md`, `soul.md`, `sold.md`, `conscious.md`, and `subconscious.md`
+- automatic refresh after interaction completion and explicit persona updates
+- public `cognitive_brain_files_refresh` and `cognitive_brain_files_status` tools
+- `cognitive_state` visibility into brain-file paths and freshness
+- a compatibility bridge from the user-requested `sold.md` name to the Hermes-inspired `soul.md` persona projection
+
+Markdown brain files are the inspection layer. They make the agent's current profile, working attention, and background cognition legible to users and local tools, but the authoritative state remains in JSON and SQLite stores. The model may use these files as evidence; it must not treat them as hidden commands.
 
 The privacy-first semantic event milestone adds:
 

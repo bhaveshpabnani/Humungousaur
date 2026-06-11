@@ -2,6 +2,8 @@
 
 Engineering principles live in `docs/ENGINEERING_PRINCIPLES.md`. New broad assistant behaviors should be model-led capability handoffs, with deterministic safeguards kept to explicit fallback commands, safety validation, schema validation, audit persistence, and evidence-boundary enforcement.
 
+Collector task rule: do not treat a stimulus type as implemented just because it is listed in a collector definition. Every collector task must also add or identify the source emitter: local polling, local OS-state inspection, native helper bridge, browser/IDE/app extension, or an explicit bridge-only placeholder naming the missing emitter. Adapter implementations live under `humungousaur/collectors/adapters/`; core runtime files such as `manager.py`, `definitions.py`, `bridge.py`, and `attention_compaction.py` stay at the collector package root.
+
 ## Milestone 1: Safe Local Runtime
 
 Status: implemented as first slice.
@@ -133,3 +135,31 @@ Remaining:
 - memory search
 - permissions dashboard
 - activity replay
+
+## Milestone 8: End-to-End Collector Sources
+
+Status: started.
+
+- Collector runtime now has a durable SQLite WAL event bus, normalized event envelopes, independent consumer offsets/state, retry tracking, and dead-letter handling.
+- `native_collectors/` now defines the cross-platform native collector kit: Swift for macOS, C#/.NET for Windows, and Rust for Linux, all targeting one shared event envelope schema.
+- Adapter modules live under `humungousaur/collectors/adapters/`.
+- Source implementation levels are documented in `docs/COLLECTOR_ARCHITECTURE.md`.
+- App, SaaS, browser-extension, IDE-plugin, and webhook source integrations are organized in `docs/APP_COLLECTOR_ARCHITECTURE.md`.
+- Active-agent collector interpretation, reflex LLM routing, task context, muted scopes, deep-dive requests, and UI posture are designed in `docs/ACTIVE_AGENT_COLLECTOR_WORKFLOW.md`.
+- Detailed active-agent Reflex architecture, human-task research basis, event families, context memory, Activity Skill Packs, agent bridge, desktop UI surfaces, and implementation phases are documented in `docs/ACTIVE_AGENT_REFLEX_ARCHITECTURE.md`.
+- First active-agent runtime slice is implemented with `humungousaur/active_agent/`, an independent `active_agent` collector consumer, Reflex LLM schema/parser, cognition prompt-template integration, task-context/muted-scope/deep-dive stores, muted-scope cancellation, deep-dive approve/reject transitions, user-declared task focus projection, generalized rolling/collector/source/entity context windows, sustained/return-after-gap boundaries, resume capsules, UI-safe explanation artifacts, durable user corrections, durable Agent Bridge activation records with status, `response_mode`, `stimulus_id`, evidence refs, and harness results, API/CLI status and write surfaces, schema-validated Activity Skill Packs with relevance selection, macOS/Windows Active Agent desktop panels for posture/explanations/corrections/task repair/scoped mutes/deep-dive decisions/collector health, and focused tests.
+- Direct app/SaaS/browser source ingestion now passes through a shared source gate before durable event-log writes, so configured profiles can reject disabled collectors, duplicates, rate-limit overflow, and local activity-policy matches.
+- `file_operation_activity` now has best-effort local `file_saved`, `file_renamed`, `file_moved`, `file_opened`, and `file_closed` sources plus macOS FSEvents bridge enrichment.
+- `folder_navigation_activity` now has best-effort local `folder_created`, `folder_changed`, `folder_renamed`, and `folder_moved` sources plus macOS FSEvents bridge enrichment.
+- `trash_activity` now has best-effort local `file_moved_to_trash`, `folder_moved_to_trash`, `trash_item_deleted`, and `trash_emptied` sources.
+- `apps/macos` now includes `HumungousaurFileEvents`; `script/run_macos_file_events.sh` starts it and writes bridge JSONL into `data_dir/collector_spool/`.
+- `filesystem`, `downloads`, local context, active window, browser context, lifecycle snapshots, Git polling, and selected environment collectors have local or hybrid source implementations.
+
+Remaining:
+
+- Replace bridge-only contracts with real emitters one family at a time.
+- Add Windows `ReadDirectoryChangesW` and Linux `inotify` helpers for parity with the macOS FSEvents file/folder helper.
+- Add privileged macOS Endpoint Security, Windows ETW/auditing, and Linux fanotify helpers only for opt-in open/close/access semantics.
+- For each remaining collector, add the native/app/browser source helper or mark the exact missing emitter in `docs/COLLECTOR_ARCHITECTURE.md`.
+- Add focused tests proving actual source emission, not only bridge ingestion.
+- Keep broad collector/semantic/API tests green after every source family.

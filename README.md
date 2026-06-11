@@ -11,11 +11,11 @@
   <a href="docs/RELEASE_RUNBOOK.md"><img src="https://img.shields.io/badge/Release-verified%20gates-111827?style=for-the-badge" alt="Verified release gates"></a>
 </p>
 
-**Local-first cognition for a real desktop agent.**
+**Local-first cognition for Janus, the active agent inside a real desktop assistant.**
 
-Humungousaur is the agent runtime for Umang: a personal assistant that can live on your machine, understand ongoing work, operate trusted tools, remember what matters, ask before risky actions, and keep a durable record of what it did.
+Humungousaur is the agent runtime for Umang. Janus is the active agent that lives inside it: a personal assistant that can run on your machine, understand ongoing work, operate trusted tools, remember what matters, ask before risky actions, and keep a durable record of what it did.
 
-It is not a thin chat wrapper. The core idea is practical cognition: the assistant should notice context, plan from evidence, use the right capability, preserve memory, recover from uncertainty, and act through visible approval gates instead of hiding automation behind vague magic.
+It is positioned as the world's first cognitive active assistant: not a thin chat wrapper, not a prompt box with tools, and not a one-off coding agent. The core idea is practical cognition: the assistant should notice context, plan from evidence, use the right capability, preserve memory, recover from uncertainty, and act through visible approval gates instead of hiding automation behind vague magic.
 
 If you want a hackable, inspectable assistant that can grow from local CLI runs into desktop, browser, voice, channel, memory, and autonomous workflows, start here.
 
@@ -27,6 +27,14 @@ If you want a hackable, inspectable assistant that can grow from local CLI runs 
 
 <p align="center">
   <sub>Native macOS shell connected to the local Humungousaur daemon.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/assets/readme/janus-active-assistant-overview.jpg" alt="Janus active assistant connector fabric and collector architecture overview" width="920">
+</p>
+
+<p align="center">
+  <sub>Janus turns collectors, connectors, model routes, and approval-gated actions into one active cognitive loop.</sub>
 </p>
 
 <p align="center">
@@ -51,12 +59,37 @@ If you want a hackable, inspectable assistant that can grow from local CLI runs 
 
 Humungousaur treats cognition as a product surface, not an internal implementation detail.
 
+- **Janus is active by design:** the named agent can observe, wait, ask, draft, act, monitor, or recover from context instead of only responding after a user opens a chat box.
 - **Memory that has jobs:** explicit notes, profile facts, lessons, commitments, environment records, summaries, and curation are separate so the assistant can recall the right thing for the right reason.
 - **Attention before action:** passive signals, activity, channel events, voice transcripts, and direct user prompts enter a harness that can respond, observe, analyze, monitor, or ignore.
 - **Skills that compound:** reusable skills are inspectable Markdown contracts with tool maps, safety boundaries, failure modes, and verification notes.
 - **Approvals that mean something:** external sends, destructive operations, app launching, UI control, shell execution, screenshots, browser mutation, and code execution can pause for human approval with an audit trail.
 - **Desktop parity by design:** Windows and macOS clients talk to the same local runtime instead of splitting into separate products.
 - **Local-first trust:** secrets stay in env/runtime secret stores, generated artifacts stay local, and release hygiene scans publish candidates before public release.
+
+## Meet Janus
+
+Janus, spelled J-A-N-U-S, is the active agent layer. Humungousaur provides the runtime, APIs, collectors, tools, memory, approvals, native apps, and release surface. Janus uses that body to behave like a cognitive assistant that is aware of the user's working environment without becoming an uncontrolled background recorder.
+
+| Janus layer | What it does |
+| --- | --- |
+| Collectors architecture | Metadata-first collectors watch allowed desktop, browser, file, app, channel, meeting, developer, knowledge, and business surfaces. Each source emits normalized events instead of dumping raw private content into prompts. |
+| Stimulus architecture | Text, voice, channel messages, browser state, file activity, connector events, and local app signals are normalized into stimuli, filtered for privacy/dwell/dedupe/rate limits, compacted into attention batches, and converted into semantic context. |
+| Reflexes architecture | Janus can answer, observe, ask for clarification, draft, queue work, monitor a condition, call a tool, request approval, cancel, recover, or write memory depending on the stimulus and risk level. |
+| Connector fabric | Connectors make external work systems ready for tools and collectors: Google Workspace, Microsoft 365, Slack, GitHub, Linear, Notion, Zoom, browsers, IDEs, CRMs, task tools, file stores, model providers, and local apps. |
+| Cognitive state | Goals, commitments, conscious focus, background learning, memories, environment facts, self-review, skill evolution, and interaction history stay durable so Janus can improve across sessions. |
+| Governance | Tool schemas, risk levels, permission checks, local outbox records, approval gates, timeline evidence, and redacted traces make the agent inspectable before and after it acts. |
+
+## The USP
+
+Most assistants are either chat-first, code-first, or automation-first. Humungousaur is cognition-first: it gives Janus a governed perception loop, a durable memory system, a real desktop body, connector-aware tools, and a safety model that treats user trust as part of the product.
+
+| Product shape | Center of gravity | Humungousaur difference |
+| --- | --- | --- |
+| Claude cowork / Claude Code-style assistants | Strong conversational reasoning and coding help inside a task session. | Janus is not limited to a chat or coding session. It can consume local stimuli, remember commitments, use desktop and SaaS connectors, and route actions through approvals across sessions. |
+| Codex | Repo-aware coding agent that edits, tests, and explains code. | Humungousaur includes coding workflows, but the core product is a broader active assistant with collectors, reflexes, connector readiness, native apps, voice/channels, memory, and governed tool execution. |
+| OpenClaw | Open agent runtime with strong execution, channels, and approval patterns. | Humungousaur builds a local-first cognitive assistant around Janus: collector-driven attention, semantic events, durable cognition surfaces, desktop parity, and connector-aware workflow context. |
+| Hermes Agent | Gateway-style agent API with runs, events, approvals, and toolsets. | Humungousaur keeps those useful runtime ideas but adds an active stimulus loop, native desktop clients, memory/cognition APIs, local collectors, source readiness, and release/update surfaces for a complete assistant product. |
 
 ## API Surface Compared
 

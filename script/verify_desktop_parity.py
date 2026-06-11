@@ -199,13 +199,20 @@ def main() -> int:
             MACOS_VOICE_AUTONOMY_SETTINGS,
         ]
     )
+    macos_catalog = read(ROOT / "apps/macos/Sources/AppViewModel.swift")
     for provider in sorted(REQUIRED_MODEL_PROVIDERS):
-        if f'Tag="{provider}"' in windows_ui and f'tag("{provider}")' in macos_ui:
+        windows_provider_present = f'Tag="{provider}"' in windows_ui or f'ProviderId = "{provider}"' in windows_ui
+        macos_provider_present = (
+            f'tag("{provider}")' in macos_ui
+            or f'providerId: "{provider}"' in macos_catalog
+            or f'$0.providerId == "{provider}"' in macos_catalog
+        )
+        if windows_provider_present and macos_provider_present:
             passed.append(f"model provider UI parity present: {provider}")
         else:
-            if f'Tag="{provider}"' not in windows_ui:
+            if not windows_provider_present:
                 errors.append(f"Windows desktop settings UI does not expose model provider {provider}")
-            if f'tag("{provider}")' not in macos_ui:
+            if not macos_provider_present:
                 errors.append(f"macOS desktop settings UI does not expose model provider {provider}")
 
     for surface_name, (windows_needles, macos_needles) in REQUIRED_UI_SURFACES.items():

@@ -285,6 +285,8 @@ def main() -> int:
                 },
             )
             smoke.require(collectors_config.get("profile", {}).get("enabled") is True, "collector configuration persists through desktop API")
+            api_post(base_url, "/collectors/tick", {"force": True})
+            (workspace / "desktop-context.md").write_text("Desktop app context changed.", encoding="utf-8")
             collectors_tick = api_post(base_url, "/collectors/tick", {"force": True})
             smoke.require("collected" in collectors_tick and "skipped" in collectors_tick, "collector tick endpoint runs safely for desktop API")
             smoke.require(
