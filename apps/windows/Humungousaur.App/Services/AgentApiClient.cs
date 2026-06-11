@@ -162,15 +162,15 @@ public sealed class AgentApiClient
 
     public Task<JsonObject> GetAutonomousStatusAsync() => GetJsonObjectAsync("autonomous/status?limit=8");
 
-    public async Task<ActiveAgentStatusResponse> GetActiveAgentStatusAsync(int limit = 20)
+    public async Task<JanusStatusResponse> GetJanusStatusAsync(int limit = 20)
     {
-        return await GetAsync<ActiveAgentStatusResponse>($"active-agent/status?limit={limit}") ?? new ActiveAgentStatusResponse();
+        return await GetAsync<JanusStatusResponse>($"janus/status?limit={limit}") ?? new JanusStatusResponse();
     }
 
-    public Task<JsonObject> GetActiveAgentPlannerContextAsync(string request = "")
+    public Task<JsonObject> GetJanusPlannerContextAsync(string request = "")
     {
         var suffix = string.IsNullOrWhiteSpace(request) ? "" : $"?request={Uri.EscapeDataString(request)}";
-        return GetJsonObjectAsync($"active-agent/planner-context{suffix}");
+        return GetJsonObjectAsync($"janus/planner-context{suffix}");
     }
 
     public async Task<CollectorStatusResponse> GetCollectorStatusAsync(int limit = 12)
@@ -178,7 +178,7 @@ public sealed class AgentApiClient
         return await GetAsync<CollectorStatusResponse>($"collectors/status?limit={limit}") ?? new CollectorStatusResponse();
     }
 
-    public Task<JsonObject> RecordActiveAgentCorrectionAsync(
+    public Task<JsonObject> RecordJanusCorrectionAsync(
         string correctionType,
         string targetType,
         string targetId,
@@ -204,10 +204,10 @@ public sealed class AgentApiClient
                 ["privacy_mode"] = "metadata_first",
             };
         }
-        return PostJsonObjectAsync("active-agent/corrections", payload);
+        return PostJsonObjectAsync("janus/corrections", payload);
     }
 
-    public Task<JsonObject> CreateActiveAgentMutedScopeAsync(
+    public Task<JsonObject> CreateJanusMutedScopeAsync(
         string mode,
         string collector,
         string source,
@@ -223,32 +223,32 @@ public sealed class AgentApiClient
             ["source"] = source.Trim(),
             ["stimulus_type"] = stimulusType.Trim(),
             ["entity_refs"] = StringArray(entityRefs),
-            ["reason"] = string.IsNullOrWhiteSpace(reason) ? "User created a scoped mute from the Windows Active Agent panel." : reason.Trim(),
+            ["reason"] = string.IsNullOrWhiteSpace(reason) ? "User created a scoped mute from the Windows Janus panel." : reason.Trim(),
         };
-        return PostJsonObjectAsync("active-agent/muted-scopes", payload);
+        return PostJsonObjectAsync("janus/muted-scopes", payload);
     }
 
-    public Task<JsonObject> CancelActiveAgentMutedScopeAsync(string scopeId, string reason)
+    public Task<JsonObject> CancelJanusMutedScopeAsync(string scopeId, string reason)
     {
-        return PostJsonObjectAsync("active-agent/muted-scopes/cancel", new JsonObject
+        return PostJsonObjectAsync("janus/muted-scopes/cancel", new JsonObject
         {
             ["scope_id"] = scopeId,
             ["reason"] = reason,
         });
     }
 
-    public Task<JsonObject> ApproveActiveAgentDeepDiveAsync(string requestId, string reason)
+    public Task<JsonObject> ApproveJanusDeepDiveAsync(string requestId, string reason)
     {
-        return PostJsonObjectAsync("active-agent/deep-dives/approve", new JsonObject
+        return PostJsonObjectAsync("janus/deep-dives/approve", new JsonObject
         {
             ["request_id"] = requestId,
             ["reason"] = reason,
         });
     }
 
-    public Task<JsonObject> RejectActiveAgentDeepDiveAsync(string requestId, string reason)
+    public Task<JsonObject> RejectJanusDeepDiveAsync(string requestId, string reason)
     {
-        return PostJsonObjectAsync("active-agent/deep-dives/reject", new JsonObject
+        return PostJsonObjectAsync("janus/deep-dives/reject", new JsonObject
         {
             ["request_id"] = requestId,
             ["reason"] = reason,
@@ -430,18 +430,18 @@ public sealed class AgentApiClient
         {
             payload["model_base_url"] = settings.ModelBaseUrl;
         }
-        var activeProvider = AppRuntimeDefaults.EffectiveActiveModelProvider(settings.ActiveModelProvider);
+        var activeProvider = AppRuntimeDefaults.EffectiveJanusModelProvider(settings.JanusModelProvider);
         if (!activeProvider.Equals("same-as-main", StringComparison.OrdinalIgnoreCase))
         {
-            payload["active_model_provider"] = AppRuntimeDefaults.CliActiveModelProvider(activeProvider);
-            payload["active_model_api_key_env"] = AppRuntimeDefaults.ModelApiKeyName(activeProvider);
-            if (!string.IsNullOrWhiteSpace(settings.ActiveModelName))
+            payload["janus_model_provider"] = AppRuntimeDefaults.CliJanusModelProvider(activeProvider);
+            payload["janus_model_api_key_env"] = AppRuntimeDefaults.ModelApiKeyName(activeProvider);
+            if (!string.IsNullOrWhiteSpace(settings.JanusModelName))
             {
-                payload["active_model"] = settings.ActiveModelName;
+                payload["janus_model"] = settings.JanusModelName;
             }
-            if (!string.IsNullOrWhiteSpace(settings.ActiveModelBaseUrl))
+            if (!string.IsNullOrWhiteSpace(settings.JanusModelBaseUrl))
             {
-                payload["active_model_base_url"] = settings.ActiveModelBaseUrl;
+                payload["janus_model_base_url"] = settings.JanusModelBaseUrl;
             }
         }
         var secrets = RuntimeSecrets(settings);
@@ -456,10 +456,10 @@ public sealed class AgentApiClient
     {
         var secrets = new JsonObject();
         AddSecret(secrets, AppRuntimeDefaults.ModelApiKeyName(settings.ModelProvider), settings.ModelApiKey);
-        var activeProvider = AppRuntimeDefaults.EffectiveActiveModelProvider(settings.ActiveModelProvider);
+        var activeProvider = AppRuntimeDefaults.EffectiveJanusModelProvider(settings.JanusModelProvider);
         if (!activeProvider.Equals("same-as-main", StringComparison.OrdinalIgnoreCase))
         {
-            AddSecret(secrets, AppRuntimeDefaults.ModelApiKeyName(activeProvider), settings.ActiveModelApiKey);
+            AddSecret(secrets, AppRuntimeDefaults.ModelApiKeyName(activeProvider), settings.JanusModelApiKey);
         }
         AddSecret(secrets, "DEEPGRAM_API_KEY", settings.DeepgramApiKey);
         AddSecret(secrets, "ELEVENLABS_API_KEY", settings.ElevenLabsApiKey);

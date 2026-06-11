@@ -23,7 +23,7 @@ Use this parent skill when a task involves reading, changing, testing, reviewing
 - `codebase-inspection`
 - `dependency-security-check`
 - `network-and-dns-safety`
-- `native-collector-development`
+- `platform-collector-development`
 - `node-debugging`
 - `python-debugging`
 - `request-code-review`
@@ -39,7 +39,7 @@ Use this parent skill when a task involves reading, changing, testing, reviewing
 - Use codebase inspection before nontrivial edits.
 - Use systematic, Python, Node, CI, and TDD skills for debugging and verification.
 - Use code review and request-code-review skills for review stance and PR-style feedback.
-- Use native collector development for OS helper collectors and bridge-ingress implementation.
+- Use platform collector development for OS helper collectors and bridge-ingress implementation.
 - Use dependency security, network/DNS safety, skill authoring, provenance, and skill security for hardening and agent skill work.
 - Use spike experiment when learning safely before a larger implementation.
 

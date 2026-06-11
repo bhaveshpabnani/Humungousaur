@@ -29,8 +29,8 @@ public sealed partial class MainWindow : Window
     private List<ToolInfo> _tools = [];
     private List<RuntimeRunItem> _runs = [];
     private List<ApprovalItem> _approvals = [];
-    private ActiveAgentStatusResponse _activeAgentStatus = new();
-    private JsonObject _activeAgentPlannerContext = new();
+    private JanusStatusResponse _janusStatus = new();
+    private JsonObject _janusPlannerContext = new();
     private CollectorStatusResponse _collectorStatus = new();
     private string _latestDownloadUrl = "";
     private string _lastHandledVoiceTranscript = "";
@@ -78,23 +78,23 @@ public sealed partial class MainWindow : Window
 
     private async void RefreshButton_Click(object sender, RoutedEventArgs e) => await RefreshAllAsync();
 
-    private async void RefreshActiveAgentButton_Click(object sender, RoutedEventArgs e) => await RefreshActiveAgentAsync();
+    private async void RefreshJanusButton_Click(object sender, RoutedEventArgs e) => await RefreshJanusAsync();
 
-    private async void ActiveAgentHelpfulButton_Click(object sender, RoutedEventArgs e) => await RecordActiveAgentCorrectionAsync("helpful");
+    private async void JanusHelpfulButton_Click(object sender, RoutedEventArgs e) => await RecordJanusCorrectionAsync("helpful");
 
-    private async void ActiveAgentNotRelevantButton_Click(object sender, RoutedEventArgs e) => await RecordActiveAgentCorrectionAsync("not_relevant");
+    private async void JanusNotRelevantButton_Click(object sender, RoutedEventArgs e) => await RecordJanusCorrectionAsync("not_relevant");
 
-    private async void ActiveAgentPrivateButton_Click(object sender, RoutedEventArgs e) => await RecordActiveAgentCorrectionAsync("private");
+    private async void JanusPrivateButton_Click(object sender, RoutedEventArgs e) => await RecordJanusCorrectionAsync("private");
 
-    private async void ActiveAgentWrongTaskButton_Click(object sender, RoutedEventArgs e) => await RecordActiveAgentCorrectionAsync("wrong_task");
+    private async void JanusWrongTaskButton_Click(object sender, RoutedEventArgs e) => await RecordJanusCorrectionAsync("wrong_task");
 
     private async void CreateActiveMutedScopeButton_Click(object sender, RoutedEventArgs e)
     {
-        var mode = ComboTag(ActiveAgentMuteModeBox, "no_assistance");
-        var collector = ActiveAgentMuteCollectorBox.Text.Trim();
-        var source = ActiveAgentMuteSourceBox.Text.Trim();
-        var stimulusType = ActiveAgentMuteStimulusBox.Text.Trim();
-        var entityRefs = ParseListLines(ActiveAgentMuteEntityRefsBox.Text);
+        var mode = ComboTag(JanusMuteModeBox, "no_assistance");
+        var collector = JanusMuteCollectorBox.Text.Trim();
+        var source = JanusMuteSourceBox.Text.Trim();
+        var stimulusType = JanusMuteStimulusBox.Text.Trim();
+        var entityRefs = ParseListLines(JanusMuteEntityRefsBox.Text);
         if (string.IsNullOrWhiteSpace(collector) && string.IsNullOrWhiteSpace(source) && string.IsNullOrWhiteSpace(stimulusType) && entityRefs.Count == 0)
         {
             ShowNotice("Add at least one mute scope: collector, source, stimulus, or entity ref.", InfoBarSeverity.Warning);
@@ -103,15 +103,15 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            await _api.CreateActiveAgentMutedScopeAsync(
+            await _api.CreateJanusMutedScopeAsync(
                 mode,
                 collector,
                 source,
                 stimulusType,
                 entityRefs,
-                ActiveAgentMuteReasonBox.Text);
+                JanusMuteReasonBox.Text);
             ShowNotice("Muted scope created.", InfoBarSeverity.Success);
-            await RefreshActiveAgentAsync();
+            await RefreshJanusAsync();
         }
         catch (Exception exc)
         {
@@ -121,16 +121,16 @@ public sealed partial class MainWindow : Window
 
     private async void CancelActiveMutedScopeButton_Click(object sender, RoutedEventArgs e)
     {
-        if (ActiveAgentMuteList.SelectedItem is not ActiveAgentRecord scope || string.IsNullOrWhiteSpace(scope.Id))
+        if (JanusMuteList.SelectedItem is not JanusRecord scope || string.IsNullOrWhiteSpace(scope.Id))
         {
             ShowNotice("Select a muted scope first.", InfoBarSeverity.Warning);
             return;
         }
         try
         {
-            await _api.CancelActiveAgentMutedScopeAsync(scope.Id, "Cancelled from Windows Active Agent panel.");
+            await _api.CancelJanusMutedScopeAsync(scope.Id, "Cancelled from Windows Janus panel.");
             ShowNotice("Muted scope cancelled.", InfoBarSeverity.Success);
-            await RefreshActiveAgentAsync();
+            await RefreshJanusAsync();
         }
         catch (Exception exc)
         {
@@ -153,7 +153,7 @@ public sealed partial class MainWindow : Window
         await RefreshVoiceAsync();
         await RefreshToolsAsync();
         await RefreshAutonomyAsync();
-        await RefreshActiveAgentAsync();
+        await RefreshJanusAsync();
         await RefreshOutboxAsync();
         await RefreshRuntimeAsync();
         await RefreshUpdateAsync();
@@ -291,20 +291,20 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private async Task RefreshActiveAgentAsync()
+    private async Task RefreshJanusAsync()
     {
         try
         {
-            _activeAgentPlannerContext = await _api.GetActiveAgentPlannerContextAsync("desktop planner preview");
-            _activeAgentStatus = await _api.GetActiveAgentStatusAsync(20);
-            RenderActiveAgentStatus();
+            _janusPlannerContext = await _api.GetJanusPlannerContextAsync("desktop planner preview");
+            _janusStatus = await _api.GetJanusStatusAsync(20);
+            RenderJanusStatus();
         }
         catch (Exception exc)
         {
-            _activeAgentStatus = new ActiveAgentStatusResponse();
-            _activeAgentPlannerContext = new();
-            ActiveAgentPostureText.Text = "Active agent offline";
-            ActiveAgentRawText.Text = exc.Message;
+            _janusStatus = new JanusStatusResponse();
+            _janusPlannerContext = new();
+            JanusPostureText.Text = "Janus offline";
+            JanusRawText.Text = exc.Message;
             AddProcessLine(exc.Message);
         }
 
@@ -316,8 +316,8 @@ public sealed partial class MainWindow : Window
         catch (Exception exc)
         {
             _collectorStatus = new CollectorStatusResponse();
-            ActiveAgentCollectorHealthText.Text = "Collectors offline";
-            ActiveAgentCollectorSourceHealthList.ItemsSource = new List<CollectorHealthItem>
+            JanusCollectorHealthText.Text = "Collectors offline";
+            JanusCollectorSourceHealthList.ItemsSource = new List<CollectorHealthItem>
             {
                 new() { Name = "Collectors", Status = "Offline", Subtitle = exc.Message },
             };
@@ -325,41 +325,41 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void RenderActiveAgentStatus()
+    private void RenderJanusStatus()
     {
-        ActiveAgentPostureText.Text = $"Latest posture: {Humanize(_activeAgentStatus.LatestPosture)}";
-        ActiveAgentDecisionCountText.Text = $"Decisions {_activeAgentStatus.Decisions.Count}";
-        ActiveAgentContextCountText.Text = $"Contexts {_activeAgentStatus.TaskContexts.Count}";
-        ActiveAgentMutedCountText.Text = $"Muted {_activeAgentStatus.MutedScopes.Count}";
-        ActiveAgentDecisionList.ItemsSource = _activeAgentStatus.Decisions;
-        ActiveAgentExplanationList.ItemsSource = _activeAgentStatus.Explanations;
-        ActiveAgentTaskContextList.ItemsSource = _activeAgentStatus.TaskContexts;
-        ActiveAgentDeepDiveList.ItemsSource = _activeAgentStatus.DeepDiveRequests;
-        ActiveAgentMuteList.ItemsSource = _activeAgentStatus.MutedScopes;
-        ActiveAgentRawText.Text = FormatActiveAgentPlannerContext(_activeAgentPlannerContext) + "\n\nTechnical active-agent status\n\n" + FormatActiveAgentStatus(_activeAgentStatus);
+        JanusPostureText.Text = $"Latest posture: {Humanize(_janusStatus.LatestPosture)}";
+        JanusDecisionCountText.Text = $"Decisions {_janusStatus.Decisions.Count}";
+        JanusContextCountText.Text = $"Contexts {_janusStatus.TaskContexts.Count}";
+        JanusMutedCountText.Text = $"Muted {_janusStatus.MutedScopes.Count}";
+        JanusDecisionList.ItemsSource = _janusStatus.Decisions;
+        JanusExplanationList.ItemsSource = _janusStatus.Explanations;
+        JanusTaskContextList.ItemsSource = _janusStatus.TaskContexts;
+        JanusDeepDiveList.ItemsSource = _janusStatus.DeepDiveRequests;
+        JanusMuteList.ItemsSource = _janusStatus.MutedScopes;
+        JanusRawText.Text = FormatJanusPlannerContext(_janusPlannerContext) + "\n\nTechnical Janus status\n\n" + FormatJanusStatus(_janusStatus);
     }
 
     private void RenderCollectorStatus()
     {
-        ActiveAgentCollectorHealthText.Text = _collectorStatus.SummaryText;
-        ActiveAgentCollectorSourceHealthList.ItemsSource = _collectorStatus.HealthItems;
+        JanusCollectorHealthText.Text = _collectorStatus.SummaryText;
+        JanusCollectorSourceHealthList.ItemsSource = _collectorStatus.HealthItems;
     }
 
-    private static string FormatActiveAgentPlannerContext(JsonObject preview)
+    private static string FormatJanusPlannerContext(JsonObject preview)
     {
-        var memory = preview["active_agent_memory"] as JsonObject ?? new JsonObject();
-        var state = preview["active_agent_state"] as JsonObject ?? new JsonObject();
+        var memory = preview["janus_memory"] as JsonObject ?? new JsonObject();
+        var state = preview["janus_state"] as JsonObject ?? new JsonObject();
         var safety = preview["safety"] as JsonObject ?? new JsonObject();
         return string.Join(
             "\n\n",
             "Planner preview",
-            preview["privacy"]?.GetValue<string>() ?? "Redacted planner-visible active-agent context.",
+            preview["privacy"]?.GetValue<string>() ?? "Redacted planner-visible janus context.",
             $"Memory {CountArray(memory, "items")}  Episodes {CountArray(state, "episodes")}  Tasks {CountArray(state, "task_contexts")}  Activations {CountArray(state, "activations")}  Responses {CountArray(state, "activation_responses")}  Resume {CountArray(state, "resume_capsules")}  Deep dives {CountArray(state, "deep_dive_requests")}  Results {CountArray(state, "deep_dive_results")}  Muted {CountArray(state, "muted_scopes")}",
             "Planner-visible state",
             AgentApiClient.Pretty(new JsonObject
             {
-                ["active_agent_memory"] = CloneNode(memory),
-                ["active_agent_state"] = CloneNode(state),
+                ["janus_memory"] = CloneNode(memory),
+                ["janus_state"] = CloneNode(state),
                 ["safety"] = CloneNode(safety),
             }));
     }
@@ -368,9 +368,9 @@ public sealed partial class MainWindow : Window
 
     private static JsonNode? CloneNode(JsonNode? node) => node is null ? null : JsonNode.Parse(node.ToJsonString());
 
-    private static string FormatActiveAgentStatus(ActiveAgentStatusResponse status)
+    private static string FormatJanusStatus(JanusStatusResponse status)
     {
-        static string Section(string title, IEnumerable<ActiveAgentRecord> records)
+        static string Section(string title, IEnumerable<JanusRecord> records)
         {
             var rendered = records
                 .Take(8)
@@ -401,16 +401,16 @@ public sealed partial class MainWindow : Window
             ]);
     }
 
-    private async Task RecordActiveAgentCorrectionAsync(string correctionType)
+    private async Task RecordJanusCorrectionAsync(string correctionType)
     {
-        var target = SelectedActiveAgentTarget() ?? _activeAgentStatus.LatestTarget;
+        var target = SelectedJanusTarget() ?? _janusStatus.LatestTarget;
         if (target is null)
         {
-            ShowNotice("No active-agent decision to correct yet.", InfoBarSeverity.Warning);
+            ShowNotice("No janus decision to correct yet.", InfoBarSeverity.Warning);
             return;
         }
-        var goal = ActiveAgentWrongGoalBox.Text.Trim();
-        var summary = ActiveAgentWrongSummaryBox.Text.Trim();
+        var goal = JanusWrongGoalBox.Text.Trim();
+        var summary = JanusWrongSummaryBox.Text.Trim();
         if (correctionType == "wrong_task" && string.IsNullOrWhiteSpace(goal) && string.IsNullOrWhiteSpace(summary))
         {
             ShowNotice("Add the corrected goal or summary before marking the task wrong.", InfoBarSeverity.Warning);
@@ -418,12 +418,12 @@ public sealed partial class MainWindow : Window
         }
         try
         {
-            var note = string.IsNullOrWhiteSpace(ActiveAgentFeedbackNoteBox.Text)
-                ? "Feedback from Windows Active Agent panel."
-                : ActiveAgentFeedbackNoteBox.Text.Trim();
-            await _api.RecordActiveAgentCorrectionAsync(correctionType, target.Value.TargetType, target.Value.TargetId, note, goal, summary);
-            ShowNotice("Active-agent feedback recorded.", InfoBarSeverity.Success);
-            await RefreshActiveAgentAsync();
+            var note = string.IsNullOrWhiteSpace(JanusFeedbackNoteBox.Text)
+                ? "Feedback from Windows Janus panel."
+                : JanusFeedbackNoteBox.Text.Trim();
+            await _api.RecordJanusCorrectionAsync(correctionType, target.Value.TargetType, target.Value.TargetId, note, goal, summary);
+            ShowNotice("Janus feedback recorded.", InfoBarSeverity.Success);
+            await RefreshJanusAsync();
         }
         catch (Exception exc)
         {
@@ -433,27 +433,27 @@ public sealed partial class MainWindow : Window
 
     private async Task UpdateActiveDeepDiveAsync(bool approved)
     {
-        if (ActiveAgentDeepDiveList.SelectedItem is not ActiveAgentRecord request || string.IsNullOrWhiteSpace(request.Id))
+        if (JanusDeepDiveList.SelectedItem is not JanusRecord request || string.IsNullOrWhiteSpace(request.Id))
         {
             ShowNotice("Select a deep-dive request first.", InfoBarSeverity.Warning);
             return;
         }
 
-        var reason = string.IsNullOrWhiteSpace(ActiveAgentDeepDiveReasonBox.Text)
-            ? approved ? "Approved from Windows Active Agent panel." : "Rejected from Windows Active Agent panel."
-            : ActiveAgentDeepDiveReasonBox.Text.Trim();
+        var reason = string.IsNullOrWhiteSpace(JanusDeepDiveReasonBox.Text)
+            ? approved ? "Approved from Windows Janus panel." : "Rejected from Windows Janus panel."
+            : JanusDeepDiveReasonBox.Text.Trim();
         try
         {
             if (approved)
             {
-                await _api.ApproveActiveAgentDeepDiveAsync(request.Id, reason);
+                await _api.ApproveJanusDeepDiveAsync(request.Id, reason);
             }
             else
             {
-                await _api.RejectActiveAgentDeepDiveAsync(request.Id, reason);
+                await _api.RejectJanusDeepDiveAsync(request.Id, reason);
             }
             ShowNotice(approved ? "Deep-dive request approved." : "Deep-dive request rejected.", InfoBarSeverity.Success);
-            await RefreshActiveAgentAsync();
+            await RefreshJanusAsync();
         }
         catch (Exception exc)
         {
@@ -461,21 +461,21 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private (string TargetType, string TargetId)? SelectedActiveAgentTarget()
+    private (string TargetType, string TargetId)? SelectedJanusTarget()
     {
-        if (ActiveAgentDecisionList.SelectedItem is ActiveAgentRecord { Id.Length: > 0 } decision)
+        if (JanusDecisionList.SelectedItem is JanusRecord { Id.Length: > 0 } decision)
         {
             return ("decision", decision.Id);
         }
-        if (ActiveAgentExplanationList.SelectedItem is ActiveAgentRecord { Id.Length: > 0 } explanation)
+        if (JanusExplanationList.SelectedItem is JanusRecord { Id.Length: > 0 } explanation)
         {
             return ("explanation", explanation.Id);
         }
-        if (ActiveAgentTaskContextList.SelectedItem is ActiveAgentRecord { Id.Length: > 0 } taskContext)
+        if (JanusTaskContextList.SelectedItem is JanusRecord { Id.Length: > 0 } taskContext)
         {
             return ("task_context", taskContext.Id);
         }
-        if (ActiveAgentDeepDiveList.SelectedItem is ActiveAgentRecord { Id.Length: > 0 } deepDive)
+        if (JanusDeepDiveList.SelectedItem is JanusRecord { Id.Length: > 0 } deepDive)
         {
             return ("deep_dive_request", deepDive.Id);
         }
@@ -1541,7 +1541,7 @@ public sealed partial class MainWindow : Window
         ConnectorsPage.Visibility = tag == "connectors" ? Visibility.Visible : Visibility.Collapsed;
         VoicePage.Visibility = tag == "voice" ? Visibility.Visible : Visibility.Collapsed;
         AutonomyPage.Visibility = tag == "autonomy" ? Visibility.Visible : Visibility.Collapsed;
-        ActiveAgentPage.Visibility = tag == "active-agent" ? Visibility.Visible : Visibility.Collapsed;
+        JanusPage.Visibility = tag == "janus" ? Visibility.Visible : Visibility.Collapsed;
         RuntimePage.Visibility = tag == "runtime" ? Visibility.Visible : Visibility.Collapsed;
         ToolsPage.Visibility = tag == "tools" ? Visibility.Visible : Visibility.Collapsed;
         SettingsPage.Visibility = tag == "settings" ? Visibility.Visible : Visibility.Collapsed;
@@ -2083,9 +2083,9 @@ public sealed partial class MainWindow : Window
             ModelNameBox.Text = _settings.ModelName;
             ModelBaseUrlBox.Text = _settings.ModelBaseUrl;
             ModelApiKeyBox.Password = _settings.ModelApiKey;
-            ActiveModelNameBox.Text = _settings.ActiveModelName;
-            ActiveModelBaseUrlBox.Text = _settings.ActiveModelBaseUrl;
-            ActiveModelApiKeyBox.Password = _settings.ActiveModelApiKey;
+            JanusModelNameBox.Text = _settings.JanusModelName;
+            JanusModelBaseUrlBox.Text = _settings.JanusModelBaseUrl;
+            JanusModelApiKeyBox.Password = _settings.JanusModelApiKey;
             VoiceIdBox.Text = _settings.VoiceId;
             DeepgramApiKeyBox.Password = _settings.DeepgramApiKey;
             ElevenLabsApiKeyBox.Password = _settings.ElevenLabsApiKey;
@@ -2097,7 +2097,7 @@ public sealed partial class MainWindow : Window
             ApproveHighRiskSwitch.IsOn = _settings.ApproveHighRisk;
             SetComboByTag(PlannerBox, _settings.Planner);
             SetComboByTag(ModelProviderBox, _settings.ModelProvider);
-            SetComboByTag(ActiveModelProviderBox, _settings.ActiveModelProvider);
+            SetComboByTag(JanusModelProviderBox, _settings.JanusModelProvider);
             SetComboByTag(TtsProviderBox, _settings.TtsProvider);
             WorkspaceCaption.Text = ShortenPath(_settings.WorkspacePath);
             _api.SetBaseUrl(_settings.ApiBaseUrl);
@@ -2119,10 +2119,10 @@ public sealed partial class MainWindow : Window
         _settings.ModelName = ModelNameBox.Text.Trim();
         _settings.ModelBaseUrl = ModelBaseUrlBox.Text.Trim();
         _settings.ModelApiKey = ModelApiKeyBox.Password;
-        _settings.ActiveModelProvider = ComboTag(ActiveModelProviderBox, "same-as-main");
-        _settings.ActiveModelName = ActiveModelNameBox.Text.Trim();
-        _settings.ActiveModelBaseUrl = ActiveModelBaseUrlBox.Text.Trim();
-        _settings.ActiveModelApiKey = ActiveModelApiKeyBox.Password;
+        _settings.JanusModelProvider = ComboTag(JanusModelProviderBox, "same-as-main");
+        _settings.JanusModelName = JanusModelNameBox.Text.Trim();
+        _settings.JanusModelBaseUrl = JanusModelBaseUrlBox.Text.Trim();
+        _settings.JanusModelApiKey = JanusModelApiKeyBox.Password;
         _settings.TtsProvider = ComboTag(TtsProviderBox, "system");
         _settings.VoiceId = VoiceIdBox.Text.Trim();
         _settings.DeepgramApiKey = DeepgramApiKeyBox.Password;
@@ -2296,9 +2296,9 @@ public sealed partial class MainWindow : Window
     private void PopulateModelProviderBoxes()
     {
         var mainSelection = ComboTag(ModelProviderBox, _settings.ModelProvider);
-        var activeSelection = ComboTag(ActiveModelProviderBox, _settings.ActiveModelProvider);
+        var activeSelection = ComboTag(JanusModelProviderBox, _settings.JanusModelProvider);
         PopulateModelProviderBox(ModelProviderBox, _modelProviders, includeSameAsMain: false, selectedTag: mainSelection);
-        PopulateModelProviderBox(ActiveModelProviderBox, _modelProviders, includeSameAsMain: true, selectedTag: activeSelection);
+        PopulateModelProviderBox(JanusModelProviderBox, _modelProviders, includeSameAsMain: true, selectedTag: activeSelection);
     }
 
     private static void PopulateModelProviderBox(ComboBox box, IReadOnlyList<ModelProviderInfo> providers, bool includeSameAsMain, string selectedTag)

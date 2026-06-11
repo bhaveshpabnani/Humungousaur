@@ -19,9 +19,9 @@ final class AppViewModel: ObservableObject {
     @Published var connectorCatalog = ConnectorCatalog(providerCount: 0, providers: [], redirectUri: "http://127.0.0.1:8765/connectors/callback")
     @Published var outbox = OutboxEnvelope(messages: [])
     @Published var autonomousStatus: JSONValue = .object([:])
-    @Published var activeAgentStatus = ActiveAgentStatusResponse.empty
-    @Published var activeAgentPlannerContext = ActiveAgentPlannerContextPreview.empty
-    @Published var activeAgentStatusText = "Waiting for active-agent status."
+    @Published var janusStatus = JanusStatusResponse.empty
+    @Published var janusPlannerContext = JanusPlannerContextPreview.empty
+    @Published var janusStatusText = "Waiting for Janus status."
     @Published var collectorStatus = CollectorStatusResponse.empty
     @Published var collectorStatusText = "Waiting for collector health."
     @Published var voiceStatus: JSONValue = .object([:])
@@ -82,7 +82,7 @@ final class AppViewModel: ObservableObject {
         settings = loaded
         secrets = RuntimeSecrets(
             modelAPIKey: keychain.read("model_api_key"),
-            activeModelAPIKey: keychain.read("active_model_api_key"),
+            janusModelAPIKey: keychain.read("janus_model_api_key"),
             deepgramAPIKey: keychain.read("deepgram_api_key"),
             elevenLabsAPIKey: keychain.read("elevenlabs_api_key")
         )
@@ -109,7 +109,7 @@ final class AppViewModel: ObservableObject {
         await refreshChannels()
         await refreshConnectors()
         await refreshAutonomy()
-        await refreshActiveAgent()
+        await refreshJanus()
         await refreshVoice()
     }
 
@@ -200,15 +200,15 @@ final class AppViewModel: ObservableObject {
         }
     }
 
-    func refreshActiveAgent() async {
+    func refreshJanus() async {
         do {
-            activeAgentPlannerContext = try await api.activeAgentPlannerContext(request: "desktop planner preview")
-            activeAgentStatus = try await api.activeAgentStatus(limit: 20)
-            activeAgentStatusText = "Latest posture: \(activeAgentStatus.latestPosture)."
+            janusPlannerContext = try await api.janusPlannerContext(request: "desktop planner preview")
+            janusStatus = try await api.janusStatus(limit: 20)
+            janusStatusText = "Latest posture: \(janusStatus.latestPosture)."
         } catch {
-            activeAgentPlannerContext = .empty
-            activeAgentStatus = .empty
-            activeAgentStatusText = error.localizedDescription
+            janusPlannerContext = .empty
+            janusStatus = .empty
+            janusStatusText = error.localizedDescription
         }
         await refreshCollectorStatus()
     }
@@ -223,18 +223,18 @@ final class AppViewModel: ObservableObject {
         }
     }
 
-    func recordActiveAgentCorrection(
+    func recordJanusCorrection(
         _ correctionType: String,
         note: String,
-        taskContext: ActiveAgentTaskContextDraft? = nil,
-        mutedScope: ActiveAgentMutedScopeDraft? = nil
+        taskContext: JanusTaskContextDraft? = nil,
+        mutedScope: JanusMutedScopeDraft? = nil
     ) async {
-        guard let target = activeAgentStatus.latestTarget else {
-            notice = "No active-agent decision to correct yet."
+        guard let target = janusStatus.latestTarget else {
+            notice = "No janus decision to correct yet."
             return
         }
         do {
-            _ = try await api.recordActiveAgentCorrection(
+            _ = try await api.recordJanusCorrection(
                 correctionType: correctionType,
                 targetType: target.type,
                 targetID: target.id,
@@ -242,75 +242,75 @@ final class AppViewModel: ObservableObject {
                 taskContext: taskContext,
                 mutedScope: mutedScope
             )
-            notice = "Active-agent feedback recorded."
-            await refreshActiveAgent()
+            notice = "Janus feedback recorded."
+            await refreshJanus()
         } catch {
             notice = error.localizedDescription
         }
     }
 
-    func declareActiveAgentTaskContext(_ draft: ActiveAgentTaskContextDraft) async {
+    func declareJanusTaskContext(_ draft: JanusTaskContextDraft) async {
         guard draft.hasContext else {
             notice = "A task goal or summary is required."
             return
         }
         do {
-            _ = try await api.declareActiveAgentTaskContext(draft)
+            _ = try await api.declareJanusTaskContext(draft)
             notice = "Active task context updated."
-            await refreshActiveAgent()
+            await refreshJanus()
         } catch {
             notice = error.localizedDescription
         }
     }
 
-    func createActiveAgentMutedScope(_ draft: ActiveAgentMutedScopeDraft) async {
+    func createJanusMutedScope(_ draft: JanusMutedScopeDraft) async {
         guard draft.hasScope else {
             notice = "Choose a collector, source, stimulus type, or entity reference to mute."
             return
         }
         do {
-            _ = try await api.createActiveAgentMutedScope(draft)
+            _ = try await api.createJanusMutedScope(draft)
             notice = "Muted scope created."
-            await refreshActiveAgent()
+            await refreshJanus()
         } catch {
             notice = error.localizedDescription
         }
     }
 
-    func cancelActiveMutedScope(_ scope: ActiveAgentRecord) async {
+    func cancelActiveMutedScope(_ scope: JanusRecord) async {
         do {
-            _ = try await api.cancelActiveAgentMutedScope(
+            _ = try await api.cancelJanusMutedScope(
                 scopeID: scope.id,
-                reason: "Cancelled from macOS Active Agent panel."
+                reason: "Cancelled from macOS Janus panel."
             )
             notice = "Muted scope cancelled."
-            await refreshActiveAgent()
+            await refreshJanus()
         } catch {
             notice = error.localizedDescription
         }
     }
 
-    func approveActiveAgentDeepDive(_ request: ActiveAgentRecord) async {
+    func approveJanusDeepDive(_ request: JanusRecord) async {
         do {
-            _ = try await api.approveActiveAgentDeepDive(
+            _ = try await api.approveJanusDeepDive(
                 requestID: request.id,
-                reason: "Approved from macOS Active Agent panel."
+                reason: "Approved from macOS Janus panel."
             )
             notice = "Deep-dive request approved."
-            await refreshActiveAgent()
+            await refreshJanus()
         } catch {
             notice = error.localizedDescription
         }
     }
 
-    func rejectActiveAgentDeepDive(_ request: ActiveAgentRecord) async {
+    func rejectJanusDeepDive(_ request: JanusRecord) async {
         do {
-            _ = try await api.rejectActiveAgentDeepDive(
+            _ = try await api.rejectJanusDeepDive(
                 requestID: request.id,
-                reason: "Rejected from macOS Active Agent panel."
+                reason: "Rejected from macOS Janus panel."
             )
             notice = "Deep-dive request rejected."
-            await refreshActiveAgent()
+            await refreshJanus()
         } catch {
             notice = error.localizedDescription
         }
@@ -410,7 +410,7 @@ final class AppViewModel: ObservableObject {
     func saveSettings() {
         settingsStore.save(settings)
         keychain.write(secrets.modelAPIKey, account: "model_api_key")
-        keychain.write(secrets.activeModelAPIKey, account: "active_model_api_key")
+        keychain.write(secrets.janusModelAPIKey, account: "janus_model_api_key")
         keychain.write(secrets.deepgramAPIKey, account: "deepgram_api_key")
         keychain.write(secrets.elevenLabsAPIKey, account: "elevenlabs_api_key")
         api.setBaseURL(settings.apiBaseURL)

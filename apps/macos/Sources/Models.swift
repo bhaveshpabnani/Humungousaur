@@ -476,20 +476,20 @@ struct ConnectorAuthorization: Decodable {
     }
 }
 
-struct ActiveAgentStatusResponse: Decodable, Sendable {
-    var routes: [ActiveAgentRecord]
-    var decisions: [ActiveAgentRecord]
-    var activations: [ActiveAgentRecord]
-    var memoryCandidates: [ActiveAgentRecord]
-    var taskContexts: [ActiveAgentRecord]
-    var mutedScopes: [ActiveAgentRecord]
-    var deepDiveRequests: [ActiveAgentRecord]
+struct JanusStatusResponse: Decodable, Sendable {
+    var routes: [JanusRecord]
+    var decisions: [JanusRecord]
+    var activations: [JanusRecord]
+    var memoryCandidates: [JanusRecord]
+    var taskContexts: [JanusRecord]
+    var mutedScopes: [JanusRecord]
+    var deepDiveRequests: [JanusRecord]
     var contextWindow: JSONValue
-    var contextWindows: [ActiveAgentRecord]
-    var contextBoundaries: [ActiveAgentRecord]
-    var resumeCapsules: [ActiveAgentRecord]
-    var explanations: [ActiveAgentRecord]
-    var corrections: [ActiveAgentRecord]
+    var contextWindows: [JanusRecord]
+    var contextBoundaries: [JanusRecord]
+    var resumeCapsules: [JanusRecord]
+    var explanations: [JanusRecord]
+    var corrections: [JanusRecord]
 
     enum CodingKeys: String, CodingKey {
         case routes
@@ -507,7 +507,7 @@ struct ActiveAgentStatusResponse: Decodable, Sendable {
         case corrections
     }
 
-    static let empty = ActiveAgentStatusResponse(
+    static let empty = JanusStatusResponse(
         routes: [],
         decisions: [],
         activations: [],
@@ -550,69 +550,69 @@ struct ActiveAgentStatusResponse: Decodable, Sendable {
     }
 }
 
-struct ActiveAgentPlannerContextPreview: Decodable, Sendable {
+struct JanusPlannerContextPreview: Decodable, Sendable {
     var source: String
     var request: String
     var privacy: String
-    var activeAgentMemory: JSONValue
-    var activeAgentState: JSONValue
+    var janusMemory: JSONValue
+    var janusState: JSONValue
     var safety: JSONValue
 
     enum CodingKeys: String, CodingKey {
         case source
         case request
         case privacy
-        case activeAgentMemory = "active_agent_memory"
-        case activeAgentState = "active_agent_state"
+        case janusMemory = "janus_memory"
+        case janusState = "janus_state"
         case safety
     }
 
-    static let empty = ActiveAgentPlannerContextPreview(
+    static let empty = JanusPlannerContextPreview(
         source: "",
         request: "",
         privacy: "Waiting for planner context.",
-        activeAgentMemory: .object([:]),
-        activeAgentState: .object([:]),
+        janusMemory: .object([:]),
+        janusState: .object([:]),
         safety: .object([:])
     )
 
-    var memoryItems: [ActiveAgentRecord] {
-        records(from: activeAgentMemory["items"])
+    var memoryItems: [JanusRecord] {
+        records(from: janusMemory["items"])
     }
 
-    var taskContexts: [ActiveAgentRecord] {
-        records(from: activeAgentState["task_contexts"])
+    var taskContexts: [JanusRecord] {
+        records(from: janusState["task_contexts"])
     }
 
-    var episodes: [ActiveAgentRecord] {
-        records(from: activeAgentState["episodes"])
+    var episodes: [JanusRecord] {
+        records(from: janusState["episodes"])
     }
 
-    var activations: [ActiveAgentRecord] {
-        records(from: activeAgentState["activations"])
+    var activations: [JanusRecord] {
+        records(from: janusState["activations"])
     }
 
-    var resumeCapsules: [ActiveAgentRecord] {
-        records(from: activeAgentState["resume_capsules"])
+    var resumeCapsules: [JanusRecord] {
+        records(from: janusState["resume_capsules"])
     }
 
-    var deepDiveRequests: [ActiveAgentRecord] {
-        records(from: activeAgentState["deep_dive_requests"])
+    var deepDiveRequests: [JanusRecord] {
+        records(from: janusState["deep_dive_requests"])
     }
 
-    var mutedScopes: [ActiveAgentRecord] {
-        records(from: activeAgentState["muted_scopes"])
+    var mutedScopes: [JanusRecord] {
+        records(from: janusState["muted_scopes"])
     }
 
-    private func records(from value: JSONValue?) -> [ActiveAgentRecord] {
+    private func records(from value: JSONValue?) -> [JanusRecord] {
         value?.arrayValue?.compactMap { item in
             guard let object = item.objectValue else { return nil }
-            return ActiveAgentRecord(values: object)
+            return JanusRecord(values: object)
         } ?? []
     }
 }
 
-struct ActiveAgentRecord: Decodable, Identifiable, Hashable, Sendable {
+struct JanusRecord: Decodable, Identifiable, Hashable, Sendable {
     var values: [String: JSONValue]
 
     var id: String {
@@ -693,7 +693,7 @@ struct ActiveAgentRecord: Decodable, Identifiable, Hashable, Sendable {
     }
 }
 
-struct ActiveAgentTaskContextDraft: Equatable {
+struct JanusTaskContextDraft: Equatable {
     var goal = ""
     var summary = ""
     var privacyMode = "metadata_first"
@@ -712,7 +712,7 @@ struct ActiveAgentTaskContextDraft: Equatable {
     }
 }
 
-struct ActiveAgentMutedScopeDraft: Equatable {
+struct JanusMutedScopeDraft: Equatable {
     var mode = "no_assistance"
     var scopeType = "manual"
     var collector = ""
@@ -720,7 +720,7 @@ struct ActiveAgentMutedScopeDraft: Equatable {
     var stimulusType = ""
     var entityRefs = ""
     var expiresAt = ""
-    var reason = "Muted from macOS Active Agent panel."
+    var reason = "Muted from macOS Janus panel."
 
     var entityRefList: [String] {
         entityRefs
@@ -766,13 +766,13 @@ struct CollectorStatusResponse: Decodable, Sendable {
         } ?? []
     }
 
-    var recentEvents: [ActiveAgentRecord] {
+    var recentEvents: [JanusRecord] {
         let eventValues = values["recent_events"]?.arrayValue
             ?? eventLog["recent_events"]?.arrayValue
             ?? []
         return eventValues.compactMap { value in
             guard let object = value.objectValue else { return nil }
-            return ActiveAgentRecord(values: object)
+            return JanusRecord(values: object)
         }
     }
 

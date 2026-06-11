@@ -1,6 +1,6 @@
 # Humungousaur Native Collectors
 
-Native collectors are platform-specific event producers. They should observe OS
+Platform collectors are platform-specific event producers. They should observe OS
 and application signals, redact locally, and emit the shared collector event
 envelope. Humungousaur owns privacy policy, durable event storage, attention
 batching, semantic interpretation, memory, UI streaming, and autonomy.

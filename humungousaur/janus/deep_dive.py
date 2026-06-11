@@ -5,7 +5,7 @@ from typing import Any
 from humungousaur.config import AgentConfig
 
 from .models import DeepDiveResult, new_id
-from .store import ActiveAgentStore
+from .store import JanusStore
 
 
 def execute_approved_deep_dive(config: AgentConfig, request_id: str, *, limit: int = 40) -> dict[str, Any]:
@@ -18,7 +18,7 @@ def execute_approved_deep_dive(config: AgentConfig, request_id: str, *, limit: i
     """
 
     normalized = config.normalized()
-    store = ActiveAgentStore(normalized.active_agent_db_path)
+    store = JanusStore(normalized.janus_db_path)
     request = _find_request(store, request_id)
     if request is None:
         raise ValueError(f"deep-dive request not found: {request_id}")
@@ -70,7 +70,7 @@ def execute_approved_deep_dive(config: AgentConfig, request_id: str, *, limit: i
     }
 
 
-def _find_request(store: ActiveAgentStore, request_id: str) -> dict[str, Any] | None:
+def _find_request(store: JanusStore, request_id: str) -> dict[str, Any] | None:
     for request in store.deep_dive_requests(limit=200):
         if str(request.get("request_id") or "") == str(request_id or ""):
             return request
@@ -79,7 +79,7 @@ def _find_request(store: ActiveAgentStore, request_id: str) -> dict[str, Any] | 
 
 def _collect_metadata_evidence(
     config: AgentConfig,
-    store: ActiveAgentStore,
+    store: JanusStore,
     request: dict[str, Any],
     *,
     limit: int,
@@ -145,7 +145,7 @@ def _compact_collector_event(event: dict[str, Any]) -> dict[str, Any]:
 def _summarize_deep_dive(request: dict[str, Any], evidence: dict[str, Any]) -> str:
     event_count = len(evidence.get("collector_events", []))
     context_count = len(evidence.get("task_contexts", []))
-    source = str(request.get("source") or "active-agent state")
+    source = str(request.get("source") or "janus state")
     access = str(request.get("requested_access") or "metadata")
     return (
         f"Approved metadata deep dive for {source} gathered {event_count} recent collector event(s) "

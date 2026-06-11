@@ -30,7 +30,7 @@ internal sealed class WindowLifecycleCollector
         return true;
     }
 
-    public static NativeCollectorEvent Create(string stimulusType, WindowSnapshot snapshot) =>
+    public static CollectorHostEvent Create(string stimulusType, WindowSnapshot snapshot) =>
         new(
             CollectorCatalog.WindowLifecycle,
             "activity",
@@ -46,7 +46,7 @@ internal sealed class WindowLifecycleCollector
             snapshot.RedactedPayload()
         );
 
-    public static NativeCollectorEvent CreateClosed(IntPtr hwnd, int idObject) =>
+    public static CollectorHostEvent CreateClosed(IntPtr hwnd, int idObject) =>
         new(
             CollectorCatalog.WindowLifecycle,
             "activity",

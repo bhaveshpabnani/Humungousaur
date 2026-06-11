@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any, Callable
 
-from humungousaur.active_agent.store import ActiveAgentStore
+from humungousaur.janus.store import JanusStore
 from humungousaur.cognition import CognitiveRecorder
 from humungousaur.cognition.knowledge import KnowledgeStore
 from humungousaur.config import AgentConfig
@@ -77,14 +77,14 @@ class AgentOrchestrator:
     def _build_model_client(self) -> ModelClient:
         return build_model_client(self.config)
 
-    def active_agent_planner_context_preview(self, request: str = "") -> dict[str, object]:
+    def janus_planner_context_preview(self, request: str = "") -> dict[str, object]:
         context = self._planning_context(request=request)
         return {
             "source": "planner_runtime_context_preview",
             "request": redact_secrets(" ".join(str(request or "").split()))[:500],
-            "privacy": "redacted preview of planner-visible active-agent lanes; raw status/debug payloads are excluded",
-            "active_agent_memory": context.get("active_agent_memory", {}),
-            "active_agent_state": context.get("active_agent_state", {}),
+            "privacy": "redacted preview of planner-visible janus lanes; raw status/debug payloads are excluded",
+            "janus_memory": context.get("janus_memory", {}),
+            "janus_state": context.get("janus_state", {}),
             "safety": context.get("safety", {}),
         }
 
@@ -480,8 +480,8 @@ class AgentOrchestrator:
             "activity_policy": self._activity_policy_context(),
             "user_profile": compact_user_profile(build_user_profile(self.memory, limit=100), per_section=3),
             "cognition": self._cognitive_context(),
-            "active_agent_memory": self._active_agent_memory_context(),
-            "active_agent_state": self._active_agent_state_context(),
+            "janus_memory": self._janus_memory_context(),
+            "janus_state": self._janus_state_context(),
             "browser_sessions": self._browser_context(),
             "available_workspace_skills": workspace_skills,
             "active_workspace_skills": self._selected_workspace_skill_context(request, workspace_skills),
@@ -736,7 +736,7 @@ class AgentOrchestrator:
         policy = ActivityPolicyStore(activity_policy_path(self.config)).load()
         visible: list[dict[str, object]] = []
         for event in self.memory.tail(limit=15):
-            if _active_agent_internal_memory_event(event):
+            if _janus_internal_memory_event(event):
                 continue
             if event.get("event_type") == "activity_event" and not _activity_event_visible(event, policy):
                 continue
@@ -745,17 +745,17 @@ class AgentOrchestrator:
                 break
         return visible
 
-    def _active_agent_memory_context(self) -> dict[str, object]:
+    def _janus_memory_context(self) -> dict[str, object]:
         try:
             records = KnowledgeStore(self.config.cognition_db_path).list(
                 limit=5,
-                source="active_agent_memory_candidate",
+                source="janus_memory_candidate",
                 min_confidence=0.5,
             )
         except Exception:
             records = []
         return {
-            "source": "active_agent_memory_candidate",
+            "source": "janus_memory_candidate",
             "limit": 5,
             "min_confidence": 0.5,
             "recency": "most_recent_updated_at",
@@ -774,47 +774,47 @@ class AgentOrchestrator:
             ],
         }
 
-    def _active_agent_state_context(self) -> dict[str, object]:
+    def _janus_state_context(self) -> dict[str, object]:
         try:
-            store = ActiveAgentStore(self.config.active_agent_db_path)
+            store = JanusStore(self.config.janus_db_path)
             task_contexts = [
-                self._active_agent_task_context_item(item)
+                self._janus_task_context_item(item)
                 for item in store.task_contexts(limit=6)
                 if str(item.get("status") or "") in {"active", "waiting", "paused"}
             ][:4]
             episodes = [
-                self._active_agent_episode_item(item)
+                self._janus_episode_item(item)
                 for item in store.episodes(limit=6)
                 if str(item.get("status") or "") in {"active", "waiting", "paused"}
             ][:4]
             activations = [
-                self._active_agent_activation_item(item)
+                self._janus_activation_item(item)
                 for item in store.activations(limit=8)
                 if str(item.get("status") or "") in {"prepared", "pending", "submitted", "failed"}
             ][:4]
             resume_capsules = [
-                self._active_agent_resume_capsule_item(item)
+                self._janus_resume_capsule_item(item)
                 for item in store.resume_capsules(limit=6)
                 if str(item.get("status") or "") == "active"
             ][:3]
             deep_dive_requests = [
-                self._active_agent_deep_dive_item(item)
+                self._janus_deep_dive_item(item)
                 for item in store.deep_dive_requests(limit=6)
                 if str(item.get("status") or "") in {"needs_approval", "approved", "blocked_by_policy"}
             ][:3]
             deep_dive_results = [
-                self._active_agent_deep_dive_result_item(item)
+                self._janus_deep_dive_result_item(item)
                 for item in store.deep_dive_results(limit=6)
                 if str(item.get("status") or "") == "completed"
             ][:3]
-            activation_responses = [self._active_agent_activation_response_item(item) for item in store.activation_responses(limit=6)][:3]
-            episode_links = [self._active_agent_episode_link_item(item) for item in store.episode_links(limit=6)][:3]
+            activation_responses = [self._janus_activation_response_item(item) for item in store.activation_responses(limit=6)][:3]
+            episode_links = [self._janus_episode_link_item(item) for item in store.episode_links(limit=6)][:3]
             muted_scopes = [
-                self._active_agent_muted_scope_item(item)
+                self._janus_muted_scope_item(item)
                 for item in store.muted_scopes(limit=6)
                 if str(item.get("status") or "") == "active"
             ][:3]
-            explanations = [self._active_agent_explanation_item(item) for item in store.explanations(limit=4)][:4]
+            explanations = [self._janus_explanation_item(item) for item in store.explanations(limit=4)][:4]
         except Exception:
             task_contexts = []
             episodes = []
@@ -827,8 +827,8 @@ class AgentOrchestrator:
             muted_scopes = []
             explanations = []
         return {
-            "source": "active_agent_runtime",
-            "privacy": "safe active-agent summaries and evidence refs only; raw collector payloads are not included",
+            "source": "janus_runtime",
+            "privacy": "safe janus summaries and evidence refs only; raw collector payloads are not included",
             "recency": "most_recent_updated_at_or_event_sequence",
             "limits": {
                 "task_contexts": 4,
@@ -854,7 +854,7 @@ class AgentOrchestrator:
             "explanations": explanations,
         }
 
-    def _active_agent_episode_item(self, item: dict[str, Any]) -> dict[str, object]:
+    def _janus_episode_item(self, item: dict[str, Any]) -> dict[str, object]:
         return {
             "episode_id": _safe_context_text(item.get("episode_id"), limit=160),
             "status": _safe_context_text(item.get("status"), limit=80),
@@ -873,7 +873,7 @@ class AgentOrchestrator:
             "updated_at": _safe_context_text(item.get("updated_at"), limit=120),
         }
 
-    def _active_agent_task_context_item(self, item: dict[str, Any]) -> dict[str, object]:
+    def _janus_task_context_item(self, item: dict[str, Any]) -> dict[str, object]:
         return {
             "task_context_id": _safe_context_text(item.get("task_context_id"), limit=160),
             "status": _safe_context_text(item.get("status"), limit=80),
@@ -889,7 +889,7 @@ class AgentOrchestrator:
             "updated_at": _safe_context_text(item.get("updated_at"), limit=120),
         }
 
-    def _active_agent_activation_item(self, item: dict[str, Any]) -> dict[str, object]:
+    def _janus_activation_item(self, item: dict[str, Any]) -> dict[str, object]:
         return {
             "activation_id": _safe_context_text(item.get("activation_id"), limit=160),
             "decision_id": _safe_context_text(item.get("decision_id"), limit=160),
@@ -908,7 +908,7 @@ class AgentOrchestrator:
             "updated_at": _safe_context_text(item.get("updated_at"), limit=120),
         }
 
-    def _active_agent_resume_capsule_item(self, item: dict[str, Any]) -> dict[str, object]:
+    def _janus_resume_capsule_item(self, item: dict[str, Any]) -> dict[str, object]:
         evidence = item.get("evidence") if isinstance(item.get("evidence"), dict) else {}
         boundary = evidence.get("boundary") if isinstance(evidence.get("boundary"), dict) else {}
         return {
@@ -924,7 +924,7 @@ class AgentOrchestrator:
             "updated_at": _safe_context_text(item.get("updated_at"), limit=120),
         }
 
-    def _active_agent_deep_dive_item(self, item: dict[str, Any]) -> dict[str, object]:
+    def _janus_deep_dive_item(self, item: dict[str, Any]) -> dict[str, object]:
         return {
             "request_id": _safe_context_text(item.get("request_id"), limit=160),
             "episode_id": _safe_context_text(item.get("episode_id"), limit=160),
@@ -938,7 +938,7 @@ class AgentOrchestrator:
             "updated_at": _safe_context_text(item.get("updated_at"), limit=120),
         }
 
-    def _active_agent_deep_dive_result_item(self, item: dict[str, Any]) -> dict[str, object]:
+    def _janus_deep_dive_result_item(self, item: dict[str, Any]) -> dict[str, object]:
         evidence = item.get("evidence") if isinstance(item.get("evidence"), dict) else {}
         return {
             "result_id": _safe_context_text(item.get("result_id"), limit=160),
@@ -954,7 +954,7 @@ class AgentOrchestrator:
             "created_at": _safe_context_text(item.get("created_at"), limit=120),
         }
 
-    def _active_agent_activation_response_item(self, item: dict[str, Any]) -> dict[str, object]:
+    def _janus_activation_response_item(self, item: dict[str, Any]) -> dict[str, object]:
         return {
             "response_id": _safe_context_text(item.get("response_id"), limit=160),
             "activation_id": _safe_context_text(item.get("activation_id"), limit=160),
@@ -967,7 +967,7 @@ class AgentOrchestrator:
             "created_at": _safe_context_text(item.get("created_at"), limit=120),
         }
 
-    def _active_agent_episode_link_item(self, item: dict[str, Any]) -> dict[str, object]:
+    def _janus_episode_link_item(self, item: dict[str, Any]) -> dict[str, object]:
         return {
             "link_id": _safe_context_text(item.get("link_id"), limit=160),
             "source_episode_id": _safe_context_text(item.get("source_episode_id"), limit=160),
@@ -979,7 +979,7 @@ class AgentOrchestrator:
             "updated_at": _safe_context_text(item.get("updated_at"), limit=120),
         }
 
-    def _active_agent_muted_scope_item(self, item: dict[str, Any]) -> dict[str, object]:
+    def _janus_muted_scope_item(self, item: dict[str, Any]) -> dict[str, object]:
         return {
             "scope_id": _safe_context_text(item.get("scope_id"), limit=160),
             "mode": _safe_context_text(item.get("mode"), limit=80),
@@ -993,7 +993,7 @@ class AgentOrchestrator:
             "expires_at": _safe_context_text(item.get("expires_at"), limit=120),
         }
 
-    def _active_agent_explanation_item(self, item: dict[str, Any]) -> dict[str, object]:
+    def _janus_explanation_item(self, item: dict[str, Any]) -> dict[str, object]:
         return {
             "explanation_id": _safe_context_text(item.get("explanation_id"), limit=160),
             "route_id": _safe_context_text(item.get("route_id"), limit=160),
@@ -1536,9 +1536,9 @@ def _looks_safe_entity_ref(value: object) -> bool:
     return "_hash:" in text or text.startswith(("document_id_hash:", "workspace_hash:", "entity_hash:", "url_hash:", "file_hash:", "app_hash:"))
 
 
-def _active_agent_internal_memory_event(event: dict[str, object]) -> bool:
+def _janus_internal_memory_event(event: dict[str, object]) -> bool:
     event_type = str(event.get("event_type") or "")
-    return event_type.startswith("active_agent_")
+    return event_type.startswith("janus_")
 
 
 def _workspace_skill_ancestor_ids(skill_id: str, by_id: dict[str, object]) -> list[str]:

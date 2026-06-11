@@ -1,14 +1,14 @@
 import SwiftUI
 
-struct ActiveAgentView: View {
+struct JanusView: View {
     @EnvironmentObject private var model: AppViewModel
-    @State private var correctionNote = "Feedback from macOS Active Agent panel."
-    @State private var wrongTaskNote = "This active-agent context matched the wrong task."
-    @State private var taskDraft = ActiveAgentTaskContextDraft()
-    @State private var mutedScopeDraft = ActiveAgentMutedScopeDraft()
+    @State private var correctionNote = "Feedback from macOS Janus panel."
+    @State private var wrongTaskNote = "This janus context matched the wrong task."
+    @State private var taskDraft = JanusTaskContextDraft()
+    @State private var mutedScopeDraft = JanusMutedScopeDraft()
 
-    private var status: ActiveAgentStatusResponse {
-        model.activeAgentStatus
+    private var status: JanusStatusResponse {
+        model.janusStatus
     }
 
     var body: some View {
@@ -16,7 +16,7 @@ struct ActiveAgentView: View {
             VStack(alignment: .leading, spacing: 18) {
                 SectionHeader(
                     eyebrow: "Control",
-                    title: "Active Agent",
+                    title: "Janus",
                     subtitle: "Inspect why Humungousaur reacted, tune the task context, and keep collector access scoped."
                 )
 
@@ -30,18 +30,18 @@ struct ActiveAgentView: View {
                 plannerPreviewPanel
 
                 HStack(alignment: .top, spacing: 14) {
-                    ActiveAgentRecordPanel(title: "Latest Reflex", records: status.decisions, emptyMessage: "No reflex decisions recorded yet.")
-                    ActiveAgentRecordPanel(title: "Agent Bridge", records: status.activations, emptyMessage: "No prepared or submitted activations yet.")
+                    JanusRecordPanel(title: "Latest Reflex", records: status.decisions, emptyMessage: "No reflex decisions recorded yet.")
+                    JanusRecordPanel(title: "Agent Bridge", records: status.activations, emptyMessage: "No prepared or submitted activations yet.")
                 }
 
                 HStack(alignment: .top, spacing: 14) {
-                    ActiveAgentRecordPanel(title: "Task Context", records: status.taskContexts, emptyMessage: "No active task context yet.")
-                    ActiveAgentRecordPanel(title: "Memory Candidates", records: status.memoryCandidates, emptyMessage: "No Reflex memory candidates yet.")
+                    JanusRecordPanel(title: "Task Context", records: status.taskContexts, emptyMessage: "No active task context yet.")
+                    JanusRecordPanel(title: "Memory Candidates", records: status.memoryCandidates, emptyMessage: "No Reflex memory candidates yet.")
                 }
 
                 HStack(alignment: .top, spacing: 14) {
                     deepDivePanel
-                    ActiveAgentRecordPanel(title: "Why", records: status.explanations, emptyMessage: "No explanations recorded yet.")
+                    JanusRecordPanel(title: "Why", records: status.explanations, emptyMessage: "No explanations recorded yet.")
                 }
 
                 HStack(alignment: .top, spacing: 14) {
@@ -54,7 +54,7 @@ struct ActiveAgentView: View {
                     collectorHealthPanel
                 }
 
-                UserTechnicalDetails(title: "Technical active-agent status") {
+                UserTechnicalDetails(title: "Technical Janus status") {
                     JSONTextView(value: technicalStatus)
                         .frame(minHeight: 300)
                 }
@@ -62,7 +62,7 @@ struct ActiveAgentView: View {
             .padding(28)
         }
         .task {
-            await model.refreshActiveAgent()
+            await model.refreshJanus()
         }
     }
 
@@ -78,7 +78,7 @@ struct ActiveAgentView: View {
     private var feedbackPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
             panelTitle("Feedback", symbol: "hand.thumbsup")
-            Text(model.activeAgentStatusText)
+            Text(model.janusStatusText)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             TextField("Feedback note", text: $correctionNote, axis: .vertical)
@@ -92,7 +92,7 @@ struct ActiveAgentView: View {
             }
 
             Button {
-                Task { await model.refreshActiveAgent() }
+                Task { await model.refreshJanus() }
             } label: {
                 Label("Refresh", systemImage: "arrow.clockwise")
             }
@@ -104,7 +104,7 @@ struct ActiveAgentView: View {
     }
 
     private var plannerPreviewPanel: some View {
-        let preview = model.activeAgentPlannerContext
+        let preview = model.janusPlannerContext
         return VStack(alignment: .leading, spacing: 12) {
             panelTitle("Planner Preview", symbol: "eye")
             Text(preview.privacy)
@@ -121,12 +121,12 @@ struct ActiveAgentView: View {
                 miniMetric("Muted", "\(preview.mutedScopes.count)")
             }
             HStack(alignment: .top, spacing: 12) {
-                ActiveAgentRecordPanel(title: "Current Activity", records: preview.episodes + preview.taskContexts, emptyMessage: "No planner-visible activity context yet.")
-                ActiveAgentRecordPanel(title: "Planner Memory", records: preview.memoryItems, emptyMessage: "No promoted active-agent memory yet.")
+                JanusRecordPanel(title: "Current Activity", records: preview.episodes + preview.taskContexts, emptyMessage: "No planner-visible activity context yet.")
+                JanusRecordPanel(title: "Planner Memory", records: preview.memoryItems, emptyMessage: "No promoted Janus memory yet.")
             }
             HStack(alignment: .top, spacing: 12) {
-                ActiveAgentRecordPanel(title: "Prepared Help", records: preview.activations + preview.resumeCapsules, emptyMessage: "No planner-visible prepared help yet.")
-                ActiveAgentRecordPanel(title: "Approvals And Mutes", records: preview.deepDiveRequests + preview.mutedScopes, emptyMessage: "No pending deep dives or muted scopes.")
+                JanusRecordPanel(title: "Prepared Help", records: preview.activations + preview.resumeCapsules, emptyMessage: "No planner-visible prepared help yet.")
+                JanusRecordPanel(title: "Approvals And Mutes", records: preview.deepDiveRequests + preview.mutedScopes, emptyMessage: "No pending deep dives or muted scopes.")
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
@@ -151,7 +151,7 @@ struct ActiveAgentView: View {
             HStack(spacing: 8) {
                 Button {
                     Task {
-                        await model.recordActiveAgentCorrection(
+                        await model.recordJanusCorrection(
                             "wrong_task",
                             note: wrongTaskNote,
                             taskContext: taskDraft
@@ -165,7 +165,7 @@ struct ActiveAgentView: View {
                 .disabled(!taskDraft.hasContext)
 
                 Button {
-                    Task { await model.declareActiveAgentTaskContext(taskDraft) }
+                    Task { await model.declareJanusTaskContext(taskDraft) }
                 } label: {
                     Label("Save Context", systemImage: "pin")
                 }
@@ -207,7 +207,7 @@ struct ActiveAgentView: View {
                         }
                         HStack(spacing: 8) {
                             Button {
-                                Task { await model.approveActiveAgentDeepDive(request) }
+                                Task { await model.approveJanusDeepDive(request) }
                             } label: {
                                 Label("Approve", systemImage: "checkmark.seal")
                             }
@@ -216,7 +216,7 @@ struct ActiveAgentView: View {
                             .disabled(!request.canDecideDeepDive)
 
                             Button {
-                                Task { await model.rejectActiveAgentDeepDive(request) }
+                                Task { await model.rejectJanusDeepDive(request) }
                             } label: {
                                 Label("Reject", systemImage: "xmark.seal")
                             }
@@ -248,7 +248,7 @@ struct ActiveAgentView: View {
             TextField("Reason", text: $mutedScopeDraft.reason, axis: .vertical)
                 .lineLimit(2...3)
             Button {
-                Task { await model.createActiveAgentMutedScope(mutedScopeDraft) }
+                Task { await model.createJanusMutedScope(mutedScopeDraft) }
             } label: {
                 Label("Create Scoped Mute", systemImage: "plus.circle")
             }
@@ -362,7 +362,7 @@ struct ActiveAgentView: View {
     private func correctionButton(_ title: String, symbol: String, type: String, includeScope: Bool = false) -> some View {
         Button {
             Task {
-                await model.recordActiveAgentCorrection(
+                await model.recordJanusCorrection(
                     type,
                     note: correctionNote,
                     mutedScope: includeScope ? mutedScopeDraft : nil
@@ -417,9 +417,9 @@ struct ActiveAgentView: View {
     }
 }
 
-private struct ActiveAgentRecordPanel: View {
+private struct JanusRecordPanel: View {
     let title: String
-    let records: [ActiveAgentRecord]
+    let records: [JanusRecord]
     let emptyMessage: String
 
     var body: some View {
@@ -468,7 +468,7 @@ private struct ActiveAgentRecordPanel: View {
     }
 }
 
-private extension ActiveAgentRecord {
+private extension JanusRecord {
     var canDecideDeepDive: Bool {
         let status = string("status")?.lowercased()
         return status == nil || status == "needs_approval" || status == "pending"

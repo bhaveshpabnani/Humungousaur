@@ -7,10 +7,10 @@ from dataclasses import asdict
 from pathlib import Path
 
 from humungousaur.api import run_api_server
-from humungousaur.active_agent import (
-    active_agent_status,
-    active_agent_privacy_delete,
-    active_agent_privacy_export,
+from humungousaur.janus import (
+    janus_status,
+    janus_privacy_delete,
+    janus_privacy_export,
     apply_episode_operation,
     approve_deep_dive_request,
     cancel_muted_scope,
@@ -21,7 +21,7 @@ from humungousaur.active_agent import (
     reject_deep_dive_request,
     record_user_correction,
     respond_to_activation,
-    run_active_agent_eval,
+    run_janus_eval,
 )
 from humungousaur.client_protocol import run_client_protocol_stdio
 from humungousaur.collectors import (
@@ -232,7 +232,7 @@ def build_parser() -> argparse.ArgumentParser:
     collector_events.add_argument("--since-sequence", type=int, default=0)
     collector_events.add_argument("--json", action="store_true")
 
-    collector_helper_health = subparsers.add_parser("collectors-helper-health", help="Record native collector helper health")
+    collector_helper_health = subparsers.add_parser("collectors-helper-health", help="Record platform collector helper health")
     collector_helper_health.add_argument("--workspace", type=Path, default=Path.cwd())
     collector_helper_health.add_argument("--data-dir", type=Path, default=Path("artifacts"))
     collector_helper_health.add_argument("--helper-id", required=True)
@@ -299,148 +299,148 @@ def build_parser() -> argparse.ArgumentParser:
     collector_loop.add_argument("--json", action="store_true")
     _add_planner_args(collector_loop)
 
-    active_agent_status_parser = subparsers.add_parser("active-agent-status", help="Inspect active-agent routes, decisions, task context, muted scopes, and deep dives")
-    active_agent_status_parser.add_argument("--workspace", type=Path, default=Path.cwd())
-    active_agent_status_parser.add_argument("--data-dir", type=Path, default=Path("artifacts"))
-    active_agent_status_parser.add_argument("--limit", type=int, default=20)
-    active_agent_status_parser.add_argument("--json", action="store_true")
+    janus_status_parser = subparsers.add_parser("janus-status", help="Inspect janus routes, decisions, task context, muted scopes, and deep dives")
+    janus_status_parser.add_argument("--workspace", type=Path, default=Path.cwd())
+    janus_status_parser.add_argument("--data-dir", type=Path, default=Path("artifacts"))
+    janus_status_parser.add_argument("--limit", type=int, default=20)
+    janus_status_parser.add_argument("--json", action="store_true")
 
-    active_agent_planner_context = subparsers.add_parser("active-agent-planner-context", help="Preview the redacted active-agent context visible to the planner")
-    active_agent_planner_context.add_argument("--workspace", type=Path, default=Path.cwd())
-    active_agent_planner_context.add_argument("--data-dir", type=Path, default=Path("artifacts"))
-    active_agent_planner_context.add_argument("--request", default="")
-    active_agent_planner_context.add_argument("--json", action="store_true")
-    _add_planner_args(active_agent_planner_context)
+    janus_planner_context = subparsers.add_parser("janus-planner-context", help="Preview the redacted janus context visible to the planner")
+    janus_planner_context.add_argument("--workspace", type=Path, default=Path.cwd())
+    janus_planner_context.add_argument("--data-dir", type=Path, default=Path("artifacts"))
+    janus_planner_context.add_argument("--request", default="")
+    janus_planner_context.add_argument("--json", action="store_true")
+    _add_planner_args(janus_planner_context)
 
-    active_agent_task = subparsers.add_parser("active-agent-task-context-set", help="Declare or update active task context for collector reflex interpretation")
-    active_agent_task.add_argument("--workspace", type=Path, default=Path.cwd())
-    active_agent_task.add_argument("--data-dir", type=Path, default=Path("artifacts"))
-    active_agent_task.add_argument("--task-context-id", default="")
-    active_agent_task.add_argument("--goal", required=True)
-    active_agent_task.add_argument("--episode-id", default="")
-    active_agent_task.add_argument("--summary", default="")
-    active_agent_task.add_argument("--allowed-help", action="append", default=[])
-    active_agent_task.add_argument("--privacy-mode", default="metadata_first")
-    active_agent_task.add_argument("--json", action="store_true")
+    janus_task = subparsers.add_parser("janus-task-context-set", help="Declare or update active task context for collector reflex interpretation")
+    janus_task.add_argument("--workspace", type=Path, default=Path.cwd())
+    janus_task.add_argument("--data-dir", type=Path, default=Path("artifacts"))
+    janus_task.add_argument("--task-context-id", default="")
+    janus_task.add_argument("--goal", required=True)
+    janus_task.add_argument("--episode-id", default="")
+    janus_task.add_argument("--summary", default="")
+    janus_task.add_argument("--allowed-help", action="append", default=[])
+    janus_task.add_argument("--privacy-mode", default="metadata_first")
+    janus_task.add_argument("--json", action="store_true")
 
-    active_agent_mute = subparsers.add_parser("active-agent-muted-scope-add", help="Mute active-agent help, LLM interpretation, or tracking for a scope")
-    active_agent_mute.add_argument("--workspace", type=Path, default=Path.cwd())
-    active_agent_mute.add_argument("--data-dir", type=Path, default=Path("artifacts"))
-    active_agent_mute.add_argument("--mode", choices=("no_assistance", "not_now", "do_not_track", "private"), default="no_assistance")
-    active_agent_mute.add_argument("--scope-type", default="manual")
-    active_agent_mute.add_argument("--entity-ref", action="append", default=[])
-    active_agent_mute.add_argument("--collector", default="")
-    active_agent_mute.add_argument("--source", default="")
-    active_agent_mute.add_argument("--stimulus-type", default="")
-    active_agent_mute.add_argument("--expires-at", default="")
-    active_agent_mute.add_argument("--reason", default="")
-    active_agent_mute.add_argument("--json", action="store_true")
+    janus_mute = subparsers.add_parser("janus-muted-scope-add", help="Mute janus help, LLM interpretation, or tracking for a scope")
+    janus_mute.add_argument("--workspace", type=Path, default=Path.cwd())
+    janus_mute.add_argument("--data-dir", type=Path, default=Path("artifacts"))
+    janus_mute.add_argument("--mode", choices=("no_assistance", "not_now", "do_not_track", "private"), default="no_assistance")
+    janus_mute.add_argument("--scope-type", default="manual")
+    janus_mute.add_argument("--entity-ref", action="append", default=[])
+    janus_mute.add_argument("--collector", default="")
+    janus_mute.add_argument("--source", default="")
+    janus_mute.add_argument("--stimulus-type", default="")
+    janus_mute.add_argument("--expires-at", default="")
+    janus_mute.add_argument("--reason", default="")
+    janus_mute.add_argument("--json", action="store_true")
 
-    active_agent_mute_cancel = subparsers.add_parser("active-agent-muted-scope-cancel", help="Cancel an active-agent muted scope")
-    active_agent_mute_cancel.add_argument("--workspace", type=Path, default=Path.cwd())
-    active_agent_mute_cancel.add_argument("--data-dir", type=Path, default=Path("artifacts"))
-    active_agent_mute_cancel.add_argument("--scope-id", required=True)
-    active_agent_mute_cancel.add_argument("--reason", default="")
-    active_agent_mute_cancel.add_argument("--json", action="store_true")
+    janus_mute_cancel = subparsers.add_parser("janus-muted-scope-cancel", help="Cancel an janus muted scope")
+    janus_mute_cancel.add_argument("--workspace", type=Path, default=Path.cwd())
+    janus_mute_cancel.add_argument("--data-dir", type=Path, default=Path("artifacts"))
+    janus_mute_cancel.add_argument("--scope-id", required=True)
+    janus_mute_cancel.add_argument("--reason", default="")
+    janus_mute_cancel.add_argument("--json", action="store_true")
 
-    active_agent_deep = subparsers.add_parser("active-agent-deep-dive-request", help="Create an approval-gated active-agent deep-dive request")
-    active_agent_deep.add_argument("--workspace", type=Path, default=Path.cwd())
-    active_agent_deep.add_argument("--data-dir", type=Path, default=Path("artifacts"))
-    active_agent_deep.add_argument("--episode-id", default="")
-    active_agent_deep.add_argument("--purpose", required=True)
-    active_agent_deep.add_argument("--source", required=True)
-    active_agent_deep.add_argument("--requested-access", required=True)
-    active_agent_deep.add_argument("--json", action="store_true")
+    janus_deep = subparsers.add_parser("janus-deep-dive-request", help="Create an approval-gated janus deep-dive request")
+    janus_deep.add_argument("--workspace", type=Path, default=Path.cwd())
+    janus_deep.add_argument("--data-dir", type=Path, default=Path("artifacts"))
+    janus_deep.add_argument("--episode-id", default="")
+    janus_deep.add_argument("--purpose", required=True)
+    janus_deep.add_argument("--source", required=True)
+    janus_deep.add_argument("--requested-access", required=True)
+    janus_deep.add_argument("--json", action="store_true")
 
-    active_agent_deep_approve = subparsers.add_parser("active-agent-deep-dive-approve", help="Approve an active-agent deep-dive request")
-    active_agent_deep_approve.add_argument("--workspace", type=Path, default=Path.cwd())
-    active_agent_deep_approve.add_argument("--data-dir", type=Path, default=Path("artifacts"))
-    active_agent_deep_approve.add_argument("--request-id", required=True)
-    active_agent_deep_approve.add_argument("--reason", default="")
-    active_agent_deep_approve.add_argument("--json", action="store_true")
+    janus_deep_approve = subparsers.add_parser("janus-deep-dive-approve", help="Approve an janus deep-dive request")
+    janus_deep_approve.add_argument("--workspace", type=Path, default=Path.cwd())
+    janus_deep_approve.add_argument("--data-dir", type=Path, default=Path("artifacts"))
+    janus_deep_approve.add_argument("--request-id", required=True)
+    janus_deep_approve.add_argument("--reason", default="")
+    janus_deep_approve.add_argument("--json", action="store_true")
 
-    active_agent_deep_execute = subparsers.add_parser("active-agent-deep-dive-execute", help="Execute an approved metadata-only active-agent deep dive")
-    active_agent_deep_execute.add_argument("--workspace", type=Path, default=Path.cwd())
-    active_agent_deep_execute.add_argument("--data-dir", type=Path, default=Path("artifacts"))
-    active_agent_deep_execute.add_argument("--request-id", required=True)
-    active_agent_deep_execute.add_argument("--limit", type=int, default=40)
-    active_agent_deep_execute.add_argument("--json", action="store_true")
+    janus_deep_execute = subparsers.add_parser("janus-deep-dive-execute", help="Execute an approved metadata-only janus deep dive")
+    janus_deep_execute.add_argument("--workspace", type=Path, default=Path.cwd())
+    janus_deep_execute.add_argument("--data-dir", type=Path, default=Path("artifacts"))
+    janus_deep_execute.add_argument("--request-id", required=True)
+    janus_deep_execute.add_argument("--limit", type=int, default=40)
+    janus_deep_execute.add_argument("--json", action="store_true")
 
-    active_agent_deep_reject = subparsers.add_parser("active-agent-deep-dive-reject", help="Reject an active-agent deep-dive request")
-    active_agent_deep_reject.add_argument("--workspace", type=Path, default=Path.cwd())
-    active_agent_deep_reject.add_argument("--data-dir", type=Path, default=Path("artifacts"))
-    active_agent_deep_reject.add_argument("--request-id", required=True)
-    active_agent_deep_reject.add_argument("--reason", default="")
-    active_agent_deep_reject.add_argument("--json", action="store_true")
+    janus_deep_reject = subparsers.add_parser("janus-deep-dive-reject", help="Reject an janus deep-dive request")
+    janus_deep_reject.add_argument("--workspace", type=Path, default=Path.cwd())
+    janus_deep_reject.add_argument("--data-dir", type=Path, default=Path("artifacts"))
+    janus_deep_reject.add_argument("--request-id", required=True)
+    janus_deep_reject.add_argument("--reason", default="")
+    janus_deep_reject.add_argument("--json", action="store_true")
 
-    active_agent_correction = subparsers.add_parser("active-agent-correction-add", help="Record a user correction for active-agent state")
-    active_agent_correction.add_argument("--workspace", type=Path, default=Path.cwd())
-    active_agent_correction.add_argument("--data-dir", type=Path, default=Path("artifacts"))
-    active_agent_correction.add_argument("--correction-type", choices=("wrong_task", "not_relevant", "helpful", "private", "not_now", "do_not_track", "no_assistance"), required=True)
-    active_agent_correction.add_argument("--target-type", default="active_agent")
-    active_agent_correction.add_argument("--target-id", required=True)
-    active_agent_correction.add_argument("--note", default="")
-    active_agent_correction.add_argument("--goal", default="")
-    active_agent_correction.add_argument("--collector", default="")
-    active_agent_correction.add_argument("--source", default="")
-    active_agent_correction.add_argument("--stimulus-type", default="")
-    active_agent_correction.add_argument("--entity-ref", action="append", default=[])
-    active_agent_correction.add_argument("--expires-at", default="")
-    active_agent_correction.add_argument("--json", action="store_true")
+    janus_correction = subparsers.add_parser("janus-correction-add", help="Record a user correction for janus state")
+    janus_correction.add_argument("--workspace", type=Path, default=Path.cwd())
+    janus_correction.add_argument("--data-dir", type=Path, default=Path("artifacts"))
+    janus_correction.add_argument("--correction-type", choices=("wrong_task", "not_relevant", "helpful", "private", "not_now", "do_not_track", "no_assistance"), required=True)
+    janus_correction.add_argument("--target-type", default="janus")
+    janus_correction.add_argument("--target-id", required=True)
+    janus_correction.add_argument("--note", default="")
+    janus_correction.add_argument("--goal", default="")
+    janus_correction.add_argument("--collector", default="")
+    janus_correction.add_argument("--source", default="")
+    janus_correction.add_argument("--stimulus-type", default="")
+    janus_correction.add_argument("--entity-ref", action="append", default=[])
+    janus_correction.add_argument("--expires-at", default="")
+    janus_correction.add_argument("--json", action="store_true")
 
-    active_agent_activation_response = subparsers.add_parser("active-agent-activation-respond", help="Record a direct user response to an active-agent activation")
-    active_agent_activation_response.add_argument("--workspace", type=Path, default=Path.cwd())
-    active_agent_activation_response.add_argument("--data-dir", type=Path, default=Path("artifacts"))
-    active_agent_activation_response.add_argument("--activation-id", required=True)
-    active_agent_activation_response.add_argument("--response-type", choices=("accept", "decline", "not_now", "private", "clarify", "wake_agent"), required=True)
-    active_agent_activation_response.add_argument("--text", default="")
-    active_agent_activation_response.add_argument("--goal", default="")
-    active_agent_activation_response.add_argument("--run-agent", action="store_true")
-    active_agent_activation_response.add_argument("--json", action="store_true")
-    _add_planner_args(active_agent_activation_response)
+    janus_activation_response = subparsers.add_parser("janus-activation-respond", help="Record a direct user response to an janus activation")
+    janus_activation_response.add_argument("--workspace", type=Path, default=Path.cwd())
+    janus_activation_response.add_argument("--data-dir", type=Path, default=Path("artifacts"))
+    janus_activation_response.add_argument("--activation-id", required=True)
+    janus_activation_response.add_argument("--response-type", choices=("accept", "decline", "not_now", "private", "clarify", "wake_agent"), required=True)
+    janus_activation_response.add_argument("--text", default="")
+    janus_activation_response.add_argument("--goal", default="")
+    janus_activation_response.add_argument("--run-agent", action="store_true")
+    janus_activation_response.add_argument("--json", action="store_true")
+    _add_planner_args(janus_activation_response)
 
-    active_agent_episode_op = subparsers.add_parser("active-agent-episode-operate", help="Pause, resume, complete, abandon, merge, or split an active-agent episode")
-    active_agent_episode_op.add_argument("--workspace", type=Path, default=Path.cwd())
-    active_agent_episode_op.add_argument("--data-dir", type=Path, default=Path("artifacts"))
-    active_agent_episode_op.add_argument("--operation", choices=("pause", "resume", "complete", "abandon", "merge", "split"), required=True)
-    active_agent_episode_op.add_argument("--episode-id", required=True)
-    active_agent_episode_op.add_argument("--target-episode-id", default="")
-    active_agent_episode_op.add_argument("--new-episode-id", default="")
-    active_agent_episode_op.add_argument("--summary", default="")
-    active_agent_episode_op.add_argument("--hypothesis", default="")
-    active_agent_episode_op.add_argument("--reason", default="")
-    active_agent_episode_op.add_argument("--json", action="store_true")
+    janus_episode_op = subparsers.add_parser("janus-episode-operate", help="Pause, resume, complete, abandon, merge, or split an janus episode")
+    janus_episode_op.add_argument("--workspace", type=Path, default=Path.cwd())
+    janus_episode_op.add_argument("--data-dir", type=Path, default=Path("artifacts"))
+    janus_episode_op.add_argument("--operation", choices=("pause", "resume", "complete", "abandon", "merge", "split"), required=True)
+    janus_episode_op.add_argument("--episode-id", required=True)
+    janus_episode_op.add_argument("--target-episode-id", default="")
+    janus_episode_op.add_argument("--new-episode-id", default="")
+    janus_episode_op.add_argument("--summary", default="")
+    janus_episode_op.add_argument("--hypothesis", default="")
+    janus_episode_op.add_argument("--reason", default="")
+    janus_episode_op.add_argument("--json", action="store_true")
 
-    active_agent_privacy_export_parser = subparsers.add_parser("active-agent-privacy-export", help="Export scoped active-agent state without raw collector payloads")
-    active_agent_privacy_export_parser.add_argument("--workspace", type=Path, default=Path.cwd())
-    active_agent_privacy_export_parser.add_argument("--data-dir", type=Path, default=Path("artifacts"))
-    active_agent_privacy_export_parser.add_argument("--target-type", default="")
-    active_agent_privacy_export_parser.add_argument("--target-id", default="")
-    active_agent_privacy_export_parser.add_argument("--episode-id", default="")
-    active_agent_privacy_export_parser.add_argument("--collector", default="")
-    active_agent_privacy_export_parser.add_argument("--source", default="")
-    active_agent_privacy_export_parser.add_argument("--entity-ref", default="")
-    active_agent_privacy_export_parser.add_argument("--limit", type=int, default=100)
-    active_agent_privacy_export_parser.add_argument("--json", action="store_true")
+    janus_privacy_export_parser = subparsers.add_parser("janus-privacy-export", help="Export scoped janus state without raw collector payloads")
+    janus_privacy_export_parser.add_argument("--workspace", type=Path, default=Path.cwd())
+    janus_privacy_export_parser.add_argument("--data-dir", type=Path, default=Path("artifacts"))
+    janus_privacy_export_parser.add_argument("--target-type", default="")
+    janus_privacy_export_parser.add_argument("--target-id", default="")
+    janus_privacy_export_parser.add_argument("--episode-id", default="")
+    janus_privacy_export_parser.add_argument("--collector", default="")
+    janus_privacy_export_parser.add_argument("--source", default="")
+    janus_privacy_export_parser.add_argument("--entity-ref", default="")
+    janus_privacy_export_parser.add_argument("--limit", type=int, default=100)
+    janus_privacy_export_parser.add_argument("--json", action="store_true")
 
-    active_agent_privacy_delete_parser = subparsers.add_parser("active-agent-privacy-delete", help="Delete scoped active-agent state")
-    active_agent_privacy_delete_parser.add_argument("--workspace", type=Path, default=Path.cwd())
-    active_agent_privacy_delete_parser.add_argument("--data-dir", type=Path, default=Path("artifacts"))
-    active_agent_privacy_delete_parser.add_argument("--target-type", default="")
-    active_agent_privacy_delete_parser.add_argument("--target-id", default="")
-    active_agent_privacy_delete_parser.add_argument("--episode-id", default="")
-    active_agent_privacy_delete_parser.add_argument("--collector", default="")
-    active_agent_privacy_delete_parser.add_argument("--source", default="")
-    active_agent_privacy_delete_parser.add_argument("--entity-ref", default="")
-    active_agent_privacy_delete_parser.add_argument("--reason", default="")
-    active_agent_privacy_delete_parser.add_argument("--json", action="store_true")
+    janus_privacy_delete_parser = subparsers.add_parser("janus-privacy-delete", help="Delete scoped janus state")
+    janus_privacy_delete_parser.add_argument("--workspace", type=Path, default=Path.cwd())
+    janus_privacy_delete_parser.add_argument("--data-dir", type=Path, default=Path("artifacts"))
+    janus_privacy_delete_parser.add_argument("--target-type", default="")
+    janus_privacy_delete_parser.add_argument("--target-id", default="")
+    janus_privacy_delete_parser.add_argument("--episode-id", default="")
+    janus_privacy_delete_parser.add_argument("--collector", default="")
+    janus_privacy_delete_parser.add_argument("--source", default="")
+    janus_privacy_delete_parser.add_argument("--entity-ref", default="")
+    janus_privacy_delete_parser.add_argument("--reason", default="")
+    janus_privacy_delete_parser.add_argument("--json", action="store_true")
 
-    active_agent_eval = subparsers.add_parser("active-agent-eval-run", help="Run active-agent state replay/privacy invariant checks")
-    active_agent_eval.add_argument("--workspace", type=Path, default=Path.cwd())
-    active_agent_eval.add_argument("--data-dir", type=Path, default=Path("artifacts"))
-    active_agent_eval.add_argument("--scenario", default="status_replay")
-    active_agent_eval.add_argument("--limit", type=int, default=100)
-    active_agent_eval.add_argument("--json", action="store_true")
+    janus_eval = subparsers.add_parser("janus-eval-run", help="Run janus state replay/privacy invariant checks")
+    janus_eval.add_argument("--workspace", type=Path, default=Path.cwd())
+    janus_eval.add_argument("--data-dir", type=Path, default=Path("artifacts"))
+    janus_eval.add_argument("--scenario", default="status_replay")
+    janus_eval.add_argument("--limit", type=int, default=100)
+    janus_eval.add_argument("--json", action="store_true")
 
     events_status = subparsers.add_parser("events-status", help="Inspect semantic events, current context, and autonomous action candidates")
     events_status.add_argument("--workspace", type=Path, default=Path.cwd())
@@ -523,10 +523,10 @@ def main() -> None:
         model_name=getattr(args, "model", "gpt-5-mini"),
         model_base_url=getattr(args, "model_base_url", None),
         model_api_key_env=getattr(args, "model_api_key_env", None),
-        active_model_provider=getattr(args, "active_model_provider", ""),
-        active_model_name=getattr(args, "active_model", ""),
-        active_model_base_url=getattr(args, "active_model_base_url", None),
-        active_model_api_key_env=getattr(args, "active_model_api_key_env", None),
+        janus_model_provider=getattr(args, "janus_model_provider", ""),
+        janus_model_name=getattr(args, "janus_model", ""),
+        janus_model_base_url=getattr(args, "janus_model_base_url", None),
+        janus_model_api_key_env=getattr(args, "janus_model_api_key_env", None),
         model_timeout_seconds=getattr(args, "model_timeout_seconds", 45.0),
     ).normalized()
 
@@ -917,36 +917,36 @@ def main() -> None:
             print(f"Collector loop: {payload['tick_count']} tick(s).")
         return
 
-    if args.command == "active-agent-status":
-        payload = active_agent_status(config, limit=args.limit)
+    if args.command == "janus-status":
+        payload = janus_status(config, limit=args.limit)
         if args.json:
             print(json.dumps(payload, indent=2, ensure_ascii=False))
         else:
             print(
-                f"Active agent: routes={len(payload['routes'])}, decisions={len(payload['decisions'])}, "
+                f"Janus: routes={len(payload['routes'])}, decisions={len(payload['decisions'])}, "
                 f"activations={len(payload.get('activations', []))}, "
                 f"memory_candidates={len(payload.get('memory_candidates', []))}, "
                 f"task_contexts={len(payload['task_contexts'])}, muted_scopes={len(payload['muted_scopes'])}."
             )
         return
 
-    if args.command == "active-agent-planner-context":
-        payload = AgentOrchestrator(config).active_agent_planner_context_preview(request=args.request)
+    if args.command == "janus-planner-context":
+        payload = AgentOrchestrator(config).janus_planner_context_preview(request=args.request)
         if args.json:
             print(json.dumps(payload, indent=2, ensure_ascii=False))
         else:
-            memory_count = len((payload.get("active_agent_memory") or {}).get("items", []))
-            state = payload.get("active_agent_state") or {}
+            memory_count = len((payload.get("janus_memory") or {}).get("items", []))
+            state = payload.get("janus_state") or {}
             task_count = len(state.get("task_contexts", []))
             activation_count = len(state.get("activations", []))
             capsule_count = len(state.get("resume_capsules", []))
             print(
-                "Active-agent planner context: "
+                "Janus planner context: "
                 f"memory={memory_count}, tasks={task_count}, activations={activation_count}, resume_capsules={capsule_count}."
             )
         return
 
-    if args.command == "active-agent-task-context-set":
+    if args.command == "janus-task-context-set":
         payload = declare_task_context(
             config,
             {
@@ -964,7 +964,7 @@ def main() -> None:
             print(f"Active task context saved: {payload['task_context']['task_context_id']}")
         return
 
-    if args.command == "active-agent-muted-scope-add":
+    if args.command == "janus-muted-scope-add":
         payload = create_muted_scope(
             config,
             {
@@ -984,7 +984,7 @@ def main() -> None:
             print(f"Muted scope saved: {payload['muted_scope']['scope_id']} ({payload['muted_scope']['mode']})")
         return
 
-    if args.command == "active-agent-muted-scope-cancel":
+    if args.command == "janus-muted-scope-cancel":
         payload = cancel_muted_scope(config, {"scope_id": args.scope_id, "reason": args.reason})
         if args.json:
             print(json.dumps(payload, indent=2, ensure_ascii=False))
@@ -992,7 +992,7 @@ def main() -> None:
             print(f"Muted scope cancelled: {payload['muted_scope']['scope_id']}")
         return
 
-    if args.command == "active-agent-deep-dive-request":
+    if args.command == "janus-deep-dive-request":
         payload = create_deep_dive_request(
             config,
             {
@@ -1008,7 +1008,7 @@ def main() -> None:
             print(f"Deep-dive request saved: {payload['deep_dive_request']['request_id']}")
         return
 
-    if args.command == "active-agent-deep-dive-approve":
+    if args.command == "janus-deep-dive-approve":
         payload = approve_deep_dive_request(config, {"request_id": args.request_id, "reason": args.reason})
         if args.json:
             print(json.dumps(payload, indent=2, ensure_ascii=False))
@@ -1016,7 +1016,7 @@ def main() -> None:
             print(f"Deep-dive request approved: {payload['deep_dive_request']['request_id']}")
         return
 
-    if args.command == "active-agent-deep-dive-execute":
+    if args.command == "janus-deep-dive-execute":
         payload = execute_deep_dive_request(config, {"request_id": args.request_id, "limit": args.limit})
         if args.json:
             print(json.dumps(payload, indent=2, ensure_ascii=False))
@@ -1025,7 +1025,7 @@ def main() -> None:
             print(payload["deep_dive_result"]["summary"])
         return
 
-    if args.command == "active-agent-deep-dive-reject":
+    if args.command == "janus-deep-dive-reject":
         payload = reject_deep_dive_request(config, {"request_id": args.request_id, "reason": args.reason})
         if args.json:
             print(json.dumps(payload, indent=2, ensure_ascii=False))
@@ -1033,7 +1033,7 @@ def main() -> None:
             print(f"Deep-dive request rejected: {payload['deep_dive_request']['request_id']}")
         return
 
-    if args.command == "active-agent-correction-add":
+    if args.command == "janus-correction-add":
         payload = record_user_correction(
             config,
             {
@@ -1052,7 +1052,7 @@ def main() -> None:
         if args.json:
             print(json.dumps(payload, indent=2, ensure_ascii=False))
         else:
-            print(f"Active-agent correction saved: {payload['correction']['correction_id']} ({payload['correction']['correction_type']})")
+            print(f"Janus correction saved: {payload['correction']['correction_id']} ({payload['correction']['correction_type']})")
             promoted = payload.get("promoted_memory") or {}
             knowledge = promoted.get("knowledge") if isinstance(promoted, dict) else None
             if isinstance(knowledge, dict) and knowledge.get("knowledge_id"):
@@ -1063,7 +1063,7 @@ def main() -> None:
                 print(f"Retracted promoted memory: {len(retracted)} archived.")
         return
 
-    if args.command == "active-agent-activation-respond":
+    if args.command == "janus-activation-respond":
         payload = respond_to_activation(
             config,
             {
@@ -1081,7 +1081,7 @@ def main() -> None:
             print(f"Activation response saved: {response['response_id']} ({response['action_taken']})")
         return
 
-    if args.command == "active-agent-episode-operate":
+    if args.command == "janus-episode-operate":
         payload = apply_episode_operation(
             config,
             {
@@ -1100,8 +1100,8 @@ def main() -> None:
             print(f"Episode operation applied: {payload['operation']} {args.episode_id}")
         return
 
-    if args.command == "active-agent-privacy-export":
-        payload = active_agent_privacy_export(
+    if args.command == "janus-privacy-export":
+        payload = janus_privacy_export(
             config,
             {
                 "target_type": args.target_type,
@@ -1116,8 +1116,8 @@ def main() -> None:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
         return
 
-    if args.command == "active-agent-privacy-delete":
-        payload = active_agent_privacy_delete(
+    if args.command == "janus-privacy-delete":
+        payload = janus_privacy_delete(
             config,
             {
                 "target_type": args.target_type,
@@ -1133,15 +1133,15 @@ def main() -> None:
             print(json.dumps(payload, indent=2, ensure_ascii=False))
         else:
             counts = payload["privacy_action"]["affected_counts"]
-            print(f"Active-agent privacy delete completed: {sum(counts.values())} record(s).")
+            print(f"Janus privacy delete completed: {sum(counts.values())} record(s).")
         return
 
-    if args.command == "active-agent-eval-run":
-        payload = run_active_agent_eval(config, {"scenario": args.scenario, "limit": args.limit})
+    if args.command == "janus-eval-run":
+        payload = run_janus_eval(config, {"scenario": args.scenario, "limit": args.limit})
         if args.json:
             print(json.dumps(payload, indent=2, ensure_ascii=False))
         else:
-            print(f"Active-agent eval {payload['eval_run']['status']}: {payload['eval_run']['summary']}")
+            print(f"Janus eval {payload['eval_run']['status']}: {payload['eval_run']['summary']}")
         return
 
     if args.command == "events-status":
@@ -1301,25 +1301,25 @@ def _add_planner_args(parser: argparse.ArgumentParser) -> None:
         help="Timeout for each model request",
     )
     parser.add_argument(
-        "--active-model-provider",
+        "--janus-model-provider",
         choices=("", "same-as-main", *MODEL_PROVIDER_CHOICES),
         default="",
-        help="Optional model provider for active-agent reflex interpretation; defaults to the main model",
+        help="Optional model provider for janus reflex interpretation; defaults to the main model",
     )
     parser.add_argument(
-        "--active-model",
+        "--janus-model",
         default="",
-        help="Optional model name for active-agent reflex interpretation",
+        help="Optional model name for janus reflex interpretation",
     )
     parser.add_argument(
-        "--active-model-base-url",
+        "--janus-model-base-url",
         default=None,
-        help="Optional active-agent model base URL override",
+        help="Optional Janus model base URL override",
     )
     parser.add_argument(
-        "--active-model-api-key-env",
+        "--janus-model-api-key-env",
         default=None,
-        help="Environment variable that contains the active-agent model API key",
+        help="Environment variable that contains the Janus model API key",
     )
 
 

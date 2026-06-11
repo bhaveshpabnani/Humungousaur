@@ -11,7 +11,7 @@ internal sealed class CommunicationActivityCollector
     private readonly Dictionary<string, bool> _toggleState = new(StringComparer.OrdinalIgnoreCase);
     private string _lastForegroundSignature = "";
 
-    public IEnumerable<NativeCollectorEvent> Diff()
+    public IEnumerable<CollectorHostEvent> Diff()
     {
         var current = SnapshotCommunicationProcesses();
         foreach (var pair in current)
@@ -53,7 +53,7 @@ internal sealed class CommunicationActivityCollector
         }
     }
 
-    public IEnumerable<NativeCollectorEvent> ObserveForeground(WindowSnapshot snapshot)
+    public IEnumerable<CollectorHostEvent> ObserveForeground(WindowSnapshot snapshot)
     {
         var profile = CommunicationAppProfile.FromWindow(snapshot);
         if (profile is null)
@@ -124,7 +124,7 @@ internal sealed class CommunicationActivityCollector
         }
     }
 
-    public IEnumerable<NativeCollectorEvent> ObserveKeyDown(uint virtualKey)
+    public IEnumerable<CollectorHostEvent> ObserveKeyDown(uint virtualKey)
     {
         var snapshot = WindowSnapshot.FromForeground();
         if (snapshot is null)
@@ -168,7 +168,7 @@ internal sealed class CommunicationActivityCollector
         }
     }
 
-    private IEnumerable<NativeCollectorEvent> ProcessOpened(CommunicationAppProfile profile, int processId, string processName)
+    private IEnumerable<CollectorHostEvent> ProcessOpened(CommunicationAppProfile profile, int processId, string processName)
     {
         var metadata = ProcessMetadata(profile, processId, processName, "windows_process_snapshot_communication");
         if (profile.IsMeetingApp)
@@ -188,7 +188,7 @@ internal sealed class CommunicationActivityCollector
         }
     }
 
-    private IEnumerable<NativeCollectorEvent> ProcessClosed(CommunicationAppProfile profile, int processId, string processName)
+    private IEnumerable<CollectorHostEvent> ProcessClosed(CommunicationAppProfile profile, int processId, string processName)
     {
         var metadata = ProcessMetadata(profile, processId, processName, "windows_process_snapshot_communication");
         if (profile.IsMeetingApp)
@@ -202,7 +202,7 @@ internal sealed class CommunicationActivityCollector
         }
     }
 
-    private IEnumerable<NativeCollectorEvent> ObserveMeetingShortcut(
+    private IEnumerable<CollectorHostEvent> ObserveMeetingShortcut(
         CommunicationAppProfile profile,
         uint virtualKey,
         bool ctrl,
@@ -255,7 +255,7 @@ internal sealed class CommunicationActivityCollector
         }
     }
 
-    private IEnumerable<NativeCollectorEvent> ObserveChatShortcut(
+    private IEnumerable<CollectorHostEvent> ObserveChatShortcut(
         CommunicationAppProfile profile,
         uint virtualKey,
         bool ctrl,
@@ -307,7 +307,7 @@ internal sealed class CommunicationActivityCollector
         }
     }
 
-    private NativeCollectorEvent Toggle(
+    private CollectorHostEvent Toggle(
         string collector,
         CommunicationAppProfile profile,
         string key,
@@ -456,10 +456,10 @@ internal sealed class CommunicationActivityCollector
         ["custom_status_text_omitted"] = "true",
     };
 
-    private static NativeCollectorEvent Metadata(string collector, string stimulusType, string text, Dictionary<string, string> metadata) =>
+    private static CollectorHostEvent Metadata(string collector, string stimulusType, string text, Dictionary<string, string> metadata) =>
         new(collector, "channel_message", stimulusType, text, metadata);
 
-    private static NativeCollectorEvent Sensitive(string collector, string stimulusType, string text, Dictionary<string, string> metadata)
+    private static CollectorHostEvent Sensitive(string collector, string stimulusType, string text, Dictionary<string, string> metadata)
     {
         var copy = new Dictionary<string, string>(metadata)
         {
@@ -472,7 +472,7 @@ internal sealed class CommunicationActivityCollector
                 : collector.StartsWith("chat_", StringComparison.Ordinal)
                     ? "channel_message"
                     : "activity";
-        return new NativeCollectorEvent(collector, source, stimulusType, text, copy, PrivacyTier: "sensitive_metadata");
+        return new CollectorHostEvent(collector, source, stimulusType, text, copy, PrivacyTier: "sensitive_metadata");
     }
 
     private static string StableDigest(string value)

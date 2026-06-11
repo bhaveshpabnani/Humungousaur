@@ -10,7 +10,7 @@ internal sealed class BrowserForegroundCollector
     private string _lastFocusedWindow = "";
     private readonly HashSet<string> _knownBrowserWindows = new(StringComparer.OrdinalIgnoreCase);
 
-    public IEnumerable<NativeCollectorEvent> ObserveForeground(WindowSnapshot snapshot)
+    public IEnumerable<CollectorHostEvent> ObserveForeground(WindowSnapshot snapshot)
     {
         if (!BrowserMetadata.IsBrowserProcess(snapshot.ProcessName))
         {
@@ -22,7 +22,7 @@ internal sealed class BrowserForegroundCollector
         var tabSignature = $"{BrowserMetadata.BrowserKind(snapshot.ProcessName)}:{snapshot.TitleHash}:{snapshot.TitleLength}";
         _knownBrowserWindows.Add(handle);
 
-        yield return new NativeCollectorEvent(
+        yield return new CollectorHostEvent(
             CollectorCatalog.Browser,
             "browser",
             "browser_tab_changed",
@@ -30,7 +30,7 @@ internal sealed class BrowserForegroundCollector
             metadata
         );
 
-        yield return new NativeCollectorEvent(
+        yield return new CollectorHostEvent(
             CollectorCatalog.BrowserLifecycle,
             "browser",
             string.IsNullOrEmpty(_lastTabSignature) || _lastTabSignature == tabSignature ? "browser_tab_observed" : "browser_tab_switched",
@@ -41,7 +41,7 @@ internal sealed class BrowserForegroundCollector
 
         if (_lastFocusedWindow != handle)
         {
-            yield return new NativeCollectorEvent(
+            yield return new CollectorHostEvent(
                 CollectorCatalog.BrowserWindowActivity,
                 "browser",
                 "browser_window_focused",
@@ -53,14 +53,14 @@ internal sealed class BrowserForegroundCollector
 
     }
 
-    public IEnumerable<NativeCollectorEvent> ObserveWindowOpened(WindowSnapshot snapshot)
+    public IEnumerable<CollectorHostEvent> ObserveWindowOpened(WindowSnapshot snapshot)
     {
         if (!BrowserMetadata.IsBrowserProcess(snapshot.ProcessName))
         {
             yield break;
         }
         _knownBrowserWindows.Add(WindowSnapshot.HandleString(snapshot.Handle));
-        yield return new NativeCollectorEvent(
+        yield return new CollectorHostEvent(
             CollectorCatalog.BrowserWindowActivity,
             "browser",
             "browser_window_opened",
@@ -69,7 +69,7 @@ internal sealed class BrowserForegroundCollector
         );
     }
 
-    public IEnumerable<NativeCollectorEvent> ObserveWindowClosed(IntPtr hwnd, int idObject)
+    public IEnumerable<CollectorHostEvent> ObserveWindowClosed(IntPtr hwnd, int idObject)
     {
         var handle = WindowSnapshot.HandleString(hwnd);
         if (!_knownBrowserWindows.Remove(handle))
@@ -80,7 +80,7 @@ internal sealed class BrowserForegroundCollector
         {
             _lastFocusedWindow = "";
         }
-        yield return new NativeCollectorEvent(
+        yield return new CollectorHostEvent(
             CollectorCatalog.BrowserWindowActivity,
             "browser",
             "browser_window_closed",
@@ -96,7 +96,7 @@ internal sealed class BrowserForegroundCollector
         );
     }
 
-    public IEnumerable<NativeCollectorEvent> ObserveKeyDown(uint virtualKeyCode)
+    public IEnumerable<CollectorHostEvent> ObserveKeyDown(uint virtualKeyCode)
     {
         var snapshot = WindowSnapshot.FromForeground();
         if (snapshot is null || !BrowserMetadata.IsBrowserProcess(snapshot.ProcessName))
@@ -136,7 +136,7 @@ internal sealed class BrowserForegroundCollector
         }
         else if (ctrl && virtualKeyCode == (uint)NativeMethods.VkL)
         {
-            yield return new NativeCollectorEvent(
+            yield return new CollectorHostEvent(
                 CollectorCatalog.BrowserPageActivity,
                 "browser",
                 "selected_page_text_changed",
@@ -147,7 +147,7 @@ internal sealed class BrowserForegroundCollector
         }
     }
 
-    private static NativeCollectorEvent BrowserLifecycle(string stimulusType, Dictionary<string, string> metadata) =>
+    private static CollectorHostEvent BrowserLifecycle(string stimulusType, Dictionary<string, string> metadata) =>
         new(
             CollectorCatalog.BrowserLifecycle,
             "browser",
@@ -156,7 +156,7 @@ internal sealed class BrowserForegroundCollector
             metadata
         );
 
-    private static NativeCollectorEvent BrowserViewMode(string stimulusType, Dictionary<string, string> metadata) =>
+    private static CollectorHostEvent BrowserViewMode(string stimulusType, Dictionary<string, string> metadata) =>
         new(
             CollectorCatalog.BrowserViewModeActivity,
             "browser",

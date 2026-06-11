@@ -8,7 +8,7 @@ from humungousaur.planning.prompt_templates import render_prompt_template
 from humungousaur.planning.structured import load_json_object
 
 from .activity_guides import ActivityGuide
-from .models import ActiveAgentDecision, ActiveAgentRoute, Confidence, ReflexPosture, new_id
+from .models import JanusDecision, JanusRoute, Confidence, ReflexPosture, new_id
 from .redaction import safe_compact_mapping
 
 
@@ -16,7 +16,7 @@ COGNITION_PROMPT_RESOURCE = "resources/prompts/cognition.yaml"
 
 
 class ReflexInterpreter:
-    """Small model-led interpreter for active-agent reflex and triage decisions."""
+    """Small model-led interpreter for janus reflex and triage decisions."""
 
     def __init__(self, model_client: ModelClient | None = None) -> None:
         self.model_client = model_client
@@ -24,7 +24,7 @@ class ReflexInterpreter:
     def interpret(
         self,
         *,
-        route: ActiveAgentRoute,
+        route: JanusRoute,
         event: dict[str, Any],
         context_window: dict[str, Any],
         task_contexts: list[dict[str, Any]],
@@ -35,7 +35,7 @@ class ReflexInterpreter:
         active_episode_events: list[dict[str, Any]] | None = None,
         corrections: list[dict[str, Any]] | None = None,
         deep_dive_requests: list[dict[str, Any]] | None = None,
-    ) -> ActiveAgentDecision:
+    ) -> JanusDecision:
         if self.model_client is None:
             return _safe_no_model_decision(route)
         prompt = _build_prompt(
@@ -144,7 +144,7 @@ def reflex_decision_schema() -> dict[str, Any]:
     }
 
 
-def parse_reflex_decision(payload: dict[str, Any], *, route: ActiveAgentRoute, model_status: str) -> ActiveAgentDecision:
+def parse_reflex_decision(payload: dict[str, Any], *, route: JanusRoute, model_status: str) -> JanusDecision:
     posture = ReflexPosture(str(payload["posture"]))
     confidence = Confidence(str(payload["confidence"]))
     should_interrupt = bool(payload["should_interrupt_user"])
@@ -157,7 +157,7 @@ def parse_reflex_decision(payload: dict[str, Any], *, route: ActiveAgentRoute, m
     if posture in {ReflexPosture.WAKE_MAIN_AGENT, ReflexPosture.ASK_USER} and not agent_stimulus and not user_visible_text:
         posture = ReflexPosture.REMEMBER
         should_interrupt = False
-    return ActiveAgentDecision(
+    return JanusDecision(
         decision_id=new_id("reflex"),
         route_id=route.route_id,
         event_sequence=route.event_sequence,
@@ -179,7 +179,7 @@ def parse_reflex_decision(payload: dict[str, Any], *, route: ActiveAgentRoute, m
 
 def _build_prompt(
     *,
-    route: ActiveAgentRoute,
+    route: JanusRoute,
     event: dict[str, Any],
     context_window: dict[str, Any],
     task_contexts: list[dict[str, Any]],
@@ -242,8 +242,8 @@ def _compact_record(record: dict[str, Any]) -> dict[str, Any]:
     return compact
 
 
-def _safe_no_model_decision(route: ActiveAgentRoute) -> ActiveAgentDecision:
-    return ActiveAgentDecision(
+def _safe_no_model_decision(route: JanusRoute) -> JanusDecision:
+    return JanusDecision(
         decision_id=new_id("reflex"),
         route_id=route.route_id,
         event_sequence=route.event_sequence,

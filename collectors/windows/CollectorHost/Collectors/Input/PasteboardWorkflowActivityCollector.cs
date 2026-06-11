@@ -8,7 +8,7 @@ internal sealed class PasteboardWorkflowActivityCollector
 {
     private readonly ConcurrentDictionary<string, DateTimeOffset> _lastEmitted = new();
 
-    public IEnumerable<NativeCollectorEvent> ObserveKeyDown(uint virtualKey)
+    public IEnumerable<CollectorHostEvent> ObserveKeyDown(uint virtualKey)
     {
         var ctrl = NativeMethods.IsKeyDown(NativeMethods.VkControl);
         var shift = NativeMethods.IsKeyDown(NativeMethods.VkShift);
@@ -18,7 +18,7 @@ internal sealed class PasteboardWorkflowActivityCollector
         {
             yield break;
         }
-        yield return new NativeCollectorEvent(
+        yield return new CollectorHostEvent(
             CollectorCatalog.PasteboardWorkflowActivity,
             "activity",
             pasteboard,

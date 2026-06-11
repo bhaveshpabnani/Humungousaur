@@ -8,9 +8,9 @@ internal sealed class WindowsFileSystemCollector : IDisposable
     private readonly List<FileSystemWatcher> _watchers = [];
     private readonly List<string> _downloadRoots;
     private readonly List<string> _trashRoots;
-    private readonly Action<NativeCollectorEvent> _emit;
+    private readonly Action<CollectorHostEvent> _emit;
 
-    public WindowsFileSystemCollector(CollectorHostOptions options, Action<NativeCollectorEvent> emit)
+    public WindowsFileSystemCollector(CollectorHostOptions options, Action<CollectorHostEvent> emit)
     {
         _emit = emit;
         var watchRoots = ResolveWatchRoots(options.WatchPaths);
@@ -93,7 +93,7 @@ internal sealed class WindowsFileSystemCollector : IDisposable
             WatcherChangeTypes.Renamed => "file_changed",
             _ => "file_modified",
         };
-        _emit(new NativeCollectorEvent(
+        _emit(new CollectorHostEvent(
             CollectorCatalog.Filesystem,
             "activity",
             stimulusType,
@@ -108,7 +108,7 @@ internal sealed class WindowsFileSystemCollector : IDisposable
         {
             return;
         }
-        _emit(new NativeCollectorEvent(
+        _emit(new CollectorHostEvent(
             CollectorCatalog.Downloads,
             "activity",
             "downloaded_file",
@@ -132,7 +132,7 @@ internal sealed class WindowsFileSystemCollector : IDisposable
             return;
         }
         metadata["file_action"] = stimulusType.Replace("file_", "");
-        _emit(new NativeCollectorEvent(
+        _emit(new CollectorHostEvent(
             CollectorCatalog.FileOperationActivity,
             "activity",
             stimulusType,
@@ -157,7 +157,7 @@ internal sealed class WindowsFileSystemCollector : IDisposable
             return;
         }
         metadata["folder_action"] = stimulusType.Replace("folder_", "");
-        _emit(new NativeCollectorEvent(
+        _emit(new CollectorHostEvent(
             CollectorCatalog.FolderNavigationActivity,
             "activity",
             stimulusType,
@@ -185,7 +185,7 @@ internal sealed class WindowsFileSystemCollector : IDisposable
             return;
         }
         metadata["trash_action"] = stimulusType;
-        _emit(new NativeCollectorEvent(
+        _emit(new CollectorHostEvent(
             CollectorCatalog.TrashActivity,
             "activity",
             stimulusType,

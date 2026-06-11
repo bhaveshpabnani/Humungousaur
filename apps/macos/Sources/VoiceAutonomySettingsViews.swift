@@ -129,8 +129,8 @@ struct SettingsView: View {
                         SecureField("API key", text: $model.secrets.modelAPIKey)
                         Toggle("Allow protected actions without asking", isOn: $model.settings.approveHighRisk)
                     }
-                    Section("Active agent interpretation model") {
-                        Picker("Provider", selection: $model.settings.activeModelProvider) {
+                    Section("Janus interpretation model") {
+                        Picker("Provider", selection: $model.settings.janusModelProvider) {
                             Text("Same as main agent").tag("same-as-main")
                             ForEach(model.modelProviderOptions) { provider in
                                 Text(provider.label).tag(provider.providerId)
@@ -138,16 +138,16 @@ struct SettingsView: View {
                         }
                         TextField(
                             "Model name",
-                            text: $model.settings.activeModelName,
-                            prompt: Text(model.settings.activeModelProvider == "same-as-main" ? model.settings.modelName : model.defaultModelName(for: model.settings.activeModelProvider))
+                            text: $model.settings.janusModelName,
+                            prompt: Text(model.settings.janusModelProvider == "same-as-main" ? model.settings.modelName : model.defaultModelName(for: model.settings.janusModelProvider))
                         )
                         TextField(
                             "Provider URL",
-                            text: $model.settings.activeModelBaseURL,
-                            prompt: Text(model.settings.activeModelProvider == "same-as-main" ? model.settings.modelBaseURL : model.defaultBaseURL(for: model.settings.activeModelProvider))
+                            text: $model.settings.janusModelBaseURL,
+                            prompt: Text(model.settings.janusModelProvider == "same-as-main" ? model.settings.modelBaseURL : model.defaultBaseURL(for: model.settings.janusModelProvider))
                         )
-                        SecureField("API key", text: $model.secrets.activeModelAPIKey)
-                            .disabled(model.settings.activeModelProvider == "same-as-main")
+                        SecureField("API key", text: $model.secrets.janusModelAPIKey)
+                            .disabled(model.settings.janusModelProvider == "same-as-main")
                     }
                     Section("App updates") {
                         Text(model.updateStatusText)

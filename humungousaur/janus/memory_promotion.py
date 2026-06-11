@@ -11,12 +11,12 @@ from humungousaur.config import AgentConfig
 from humungousaur.memory.event_store import EventStore
 from humungousaur.planning.model_clients import redact_secrets
 
-from .store import ActiveAgentStore
+from .store import JanusStore
 
 
 def promote_memory_candidate(
     config: AgentConfig,
-    store: ActiveAgentStore,
+    store: JanusStore,
     candidate_id: str,
     *,
     reason: str = "",
@@ -45,13 +45,13 @@ def promote_memory_candidate(
     knowledge = knowledge_store.append(
         kind=_knowledge_kind(candidate.get("kind")),
         text=text,
-        source="active_agent_memory_candidate",
+        source="janus_memory_candidate",
         evidence_refs=_promotion_refs(candidate, reason=reason),
         confidence=_confidence(candidate),
     )
     promoted_candidate = store.mark_memory_candidate_promoted(candidate_id, knowledge_id=knowledge.knowledge_id) or candidate
     EventStore(normalized.memory_db_path).append(
-        "active_agent_memory_promotion",
+        "janus_memory_promotion",
         {
             "candidate_id": candidate_id,
             "knowledge_id": knowledge.knowledge_id,
@@ -73,7 +73,7 @@ def promote_memory_candidate(
 
 def retract_promoted_memory_candidate(
     config: AgentConfig,
-    store: ActiveAgentStore,
+    store: JanusStore,
     candidate_id: str,
     *,
     reason: str = "",
@@ -86,11 +86,11 @@ def retract_promoted_memory_candidate(
     if not knowledge_id:
         return None
     knowledge_store = KnowledgeStore(normalized.cognition_db_path)
-    archived = knowledge_store.archive(knowledge_id, reason=_clean(reason or "active-agent correction", limit=300))
+    archived = knowledge_store.archive(knowledge_id, reason=_clean(reason or "janus correction", limit=300))
     if archived is None:
         return None
     EventStore(normalized.memory_db_path).append(
-        "active_agent_memory_retraction",
+        "janus_memory_retraction",
         {
             "candidate_id": candidate_id,
             "knowledge_id": knowledge_id,
@@ -156,7 +156,7 @@ def _refresh_markdown_best_effort(config: AgentConfig) -> None:
     except OSError:
         EventStore(config.memory_db_path).append(
             "cognitive_markdown_refresh_failed",
-            {"source": "active_agent_memory_promotion", "reason": "filesystem_error"},
+            {"source": "janus_memory_promotion", "reason": "filesystem_error"},
         )
 
 

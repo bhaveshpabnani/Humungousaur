@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from humungousaur.active_agent.store import ActiveAgentStore
+from humungousaur.janus.store import JanusStore
 from humungousaur.config import AgentConfig
 from humungousaur.tools.activity.implementation import ActivityPolicyStore, _activity_policy_match, activity_policy_path
 
@@ -67,9 +67,9 @@ def append_source_envelope(config: AgentConfig, envelope: CollectorEventEnvelope
     if policy_match is not None:
         return SourceIngestionDecision(False, policy_match)
 
-    muted_scope = ActiveAgentStore(normalized.active_agent_db_path).active_muted_scope_for(envelope.to_record())
+    muted_scope = JanusStore(normalized.janus_db_path).active_muted_scope_for(envelope.to_record())
     if muted_scope is not None and muted_scope.do_not_store:
-        return SourceIngestionDecision(False, "active agent muted scope blocked storage")
+        return SourceIngestionDecision(False, "Janus muted scope blocked storage")
 
     appended = event_log.append(envelope)
     remember_signature(collector_signatures, event.stimulus_type, signature)

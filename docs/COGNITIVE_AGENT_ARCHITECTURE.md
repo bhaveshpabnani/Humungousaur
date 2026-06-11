@@ -55,7 +55,7 @@ External memory references informed the markdown-facing layer:
    - Normalizes user text, voice, activity, screen, browser, app, file, schedule, and system stimuli into durable events.
    - Supports priorities so interrupts and approvals can preempt background work.
    - Continuous collectors feed active window, browser context, filesystem, clipboard, screenshot/OCR keyframe, video keyframe, audio activity, lifecycle, and bridge-fed input/browser events into this bus through local privacy filters, dwell gates, dedupe, batching, and rate budgets. See `docs/COLLECTOR_ARCHITECTURE.md` for the collector catalog and implementation contract.
-   - Collector-to-agent reflex interpretation, task context, muted scopes, deep-dive requests, and UI posture are specified in `docs/ACTIVE_AGENT_COLLECTOR_WORKFLOW.md`.
+   - Collector-to-agent reflex interpretation, task context, muted scopes, deep-dive requests, and UI posture are specified in `docs/JANUS_COLLECTOR_WORKFLOW.md`.
 
 2. Perception and context
    - Converts raw signals into compact observations.

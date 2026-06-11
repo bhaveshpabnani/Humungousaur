@@ -8,7 +8,7 @@ internal sealed class InputDeviceCollector
 {
     private readonly ConcurrentDictionary<string, DateTimeOffset> _lastEmitted = new();
 
-    public IEnumerable<NativeCollectorEvent> ObserveKeyDown(uint virtualKey)
+    public IEnumerable<CollectorHostEvent> ObserveKeyDown(uint virtualKey)
     {
         var ctrl = NativeMethods.IsKeyDown(NativeMethods.VkControl);
         var alt = NativeMethods.IsKeyDown(NativeMethods.VkMenu);
@@ -25,7 +25,7 @@ internal sealed class InputDeviceCollector
         {
             yield break;
         }
-        yield return new NativeCollectorEvent(
+        yield return new CollectorHostEvent(
             CollectorCatalog.InputDevice,
             "activity",
             "keyboard_shortcut_pressed",
@@ -39,7 +39,7 @@ internal sealed class InputDeviceCollector
         );
     }
 
-    public IEnumerable<NativeCollectorEvent> ObserveMouse(IntPtr message)
+    public IEnumerable<CollectorHostEvent> ObserveMouse(IntPtr message)
     {
         string? stimulusType = message.ToInt64() switch
         {
@@ -53,7 +53,7 @@ internal sealed class InputDeviceCollector
         {
             yield break;
         }
-        yield return new NativeCollectorEvent(
+        yield return new CollectorHostEvent(
             CollectorCatalog.InputDevice,
             "activity",
             stimulusType,

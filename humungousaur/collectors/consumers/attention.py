@@ -4,7 +4,7 @@ import hashlib
 import time
 from typing import Any
 
-from humungousaur.active_agent.store import ActiveAgentStore
+from humungousaur.janus.store import JanusStore
 from humungousaur.config import AgentConfig
 from humungousaur.interaction import InteractionHarness, harness_result_to_dict
 from humungousaur.memory.event_store import EventStore
@@ -33,7 +33,7 @@ class AttentionBatchConsumer:
             pending = []
 
         events = self.event_log.read_batch(attention_consumer_name, limit=limit)
-        active_store = ActiveAgentStore(config.normalized().active_agent_db_path)
+        active_store = JanusStore(config.normalized().janus_db_path)
         last_sequence = 0
         accepted = 0
         for event in events:

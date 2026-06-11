@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from humungousaur.config import AgentConfig
-from humungousaur.active_agent.store import ActiveAgentStore
+from humungousaur.janus.store import JanusStore
 from humungousaur.cognition.loop import AutonomousLoopRunner, autonomous_loop_result_to_dict
 from humungousaur.memory.event_store import EventStore
 from humungousaur.tools.activity.implementation import (
@@ -25,7 +25,7 @@ from .definitions import (
     SENSITIVE_COLLECTORS,
     collector_capability_records,
 )
-from .consumers import ActiveAgentConsumer, AttentionBatchConsumer, AutonomousTriggerConsumer, MemoryMirrorConsumer, SemanticEventConsumer, UIStreamConsumer
+from .consumers import JanusConsumer, AttentionBatchConsumer, AutonomousTriggerConsumer, MemoryMirrorConsumer, SemanticEventConsumer, UIStreamConsumer
 from .envelope import CollectorEventEnvelope
 from .event_log import CollectorEventLog
 from .adapters.file_activity_adapters import file_activity_source_status
@@ -243,9 +243,9 @@ def run_collector_tick(
         if policy_match is not None:
             result.skipped.append({"collector": event.collector, "stimulus_type": event.stimulus_type, "reason": policy_match})
             continue
-        muted_scope = ActiveAgentStore(normalized.active_agent_db_path).active_muted_scope_for(event_payload)
+        muted_scope = JanusStore(normalized.janus_db_path).active_muted_scope_for(event_payload)
         if muted_scope is not None and muted_scope.do_not_store:
-            result.skipped.append({"collector": event.collector, "stimulus_type": event.stimulus_type, "reason": "active agent muted scope blocked storage"})
+            result.skipped.append({"collector": event.collector, "stimulus_type": event.stimulus_type, "reason": "Janus muted scope blocked storage"})
             continue
         result.collected.append(event_payload)
         if not dry_run:
@@ -261,7 +261,7 @@ def run_collector_tick(
         state["last_memory_consumer"] = memory_result
         state["last_semantic_event_consumer"] = SemanticEventConsumer(collector_event_log).consume(normalized)
         state["last_ui_stream_consumer"] = UIStreamConsumer(collector_event_log).consume()
-        state["last_active_agent_consumer"] = ActiveAgentConsumer(collector_event_log).consume(normalized)
+        state["last_janus_consumer"] = JanusConsumer(collector_event_log).consume(normalized)
     if active.submit_to_harness and not dry_run:
         attention_result = AttentionBatchConsumer(collector_event_log).consume(normalized, active, force=force)
         state["last_attention_consumer"] = {

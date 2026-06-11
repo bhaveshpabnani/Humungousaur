@@ -48,7 +48,7 @@ def utc_now() -> str:
 
 
 @dataclass(slots=True)
-class ActiveAgentRoute:
+class JanusRoute:
     route_id: str
     event_sequence: int
     event_id: str
@@ -80,7 +80,7 @@ class TaskContext:
 
 
 @dataclass(slots=True)
-class ActiveEpisode:
+class JanusEpisode:
     episode_id: str
     status: str = "active"
     source: str = "model"
@@ -150,7 +150,7 @@ class DeepDiveResult:
 
 
 @dataclass(slots=True)
-class ActiveAgentDecision:
+class JanusDecision:
     decision_id: str
     route_id: str
     event_sequence: int
@@ -171,7 +171,7 @@ class ActiveAgentDecision:
 
 
 @dataclass(slots=True)
-class ActiveAgentActivation:
+class JanusActivation:
     activation_id: str
     decision_id: str
     route_id: str
@@ -207,7 +207,7 @@ class ActivationResponse:
 
 
 @dataclass(slots=True)
-class ActiveAgentMemoryCandidate:
+class JanusMemoryCandidate:
     candidate_id: str
     decision_id: str
     route_id: str
@@ -222,7 +222,7 @@ class ActiveAgentMemoryCandidate:
 
 
 @dataclass(slots=True)
-class ActiveAgentStatus:
+class JanusStatus:
     routes: list[dict[str, Any]]
     decisions: list[dict[str, Any]]
     activations: list[dict[str, Any]]

@@ -37,7 +37,7 @@ The app talks to the local daemon at `http://127.0.0.1:8765` by default. It can 
 python3 -m humungousaur serve --workspace <repo-root> --port 8765
 ```
 
-To build the distributable desktop zip and verify its setup docs, bundle metadata, checksum, and signature mode, run:
+To build the distributable desktop zip plus installable pkg and verify setup docs, bundle metadata, installer payload, checksum, and signature mode, run:
 
 ```bash
 ./script/package_macos.sh

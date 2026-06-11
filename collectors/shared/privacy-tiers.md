@@ -8,9 +8,9 @@
 - `rich_capture`: screenshots, OCR, transcript text, clipboard values, document
   contents, or similar high-risk payloads. These should be avoided unless the user
   explicitly opts in.
-- `blocked`: native collector observed a signal but intentionally suppressed the
+- `blocked`: platform collector observed a signal but intentionally suppressed the
   payload. Blocked observations may be useful for health/status but must not enter
   attention batches.
 
-Native collectors should redact before writing. Humungousaur will still run its
+Platform collectors should redact before writing. Humungousaur will still run its
 own privacy policy, dwell, dedupe, rate limit, and attention compaction gates.

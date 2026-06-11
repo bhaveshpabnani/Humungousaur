@@ -11,10 +11,10 @@ public sealed class AppSettings
     public string ModelName { get; set; } = AppRuntimeDefaults.ModelName;
     public string ModelBaseUrl { get; set; } = "";
     public string ModelApiKey { get; set; } = "";
-    public string ActiveModelProvider { get; set; } = "same-as-main";
-    public string ActiveModelName { get; set; } = "";
-    public string ActiveModelBaseUrl { get; set; } = "";
-    public string ActiveModelApiKey { get; set; } = "";
+    public string JanusModelProvider { get; set; } = "same-as-main";
+    public string JanusModelName { get; set; } = "";
+    public string JanusModelBaseUrl { get; set; } = "";
+    public string JanusModelApiKey { get; set; } = "";
     public string TtsProvider { get; set; } = AppRuntimeDefaults.TtsProvider;
     public string VoiceId { get; set; } = "";
     public string DeepgramApiKey { get; set; } = "";

@@ -129,20 +129,20 @@ captured.
 Run once for a local smoke event:
 
 ```powershell
-dotnet run --project native_collectors/windows/CollectorHost -- --data-dir artifacts --once
+dotnet run --project collectors/windows/CollectorHost -- --data-dir artifacts --once
 ```
 
 Add explicit watched roots with repeated `--watch-path` flags:
 
 ```powershell
-dotnet run --project native_collectors/windows/CollectorHost -- --data-dir artifacts --watch-path C:\work\downloads --watch-path C:\work\project
+dotnet run --project collectors/windows/CollectorHost -- --data-dir artifacts --watch-path C:\work\downloads --watch-path C:\work\project
 ```
 
 Run as a long-lived helper and report helper health to the Humungousaur API when
 available:
 
 ```powershell
-dotnet run --project native_collectors/windows/CollectorHost -- --data-dir artifacts --helper-health-url http://127.0.0.1:8765/collectors/helper-health
+dotnet run --project collectors/windows/CollectorHost -- --data-dir artifacts --helper-health-url http://127.0.0.1:8765/collectors/helper-health
 ```
 
 Helper health is reported per collector with `helper_id=windows-core-os-context`

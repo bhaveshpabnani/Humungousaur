@@ -8,7 +8,7 @@ internal sealed class KeyboardInputActivityCollector
     private bool? _capsLockOn;
     private string _keyboardLayout = "";
 
-    public IEnumerable<NativeCollectorEvent> PollKeyboardState()
+    public IEnumerable<CollectorHostEvent> PollKeyboardState()
     {
         var capsLock = NativeMethods.IsKeyToggled(NativeMethods.VkCapital);
         if (_capsLockOn is not null && capsLock != _capsLockOn)
@@ -25,6 +25,6 @@ internal sealed class KeyboardInputActivityCollector
         _keyboardLayout = layout;
     }
 
-    private static NativeCollectorEvent Create(string stimulusType, string text, Dictionary<string, string> metadata) =>
+    private static CollectorHostEvent Create(string stimulusType, string text, Dictionary<string, string> metadata) =>
         new(CollectorCatalog.KeyboardInputActivity, "system", stimulusType, text, metadata);
 }

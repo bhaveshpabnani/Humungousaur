@@ -775,7 +775,7 @@ Implement the <APP_OR_PROVIDER> app collector for Humungousaur.
 Repository context:
 - Collector architecture: docs/COLLECTOR_ARCHITECTURE.md
 - App collector architecture: docs/APP_COLLECTOR_ARCHITECTURE.md
-- Shared envelope: humungousaur/collectors/envelope.py and native_collectors/shared/event-envelope.schema.json
+- Shared envelope: humungousaur/collectors/envelope.py and collectors/shared/event-envelope.schema.json
 - Definitions: humungousaur/collectors/definitions.py
 - Runtime event log: humungousaur/collectors/event_log.py
 - Adapters live under humungousaur/collectors/adapters/

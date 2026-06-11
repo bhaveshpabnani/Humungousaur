@@ -11,11 +11,11 @@ from typing import Any
 
 from .entities import extract_entity_refs
 from .models import (
-    ActiveAgentActivation,
-    ActiveAgentDecision,
-    ActiveEpisode,
-    ActiveAgentMemoryCandidate,
-    ActiveAgentRoute,
+    JanusActivation,
+    JanusDecision,
+    JanusEpisode,
+    JanusMemoryCandidate,
+    JanusRoute,
     ActivationResponse,
     DeepDiveRequest,
     DeepDiveResult,
@@ -25,7 +25,7 @@ from .models import (
 )
 
 
-class ActiveAgentStore:
+class JanusStore:
     """Durable local state for collector-to-agent reflex interpretation."""
 
     def __init__(self, path: Path) -> None:
@@ -84,7 +84,7 @@ class ActiveAgentStore:
             connection.execute("CREATE INDEX IF NOT EXISTS idx_active_reflex_decisions_sequence ON active_reflex_decisions(event_sequence)")
             connection.execute(
                 """
-                CREATE TABLE IF NOT EXISTS active_agent_activations (
+                CREATE TABLE IF NOT EXISTS janus_activations (
                     activation_id TEXT PRIMARY KEY,
                     decision_id TEXT NOT NULL,
                     route_id TEXT NOT NULL,
@@ -106,12 +106,12 @@ class ActiveAgentStore:
                 )
                 """
             )
-            connection.execute("CREATE INDEX IF NOT EXISTS idx_active_agent_activations_sequence ON active_agent_activations(event_sequence)")
+            connection.execute("CREATE INDEX IF NOT EXISTS idx_janus_activations_sequence ON janus_activations(event_sequence)")
             connection.execute(
-                "CREATE INDEX IF NOT EXISTS idx_active_agent_activations_status ON active_agent_activations(status, updated_at)"
+                "CREATE INDEX IF NOT EXISTS idx_janus_activations_status ON janus_activations(status, updated_at)"
             )
-            _ensure_column(connection, "active_agent_activations", "allowed_actions_json", "TEXT NOT NULL DEFAULT '[]'")
-            _ensure_column(connection, "active_agent_activations", "forbidden_actions_json", "TEXT NOT NULL DEFAULT '[]'")
+            _ensure_column(connection, "janus_activations", "allowed_actions_json", "TEXT NOT NULL DEFAULT '[]'")
+            _ensure_column(connection, "janus_activations", "forbidden_actions_json", "TEXT NOT NULL DEFAULT '[]'")
             connection.execute(
                 """
                 CREATE TABLE IF NOT EXISTS active_memory_candidates (
@@ -408,7 +408,7 @@ class ActiveAgentStore:
             connection.execute("CREATE INDEX IF NOT EXISTS idx_active_eval_runs_created ON active_eval_runs(created_at)")
             connection.commit()
 
-    def record_route(self, route: ActiveAgentRoute) -> ActiveAgentRoute:
+    def record_route(self, route: JanusRoute) -> JanusRoute:
         with closing(self._connect()) as connection:
             connection.execute(
                 """
@@ -432,7 +432,7 @@ class ActiveAgentStore:
             connection.commit()
         return route
 
-    def record_decision(self, decision: ActiveAgentDecision) -> ActiveAgentDecision:
+    def record_decision(self, decision: JanusDecision) -> JanusDecision:
         with closing(self._connect()) as connection:
             connection.execute(
                 """
@@ -464,7 +464,7 @@ class ActiveAgentStore:
             connection.commit()
         return decision
 
-    def record_activation(self, activation: ActiveAgentActivation) -> ActiveAgentActivation:
+    def record_activation(self, activation: JanusActivation) -> JanusActivation:
         now = utc_now()
         if not activation.created_at:
             activation.created_at = now
@@ -472,7 +472,7 @@ class ActiveAgentStore:
         with closing(self._connect()) as connection:
             connection.execute(
                 """
-                INSERT INTO active_agent_activations
+                INSERT INTO janus_activations
                 (activation_id, decision_id, route_id, event_sequence, posture, status, response_mode,
                  stimulus_id, user_visible_text, agent_stimulus, reason, should_interrupt_user,
                  allowed_actions_json, forbidden_actions_json, harness_result_json, evidence_refs_json,
@@ -515,7 +515,7 @@ class ActiveAgentStore:
             connection.commit()
         return activation
 
-    def record_memory_candidate(self, candidate: ActiveAgentMemoryCandidate) -> ActiveAgentMemoryCandidate:
+    def record_memory_candidate(self, candidate: JanusMemoryCandidate) -> JanusMemoryCandidate:
         with closing(self._connect()) as connection:
             connection.execute(
                 """
@@ -608,7 +608,7 @@ class ActiveAgentStore:
         cleaned_status = str(status or "").strip()
         if cleaned_status not in {"prepared", "pending", "submitted", "skipped", "failed"}:
             raise ValueError(f"unsupported activation status: {cleaned_status or '<empty>'}")
-        current = self._one("SELECT * FROM active_agent_activations WHERE activation_id = ?", cleaned_id)
+        current = self._one("SELECT * FROM janus_activations WHERE activation_id = ?", cleaned_id)
         if current is None:
             return None
         next_reason = str(reason or current.get("reason") or "")[:1_000]
@@ -617,7 +617,7 @@ class ActiveAgentStore:
         with closing(self._connect()) as connection:
             connection.execute(
                 """
-                UPDATE active_agent_activations
+                UPDATE janus_activations
                 SET status = ?, reason = ?, harness_result_json = ?, updated_at = ?
                 WHERE activation_id = ?
                 """,
@@ -673,7 +673,7 @@ class ActiveAgentStore:
             connection.commit()
         return context
 
-    def upsert_episode(self, episode: ActiveEpisode) -> ActiveEpisode:
+    def upsert_episode(self, episode: JanusEpisode) -> JanusEpisode:
         now = utc_now()
         current = self._one("SELECT created_at FROM active_episodes WHERE episode_id = ?", episode.episode_id)
         if current is not None:
@@ -1148,7 +1148,7 @@ class ActiveAgentStore:
             return None
         return payload
 
-    def record_resume_capsule(self, boundary: dict[str, Any], decision: ActiveAgentDecision | None = None) -> dict[str, Any]:
+    def record_resume_capsule(self, boundary: dict[str, Any], decision: JanusDecision | None = None) -> dict[str, Any]:
         now = utc_now()
         boundary_id = str(boundary.get("boundary_id") or "")
         capsule_id = f"capsule:{boundary_id}"
@@ -1187,11 +1187,11 @@ class ActiveAgentStore:
     def record_explanation(
         self,
         *,
-        route: ActiveAgentRoute,
+        route: JanusRoute,
         event: dict[str, Any],
         explanation_type: str,
         summary: str,
-        decision: ActiveAgentDecision | None = None,
+        decision: JanusDecision | None = None,
         boundary: dict[str, Any] | None = None,
         details: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
@@ -1499,7 +1499,7 @@ class ActiveAgentStore:
         return row
 
     def _activation(self, activation_id: str) -> dict[str, Any] | None:
-        row = self._one("SELECT * FROM active_agent_activations WHERE activation_id = ?", activation_id)
+        row = self._one("SELECT * FROM janus_activations WHERE activation_id = ?", activation_id)
         if row is None:
             return None
         row["should_interrupt_user"] = bool(row.get("should_interrupt_user"))
@@ -1661,7 +1661,7 @@ class ActiveAgentStore:
     def activations(self, *, limit: int = 20) -> list[dict[str, Any]]:
         rows = self._recent(
             """
-            SELECT * FROM active_agent_activations
+            SELECT * FROM janus_activations
             ORDER BY event_sequence DESC, updated_at DESC
             LIMIT ?
             """,
@@ -1708,7 +1708,7 @@ class ActiveAgentStore:
     def activations_for_decision(self, decision_id: str, *, limit: int = 50) -> list[dict[str, Any]]:
         rows = self._recent(
             """
-            SELECT * FROM active_agent_activations
+            SELECT * FROM janus_activations
             WHERE decision_id = ?
             ORDER BY event_sequence DESC, updated_at DESC
             LIMIT ?
@@ -2000,7 +2000,7 @@ def _parse_timestamp(value: object) -> float | None:
         return None
 
 
-def _resume_capsule_summary(boundary: dict[str, Any], decision: ActiveAgentDecision | None) -> str:
+def _resume_capsule_summary(boundary: dict[str, Any], decision: JanusDecision | None) -> str:
     if decision is not None:
         for value in (decision.agent_stimulus, decision.user_visible_text, decision.reason):
             text = " ".join(str(value or "").split())
@@ -2015,16 +2015,16 @@ def _resume_capsule_summary(boundary: dict[str, Any], decision: ActiveAgentDecis
     return f"Resume capsule prepared from {collector}:{stimulus_type} boundary evidence."
 
 
-def _explanation_id(route: ActiveAgentRoute, explanation_type: str) -> str:
+def _explanation_id(route: JanusRoute, explanation_type: str) -> str:
     digest = hashlib.sha256(f"{route.route_id}:{explanation_type}:{route.event_sequence}".encode("utf-8")).hexdigest()[:16]
     return f"why_{digest}"
 
 
 def _explanation_evidence_refs(
-    route: ActiveAgentRoute,
+    route: JanusRoute,
     event: dict[str, Any],
     *,
-    decision: ActiveAgentDecision | None,
+    decision: JanusDecision | None,
     boundary: dict[str, Any] | None,
 ) -> list[str]:
     refs = [

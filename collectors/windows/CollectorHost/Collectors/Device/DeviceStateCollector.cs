@@ -11,7 +11,7 @@ internal sealed class DeviceStateCollector
     private bool _batteryLow;
     private bool? _idle;
 
-    public IEnumerable<NativeCollectorEvent> Diff()
+    public IEnumerable<CollectorHostEvent> Diff()
     {
         var network = NetworkInterface.GetIsNetworkAvailable();
         if (_networkAvailable is not null && network != _networkAvailable)
@@ -50,7 +50,7 @@ internal sealed class DeviceStateCollector
         _idle = idle;
     }
 
-    private static NativeCollectorEvent Create(string stimulusType, string text, Dictionary<string, string> metadata) =>
+    private static CollectorHostEvent Create(string stimulusType, string text, Dictionary<string, string> metadata) =>
         new(CollectorCatalog.DeviceState, "system", stimulusType, text, metadata);
 
     private static string BucketSeconds(uint seconds) => seconds switch

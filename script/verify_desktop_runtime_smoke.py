@@ -116,7 +116,7 @@ def main() -> int:
             smoke.require(updates.get("current_version") == version, "update endpoint reports installed app version", updates)
             smoke.require(updates.get("latest_tag") == f"v{version}", "update endpoint exposes release tag", updates)
             smoke.require(
-                str(updates.get("platform_download_url", "")).endswith("/Humungousaur-macOS.zip"),
+                str(updates.get("platform_download_url", "")).endswith("/Humungousaur-macOS.pkg"),
                 "update endpoint exposes platform download URL",
                 updates.get("platform_download_url"),
             )

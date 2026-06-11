@@ -11,11 +11,11 @@ from humungousaur.planning.model_factory import build_model_client
 
 from .activity_guides import select_activity_guides
 from .models import (
-    ActiveAgentActivation,
-    ActiveAgentDecision,
-    ActiveEpisode,
-    ActiveAgentMemoryCandidate,
-    ActiveAgentRoute,
+    JanusActivation,
+    JanusDecision,
+    JanusEpisode,
+    JanusMemoryCandidate,
+    JanusRoute,
     Confidence,
     DeepDiveRequest,
     MutedScopeMode,
@@ -26,7 +26,7 @@ from .models import (
 )
 from .redaction import safe_compact_mapping
 from .reflex_interpreter import ReflexInterpreter
-from .store import ActiveAgentStore
+from .store import JanusStore
 
 
 REFLEX_STIMULI = {
@@ -107,19 +107,19 @@ BRIDGE_POSTURES = {
 }
 
 
-class ActiveEventRouter:
-    """Routes accepted collector events into active-agent interpretation."""
+class JanusEventRouter:
+    """Routes accepted collector events into janus interpretation."""
 
     def __init__(
         self,
         config: AgentConfig,
         *,
-        store: ActiveAgentStore | None = None,
+        store: JanusStore | None = None,
         model_client: ModelClient | None = None,
         run_agent: bool = True,
     ) -> None:
         self.config = config.normalized()
-        self.store = store or ActiveAgentStore(self.config.active_agent_db_path)
+        self.store = store or JanusStore(self.config.janus_db_path)
         self.interpreter = ReflexInterpreter(model_client or _build_reflex_model_client(self.config))
         self.run_agent = run_agent
 
@@ -197,11 +197,11 @@ class ActiveEventRouter:
 
     def _interpret_and_record(
         self,
-        route: ActiveAgentRoute,
+        route: JanusRoute,
         event: dict[str, Any],
         *,
         boundary: dict[str, Any] | None = None,
-    ) -> ActiveAgentDecision:
+    ) -> JanusDecision:
         context_window = self.store.context_bundle(limit=8)
         task_contexts = self.store.task_contexts(limit=8)
         policy = _policy_for_event(event, route=route, boundary=boundary)
@@ -228,8 +228,8 @@ class ActiveEventRouter:
         self._apply_decision_updates(decision, event)
         return decision
 
-    def _boundary_route(self, route: ActiveAgentRoute, event: dict[str, Any], boundary: dict[str, Any]) -> ActiveAgentRoute:
-        return ActiveAgentRoute(
+    def _boundary_route(self, route: JanusRoute, event: dict[str, Any], boundary: dict[str, Any]) -> JanusRoute:
+        return JanusRoute(
             route_id=new_id("route"),
             event_sequence=int(event.get("sequence") or route.event_sequence),
             event_id=str(event.get("event_id") or route.event_id),
@@ -241,7 +241,7 @@ class ActiveEventRouter:
             reason=f"Context boundary detected: {boundary.get('reason', '')}",
         )
 
-    def _route_event(self, event: dict[str, Any], *, muted_scope: object | None) -> ActiveAgentRoute:
+    def _route_event(self, event: dict[str, Any], *, muted_scope: object | None) -> JanusRoute:
         stimulus_type = str(event.get("stimulus_type") or "")
         collector = str(event.get("collector") or "")
         privacy_tier = str(event.get("privacy_tier") or "")
@@ -251,7 +251,7 @@ class ActiveEventRouter:
             reason = f"Matched active muted scope: {getattr(mode, 'value', str(mode))}"
         elif privacy_tier in RICH_PRIVACY_TIERS or stimulus_type in BLOCKED_STIMULI:
             route_class = RouteClass.BLOCKED
-            reason = "Sensitive or rich-capture event cannot enter active-agent interpretation without explicit deep-dive approval."
+            reason = "Sensitive or rich-capture event cannot enter janus interpretation without explicit deep-dive approval."
         elif stimulus_type in REFLEX_STIMULI:
             route_class = RouteClass.REFLEX
             reason = "Reflex state-change event."
@@ -261,7 +261,7 @@ class ActiveEventRouter:
         else:
             route_class = RouteClass.CONTEXT
             reason = "Ongoing work context event; accumulated into rolling context window."
-        return ActiveAgentRoute(
+        return JanusRoute(
             route_id=new_id("route"),
             event_sequence=int(event.get("sequence") or 0),
             event_id=str(event.get("event_id") or ""),
@@ -273,7 +273,7 @@ class ActiveEventRouter:
             reason=reason,
         )
 
-    def _apply_policy(self, decision: ActiveAgentDecision, event: dict[str, Any], *, policy: dict[str, Any]) -> ActiveAgentDecision:
+    def _apply_policy(self, decision: JanusDecision, event: dict[str, Any], *, policy: dict[str, Any]) -> JanusDecision:
         if str(event.get("privacy_tier") or "") in RICH_PRIVACY_TIERS:
             decision.posture = ReflexPosture.STAY_SILENT
             decision.should_interrupt_user = False
@@ -310,7 +310,7 @@ class ActiveEventRouter:
                 decision.safety_notes.append("Agent wake downgraded because no safe stimulus text was supplied.")
         return decision
 
-    def _apply_decision_updates(self, decision: ActiveAgentDecision, event: dict[str, Any]) -> None:
+    def _apply_decision_updates(self, decision: JanusDecision, event: dict[str, Any]) -> None:
         episode_id = self._apply_episode_update(decision, event)
         for update in decision.task_context_updates[:8]:
             summary = str(update.get("summary") or update.get("goal") or "").strip()
@@ -356,7 +356,7 @@ class ActiveEventRouter:
             request["request_id"] = request_id
         self._record_memory_candidates(decision, event)
 
-    def _apply_episode_update(self, decision: ActiveAgentDecision, event: dict[str, Any]) -> str:
+    def _apply_episode_update(self, decision: JanusDecision, event: dict[str, Any]) -> str:
         update = decision.episode_update if isinstance(decision.episode_update, dict) else {}
         action = _clean_text(update.get("action"), limit=120)
         if not update or action == "observe_only":
@@ -374,7 +374,7 @@ class ActiveEventRouter:
             f"reflex_decision:{decision.decision_id}",
             *_clean_text_list(update.get("evidence_refs"), limit=240),
         ][:30]
-        episode = ActiveEpisode(
+        episode = JanusEpisode(
             episode_id=episode_id,
             status=status,
             source="reflex_llm",
@@ -407,7 +407,7 @@ class ActiveEventRouter:
         )
         return episode_id
 
-    def _record_memory_candidates(self, decision: ActiveAgentDecision, event: dict[str, Any]) -> None:
+    def _record_memory_candidates(self, decision: JanusDecision, event: dict[str, Any]) -> None:
         if not decision.memory_updates:
             return
         memory_store = EventStore(self.config.memory_db_path)
@@ -417,7 +417,7 @@ class ActiveEventRouter:
                 continue
             self.store.record_memory_candidate(candidate)
             memory_store.append(
-                "active_agent_memory_candidate",
+                "janus_memory_candidate",
                 {
                     "candidate_id": candidate.candidate_id,
                     "decision_id": candidate.decision_id,
@@ -433,7 +433,7 @@ class ActiveEventRouter:
                 },
             )
 
-    def _maybe_wake_agent(self, decision: ActiveAgentDecision, route: ActiveAgentRoute, event: dict[str, Any]) -> dict[str, Any] | None:
+    def _maybe_wake_agent(self, decision: JanusDecision, route: JanusRoute, event: dict[str, Any]) -> dict[str, Any] | None:
         if decision.posture not in BRIDGE_POSTURES:
             return None
         activation = self._activation_for(decision, route, event)
@@ -456,7 +456,7 @@ class ActiveEventRouter:
             "stimulus_id": activation.stimulus_id,
             "occurred_at": route.created_at,
             "metadata": {
-                "active_agent": True,
+                "janus": True,
                 "route_id": route.route_id,
                 "decision_id": decision.decision_id,
                 "activation_id": activation.activation_id,
@@ -496,7 +496,7 @@ class ActiveEventRouter:
             )
             return {"activation": updated or asdict(activation), "error": error_result}
 
-    def _activation_for(self, decision: ActiveAgentDecision, route: ActiveAgentRoute, event: dict[str, Any]) -> ActiveAgentActivation:
+    def _activation_for(self, decision: JanusDecision, route: JanusRoute, event: dict[str, Any]) -> JanusActivation:
         response_mode = "text" if decision.posture == ReflexPosture.ASK_USER else "silent"
         status = "pending" if decision.posture == ReflexPosture.WAKE_MAIN_AGENT else "prepared"
         evidence_refs = [
@@ -508,7 +508,7 @@ class ActiveEventRouter:
             request_id = str(decision.deep_dive_request.get("request_id") or "")
             if request_id:
                 evidence_refs.append(f"deep_dive_request:{request_id}")
-        return ActiveAgentActivation(
+        return JanusActivation(
             activation_id=new_id("act"),
             decision_id=decision.decision_id,
             route_id=route.route_id,
@@ -516,7 +516,7 @@ class ActiveEventRouter:
             posture=decision.posture,
             status=status,
             response_mode=response_mode,
-            stimulus_id=f"active-agent-{decision.decision_id}",
+            stimulus_id=f"janus-{decision.decision_id}",
             user_visible_text=decision.user_visible_text[:1_000],
             agent_stimulus=decision.agent_stimulus[:4_000],
             reason=decision.reason[:1_000],
@@ -527,7 +527,7 @@ class ActiveEventRouter:
         )
 
 
-def _policy_for_event(event: dict[str, Any], *, route: ActiveAgentRoute, boundary: dict[str, Any] | None = None) -> dict[str, Any]:
+def _policy_for_event(event: dict[str, Any], *, route: JanusRoute, boundary: dict[str, Any] | None = None) -> dict[str, Any]:
     return {
         "route_class": route.route_class.value,
         "privacy_tier": route.privacy_tier,
@@ -556,21 +556,21 @@ def _build_reflex_model_client(config: AgentConfig) -> ModelClient | None:
 
 
 def _reflex_model_config(config: AgentConfig) -> AgentConfig:
-    provider = str(config.active_model_provider or "").strip()
+    provider = str(config.janus_model_provider or "").strip()
     if not provider or provider == "same-as-main":
         return config
     return replace(
         config,
         model_provider=provider,
-        model_name=str(config.active_model_name or "").strip() or config.model_name,
-        model_base_url=config.active_model_base_url or config.model_base_url,
-        model_api_key_env=config.active_model_api_key_env or config.model_api_key_env,
+        model_name=str(config.janus_model_name or "").strip() or config.model_name,
+        model_base_url=config.janus_model_base_url or config.model_base_url,
+        model_api_key_env=config.janus_model_api_key_env or config.model_api_key_env,
     ).normalized()
 
 
 def _decision_explanation_summary(
-    decision: ActiveAgentDecision,
-    route: ActiveAgentRoute,
+    decision: JanusDecision,
+    route: JanusRoute,
     *,
     boundary: dict[str, Any] | None = None,
 ) -> str:
@@ -582,12 +582,12 @@ def _decision_explanation_summary(
 
 def _allowed_actions_for(posture: ReflexPosture) -> list[str]:
     if posture == ReflexPosture.ASK_USER:
-        return ["ask_user_only", "show_active_agent_card"]
+        return ["ask_user_only", "show_janus_card"]
     if posture == ReflexPosture.WAKE_MAIN_AGENT:
         return ["prepare_draft", "prepare_checklist", "summarize_safe_context", "update_cognitive_focus", "queue_approval"]
     if posture == ReflexPosture.REQUEST_DEEP_DIVE:
-        return ["queue_deep_dive_approval", "show_active_agent_card"]
-    return ["prepare_silent_help", "summarize_safe_context", "show_active_agent_card"]
+        return ["queue_deep_dive_approval", "show_janus_card"]
+    return ["prepare_silent_help", "summarize_safe_context", "show_janus_card"]
 
 
 def _forbidden_actions_for(posture: ReflexPosture) -> list[str]:
@@ -640,17 +640,17 @@ def _scope_blocks_storage(scope: object | None) -> bool:
 
 
 def _memory_candidate_for(
-    decision: ActiveAgentDecision,
+    decision: JanusDecision,
     event: dict[str, Any],
     update: dict[str, Any],
-) -> ActiveAgentMemoryCandidate | None:
+) -> JanusMemoryCandidate | None:
     if not isinstance(update, dict):
         return None
     summary = _clean_text(update.get("summary") or update.get("text") or update.get("note"), limit=1_000)
     if not summary:
         return None
     event_sequence = int(event.get("sequence") or decision.event_sequence)
-    return ActiveAgentMemoryCandidate(
+    return JanusMemoryCandidate(
         candidate_id=str(update.get("candidate_id") or new_id("mem")),
         decision_id=decision.decision_id,
         route_id=decision.route_id,

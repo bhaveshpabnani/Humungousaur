@@ -1,6 +1,6 @@
 namespace Humungousaur.Collectors.Windows.Contracts;
 
-internal sealed record NativeCollectorEvent(
+internal sealed record CollectorHostEvent(
     string Collector,
     string Source,
     string StimulusType,

@@ -4,7 +4,7 @@ namespace Humungousaur.Collectors.Windows.Collectors.Window;
 
 internal static class ActiveWindowCollector
 {
-    public static NativeCollectorEvent Create(WindowSnapshot snapshot) =>
+    public static CollectorHostEvent Create(WindowSnapshot snapshot) =>
         new(
             CollectorCatalog.ActiveWindow,
             "activity",

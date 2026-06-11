@@ -49,7 +49,18 @@ public sealed class AppSettingsStore
     {
         if (string.IsNullOrWhiteSpace(settings.WorkspacePath))
         {
-            settings.WorkspacePath = FindWorkspaceRoot() ?? Environment.CurrentDirectory;
+            settings.WorkspacePath = FindWorkspaceRoot() ??
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) ??
+                Environment.CurrentDirectory;
+        }
+
+        if (string.IsNullOrWhiteSpace(settings.PythonPath))
+        {
+            var installedPython = InstalledRuntimePythonPath();
+            if (!string.IsNullOrWhiteSpace(installedPython))
+            {
+                settings.PythonPath = installedPython;
+            }
         }
 
         if (settings.Port <= 0)
@@ -74,7 +85,7 @@ public sealed class AppSettingsStore
             settings.ModelProvider = AppRuntimeDefaults.EffectiveModelProvider(settings.ModelProvider);
         }
         settings.ModelName = AppRuntimeDefaults.EffectiveModelName(settings.ModelName);
-        settings.ActiveModelProvider = AppRuntimeDefaults.EffectiveActiveModelProvider(settings.ActiveModelProvider);
+        settings.JanusModelProvider = AppRuntimeDefaults.EffectiveJanusModelProvider(settings.JanusModelProvider);
         settings.TtsProvider = AppRuntimeDefaults.EffectiveTtsProvider(settings.TtsProvider);
         if (string.IsNullOrWhiteSpace(settings.VoiceWakePhrases) ||
             settings.VoiceWakePhrases.Contains("jarvis", StringComparison.OrdinalIgnoreCase))
@@ -103,10 +114,10 @@ public sealed class AppSettingsStore
             ModelName = settings.ModelName,
             ModelBaseUrl = settings.ModelBaseUrl,
             ModelApiKey = Protect(settings.ModelApiKey),
-            ActiveModelProvider = settings.ActiveModelProvider,
-            ActiveModelName = settings.ActiveModelName,
-            ActiveModelBaseUrl = settings.ActiveModelBaseUrl,
-            ActiveModelApiKey = Protect(settings.ActiveModelApiKey),
+            JanusModelProvider = settings.JanusModelProvider,
+            JanusModelName = settings.JanusModelName,
+            JanusModelBaseUrl = settings.JanusModelBaseUrl,
+            JanusModelApiKey = Protect(settings.JanusModelApiKey),
             TtsProvider = settings.TtsProvider,
             VoiceId = settings.VoiceId,
             DeepgramApiKey = Protect(settings.DeepgramApiKey),
@@ -138,7 +149,7 @@ public sealed class AppSettingsStore
     private static void UnprotectSettings(AppSettings settings)
     {
         settings.ModelApiKey = Unprotect(settings.ModelApiKey);
-        settings.ActiveModelApiKey = Unprotect(settings.ActiveModelApiKey);
+        settings.JanusModelApiKey = Unprotect(settings.JanusModelApiKey);
         settings.DeepgramApiKey = Unprotect(settings.DeepgramApiKey);
         settings.ElevenLabsApiKey = Unprotect(settings.ElevenLabsApiKey);
         foreach (var channel in settings.Channels)
@@ -193,5 +204,16 @@ public sealed class AppSettingsStore
             directory = directory.Parent;
         }
         return null;
+    }
+
+    private static string? InstalledRuntimePythonPath()
+    {
+        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        if (string.IsNullOrWhiteSpace(localAppData))
+        {
+            return null;
+        }
+        var candidate = Path.Combine(localAppData, "Humungousaur", "runtime", ".venv", "Scripts", "python.exe");
+        return File.Exists(candidate) ? candidate : null;
     }
 }

@@ -9,7 +9,7 @@ internal sealed class ScreenUiMetadataCollector
 {
     private readonly ConcurrentDictionary<string, DateTimeOffset> _lastEmitted = new();
 
-    public IEnumerable<NativeCollectorEvent> ObserveForeground(WindowSnapshot snapshot)
+    public IEnumerable<CollectorHostEvent> ObserveForeground(WindowSnapshot snapshot)
     {
         if (IsTaskbarOrShell(snapshot) && Throttle($"taskbar-focus:{snapshot.ClassName}", TimeSpan.FromSeconds(3)))
         {
@@ -31,7 +31,7 @@ internal sealed class ScreenUiMetadataCollector
         }
     }
 
-    public IEnumerable<NativeCollectorEvent> ObserveWinEvent(uint eventType, WindowSnapshot snapshot, int idObject, int idChild)
+    public IEnumerable<CollectorHostEvent> ObserveWinEvent(uint eventType, WindowSnapshot snapshot, int idObject, int idChild)
     {
         if (eventType == NativeMethods.EventObjectFocus)
         {
@@ -117,7 +117,7 @@ internal sealed class ScreenUiMetadataCollector
         }
     }
 
-    public IEnumerable<NativeCollectorEvent> ObserveKeyDown(uint virtualKey)
+    public IEnumerable<CollectorHostEvent> ObserveKeyDown(uint virtualKey)
     {
         var foreground = WindowSnapshot.FromForeground();
         if (foreground is null)
@@ -140,31 +140,31 @@ internal sealed class ScreenUiMetadataCollector
         }
     }
 
-    private IEnumerable<NativeCollectorEvent> ObserveSystemShortcut(uint virtualKey, bool ctrl, bool alt, bool shift, bool win, WindowSnapshot snapshot, Dictionary<string, string> metadata)
+    private IEnumerable<CollectorHostEvent> ObserveSystemShortcut(uint virtualKey, bool ctrl, bool alt, bool shift, bool win, WindowSnapshot snapshot, Dictionary<string, string> metadata)
     {
         if (win && virtualKey == 0x41 && Throttle("quick_settings_opened", TimeSpan.FromSeconds(2)))
         {
-            yield return new NativeCollectorEvent(CollectorCatalog.QuickSettingsActivity, "system", "quick_settings_opened", "Quick settings opened.", metadata);
+            yield return new CollectorHostEvent(CollectorCatalog.QuickSettingsActivity, "system", "quick_settings_opened", "Quick settings opened.", metadata);
         }
         if (win && virtualKey == 0x57 && Throttle("widget_panel_opened", TimeSpan.FromSeconds(2)))
         {
-            yield return new NativeCollectorEvent(CollectorCatalog.WidgetActivity, "system", "widget_panel_opened", "Widget panel opened; widget names and payloads omitted.", metadata, PrivacyTier: "sensitive_metadata");
+            yield return new CollectorHostEvent(CollectorCatalog.WidgetActivity, "system", "widget_panel_opened", "Widget panel opened; widget names and payloads omitted.", metadata, PrivacyTier: "sensitive_metadata");
         }
         if (win && virtualKey == 0x42 && Throttle("taskbar_item_clicked", TimeSpan.FromSeconds(2)))
         {
-            yield return new NativeCollectorEvent(CollectorCatalog.DockTaskbarActivity, "system", "taskbar_item_clicked", "Taskbar focus changed; app labels omitted.", metadata, PrivacyTier: "sensitive_metadata");
+            yield return new CollectorHostEvent(CollectorCatalog.DockTaskbarActivity, "system", "taskbar_item_clicked", "Taskbar focus changed; app labels omitted.", metadata, PrivacyTier: "sensitive_metadata");
         }
         if (win && virtualKey == 0x4E && Throttle("tray_notification_clicked", TimeSpan.FromSeconds(2)))
         {
-            yield return new NativeCollectorEvent(CollectorCatalog.MenuBarTrayActivity, "system", "tray_notification_clicked", "Notification/tray surface opened; notification text omitted.", metadata, PrivacyTier: "sensitive_metadata");
+            yield return new CollectorHostEvent(CollectorCatalog.MenuBarTrayActivity, "system", "tray_notification_clicked", "Notification/tray surface opened; notification text omitted.", metadata, PrivacyTier: "sensitive_metadata");
         }
         if (alt && virtualKey == 0x09 && Throttle("pane_switched", TimeSpan.FromSeconds(1)))
         {
-            yield return new NativeCollectorEvent(CollectorCatalog.NavigationActivity, "accessibility", "pane_switched", "Application/window switcher used; window titles omitted.", metadata, PrivacyTier: "sensitive_metadata");
+            yield return new CollectorHostEvent(CollectorCatalog.NavigationActivity, "accessibility", "pane_switched", "Application/window switcher used; window titles omitted.", metadata, PrivacyTier: "sensitive_metadata");
         }
     }
 
-    private IEnumerable<NativeCollectorEvent> ObserveUiShortcut(uint virtualKey, bool ctrl, bool alt, bool shift, bool win, WindowSnapshot snapshot, Dictionary<string, string> metadata)
+    private IEnumerable<CollectorHostEvent> ObserveUiShortcut(uint virtualKey, bool ctrl, bool alt, bool shift, bool win, WindowSnapshot snapshot, Dictionary<string, string> metadata)
     {
         if (!ctrl && !alt && !win)
         {
@@ -172,39 +172,39 @@ internal sealed class ScreenUiMetadataCollector
         }
         if (ctrl && shift && virtualKey == 0x50 && Throttle("command_palette_opened", TimeSpan.FromSeconds(2)))
         {
-            yield return new NativeCollectorEvent(CollectorCatalog.CommandActivity, "accessibility", "command_palette_opened", "Command palette opened; query and command labels omitted.", metadata, PrivacyTier: "sensitive_metadata");
+            yield return new CollectorHostEvent(CollectorCatalog.CommandActivity, "accessibility", "command_palette_opened", "Command palette opened; query and command labels omitted.", metadata, PrivacyTier: "sensitive_metadata");
         }
         if (ctrl && virtualKey == 0x5A && Throttle("undo_performed", TimeSpan.FromMilliseconds(500)))
         {
-            yield return new NativeCollectorEvent(CollectorCatalog.EditHistoryActivity, "accessibility", "undo_performed", "Undo performed; edited content omitted.", metadata, PrivacyTier: "sensitive_metadata");
+            yield return new CollectorHostEvent(CollectorCatalog.EditHistoryActivity, "accessibility", "undo_performed", "Undo performed; edited content omitted.", metadata, PrivacyTier: "sensitive_metadata");
         }
         if (ctrl && (virtualKey == 0x59 || (shift && virtualKey == 0x5A)) && Throttle("redo_performed", TimeSpan.FromMilliseconds(500)))
         {
-            yield return new NativeCollectorEvent(CollectorCatalog.EditHistoryActivity, "accessibility", "redo_performed", "Redo performed; edited content omitted.", metadata, PrivacyTier: "sensitive_metadata");
+            yield return new CollectorHostEvent(CollectorCatalog.EditHistoryActivity, "accessibility", "redo_performed", "Redo performed; edited content omitted.", metadata, PrivacyTier: "sensitive_metadata");
         }
         if (ctrl && virtualKey == 0x53 && Throttle("manual_save_completed", TimeSpan.FromSeconds(1)))
         {
-            yield return new NativeCollectorEvent(CollectorCatalog.EditHistoryActivity, "accessibility", "manual_save_completed", "Manual save shortcut used; document path and content omitted.", metadata, PrivacyTier: "sensitive_metadata");
+            yield return new CollectorHostEvent(CollectorCatalog.EditHistoryActivity, "accessibility", "manual_save_completed", "Manual save shortcut used; document path and content omitted.", metadata, PrivacyTier: "sensitive_metadata");
         }
         if (alt && virtualKey == 0x25 && Throttle("in_app_back", TimeSpan.FromMilliseconds(750)))
         {
-            yield return new NativeCollectorEvent(CollectorCatalog.NavigationActivity, "accessibility", "in_app_back", "Back navigation used; destination omitted.", metadata, PrivacyTier: "sensitive_metadata");
+            yield return new CollectorHostEvent(CollectorCatalog.NavigationActivity, "accessibility", "in_app_back", "Back navigation used; destination omitted.", metadata, PrivacyTier: "sensitive_metadata");
         }
         if (alt && virtualKey == 0x27 && Throttle("in_app_forward", TimeSpan.FromMilliseconds(750)))
         {
-            yield return new NativeCollectorEvent(CollectorCatalog.NavigationActivity, "accessibility", "in_app_forward", "Forward navigation used; destination omitted.", metadata, PrivacyTier: "sensitive_metadata");
+            yield return new CollectorHostEvent(CollectorCatalog.NavigationActivity, "accessibility", "in_app_forward", "Forward navigation used; destination omitted.", metadata, PrivacyTier: "sensitive_metadata");
         }
         if (ctrl && virtualKey == 0x46 && Throttle("search_result_opened", TimeSpan.FromSeconds(2)))
         {
-            yield return new NativeCollectorEvent(CollectorCatalog.NavigationActivity, "accessibility", "search_result_opened", "Search/find surface used; query omitted.", metadata, PrivacyTier: "sensitive_metadata");
+            yield return new CollectorHostEvent(CollectorCatalog.NavigationActivity, "accessibility", "search_result_opened", "Search/find surface used; query omitted.", metadata, PrivacyTier: "sensitive_metadata");
         }
         if (ctrl && virtualKey == 0x41 && Throttle("multi_selection_changed", TimeSpan.FromSeconds(1)))
         {
-            yield return new NativeCollectorEvent(CollectorCatalog.SelectionActivity, "accessibility", "multi_selection_changed", "Multi-selection changed; selected labels and text omitted.", metadata, PrivacyTier: "sensitive_metadata");
+            yield return new CollectorHostEvent(CollectorCatalog.SelectionActivity, "accessibility", "multi_selection_changed", "Multi-selection changed; selected labels and text omitted.", metadata, PrivacyTier: "sensitive_metadata");
         }
         if ((ctrl || alt || win) && Throttle($"shortcut_action:{virtualKey}:{ctrl}:{alt}:{shift}:{win}", TimeSpan.FromSeconds(1)))
         {
-            yield return new NativeCollectorEvent(CollectorCatalog.CommandActivity, "accessibility", "shortcut_action_triggered", "Keyboard shortcut action triggered; raw key content omitted.", metadata, PrivacyTier: "sensitive_metadata");
+            yield return new CollectorHostEvent(CollectorCatalog.CommandActivity, "accessibility", "shortcut_action_triggered", "Keyboard shortcut action triggered; raw key content omitted.", metadata, PrivacyTier: "sensitive_metadata");
         }
     }
 
@@ -220,13 +220,13 @@ internal sealed class ScreenUiMetadataCollector
         return true;
     }
 
-    private static NativeCollectorEvent CreateSensitiveAccessibility(string collector, string stimulusType, string text, WindowSnapshot snapshot, int idObject, int idChild) =>
+    private static CollectorHostEvent CreateSensitiveAccessibility(string collector, string stimulusType, string text, WindowSnapshot snapshot, int idObject, int idChild) =>
         new(collector, "accessibility", stimulusType, text, AccessibilityMetadata(snapshot, idObject, idChild), PrivacyTier: "sensitive_metadata");
 
-    private static NativeCollectorEvent CreateSystem(string collector, string stimulusType, string text, WindowSnapshot snapshot) =>
+    private static CollectorHostEvent CreateSystem(string collector, string stimulusType, string text, WindowSnapshot snapshot) =>
         new(collector, "system", stimulusType, text, ShellMetadata(snapshot));
 
-    private static NativeCollectorEvent CreateSensitiveSystem(string collector, string stimulusType, string text, WindowSnapshot snapshot) =>
+    private static CollectorHostEvent CreateSensitiveSystem(string collector, string stimulusType, string text, WindowSnapshot snapshot) =>
         new(collector, "system", stimulusType, text, ShellMetadata(snapshot), PrivacyTier: "sensitive_metadata");
 
     private static Dictionary<string, string> AccessibilityMetadata(WindowSnapshot snapshot, int idObject, int idChild)

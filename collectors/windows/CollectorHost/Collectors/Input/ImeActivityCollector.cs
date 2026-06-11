@@ -9,7 +9,7 @@ internal sealed class ImeActivityCollector
     private string _lastLayout = "";
     private bool? _lastImeOpen;
 
-    public NativeCollectorEvent? Diff(WindowSnapshot snapshot)
+    public CollectorHostEvent? Diff(WindowSnapshot snapshot)
     {
         var layout = NativeMethods.KeyboardLayoutNameForWindow(snapshot.Handle);
         var imeOpen = NativeMethods.ImeOpen(snapshot.Handle);
@@ -49,6 +49,6 @@ internal sealed class ImeActivityCollector
         return null;
     }
 
-    private static NativeCollectorEvent Create(string stimulusType, string text, Dictionary<string, string> metadata) =>
+    private static CollectorHostEvent Create(string stimulusType, string text, Dictionary<string, string> metadata) =>
         new(CollectorCatalog.ImeActivity, "accessibility", stimulusType, text, metadata, PrivacyTier: "sensitive_metadata");
 }

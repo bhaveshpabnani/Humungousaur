@@ -194,7 +194,7 @@ internal sealed class WindowsCoreOsContextHelper
         await EmitIfPresentAsync(_imeActivity.Diff(snapshot), cancellationToken);
     }
 
-    private async Task EmitIfPresentAsync(NativeCollectorEvent? collectorEvent, CancellationToken cancellationToken)
+    private async Task EmitIfPresentAsync(CollectorHostEvent? collectorEvent, CancellationToken cancellationToken)
     {
         if (collectorEvent is not null)
         {
@@ -202,7 +202,7 @@ internal sealed class WindowsCoreOsContextHelper
         }
     }
 
-    private async Task EmitAllAsync(IEnumerable<NativeCollectorEvent> collectorEvents, CancellationToken cancellationToken)
+    private async Task EmitAllAsync(IEnumerable<CollectorHostEvent> collectorEvents, CancellationToken cancellationToken)
     {
         foreach (var collectorEvent in collectorEvents)
         {

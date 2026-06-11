@@ -3,16 +3,16 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from humungousaur.active_agent.models import (
-    ActiveAgentActivation,
-    ActiveEpisode,
+from humungousaur.janus.models import (
+    JanusActivation,
+    JanusEpisode,
     DeepDiveRequest,
     MutedScope,
     MutedScopeMode,
     ReflexPosture,
     TaskContext,
 )
-from humungousaur.active_agent.store import ActiveAgentStore
+from humungousaur.janus.store import JanusStore
 from humungousaur.cognition.knowledge import KnowledgeStore
 from humungousaur.cognition.models import KnowledgeKind
 from humungousaur.config import AgentConfig
@@ -114,8 +114,8 @@ class OrchestratorTests(unittest.TestCase):
             orchestrator = AgentOrchestrator(config)
             orchestrator.memory.append("user_memory", {"kind": "preference", "text": "context needle"})
             orchestrator.memory.append(
-                "active_agent_memory_candidate",
-                {"summary": "unaccepted active-agent candidate should not be generic recent memory", "payload": {"raw_text": "private"}},
+                "janus_memory_candidate",
+                {"summary": "unaccepted janus candidate should not be generic recent memory", "payload": {"raw_text": "private"}},
             )
             session = BrowserSessionStore(config.browser_sessions_db_path).create_or_update(
                 {
@@ -132,10 +132,10 @@ class OrchestratorTests(unittest.TestCase):
             self.assertEqual(context["recent_memory"][0]["payload"]["text"], "context needle")
             self.assertEqual(len(context["recent_memory"]), 1)
             self.assertEqual(context["user_profile"]["preferences"][0]["text"], "context needle")
-            self.assertEqual(context["active_agent_memory"]["source"], "active_agent_memory_candidate")
-            self.assertEqual(context["active_agent_memory"]["items"], [])
-            self.assertEqual(context["active_agent_state"]["source"], "active_agent_runtime")
-            self.assertEqual(context["active_agent_state"]["task_contexts"], [])
+            self.assertEqual(context["janus_memory"]["source"], "janus_memory_candidate")
+            self.assertEqual(context["janus_memory"]["items"], [])
+            self.assertEqual(context["janus_state"]["source"], "janus_runtime")
+            self.assertEqual(context["janus_state"]["task_contexts"], [])
             self.assertEqual(context["browser_sessions"][0]["session_id"], session["session_id"])
             self.assertEqual(context["screen_captures"]["count"], 0)
             self.assertEqual(context["available_workspace_skills"][0]["name"], "demo-skill")
@@ -144,15 +144,15 @@ class OrchestratorTests(unittest.TestCase):
             self.assertIn("system", context)
             self.assertIn("active_window", context)
 
-    def test_planning_context_includes_only_active_agent_promoted_knowledge(self) -> None:
+    def test_planning_context_includes_only_janus_promoted_knowledge(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)
             config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", planner_provider="explicit").normalized()
             knowledge = KnowledgeStore(config.cognition_db_path)
             promoted = knowledge.append(
                 kind=KnowledgeKind.CONTEXT,
-                text="User is preparing the Acme proposal from active-agent memory.",
-                source="active_agent_memory_candidate",
+                text="User is preparing the Acme proposal from Janus memory.",
+                source="janus_memory_candidate",
                 evidence_refs=["active_memory_candidate:mem-1", "collector_event:42"],
                 confidence=0.82,
             )
@@ -165,41 +165,41 @@ class OrchestratorTests(unittest.TestCase):
             )
             archived = knowledge.append(
                 kind=KnowledgeKind.CONTEXT,
-                text="Archived active-agent memory should not influence planning.",
-                source="active_agent_memory_candidate",
+                text="Archived Janus memory should not influence planning.",
+                source="janus_memory_candidate",
                 evidence_refs=["active_memory_candidate:old"],
                 confidence=0.8,
             )
             low_confidence = knowledge.append(
                 kind=KnowledgeKind.CONTEXT,
-                text="Low confidence active-agent memory should not influence planning yet.",
-                source="active_agent_memory_candidate",
+                text="Low confidence Janus memory should not influence planning yet.",
+                source="janus_memory_candidate",
                 evidence_refs=["active_memory_candidate:low"],
                 confidence=0.2,
             )
             knowledge.archive(archived.knowledge_id, reason="private correction")
 
             context = AgentOrchestrator(config)._planning_context("what should I continue?")
-            active_items = context["active_agent_memory"]["items"]
+            active_items = context["janus_memory"]["items"]
             generic_knowledge_ids = {item["knowledge_id"] for item in context["cognition"]["knowledge"]}
             active_ids = {item["knowledge_id"] for item in active_items}
 
         self.assertEqual([item["knowledge_id"] for item in active_items], [promoted.knowledge_id])
         self.assertEqual(active_items[0]["text"], promoted.text)
         self.assertIn("active_memory_candidate:mem-1", active_items[0]["evidence_refs"])
-        self.assertEqual(context["active_agent_memory"]["min_confidence"], 0.5)
-        self.assertEqual(context["active_agent_memory"]["recency"], "most_recent_updated_at")
+        self.assertEqual(context["janus_memory"]["min_confidence"], 0.5)
+        self.assertEqual(context["janus_memory"]["recency"], "most_recent_updated_at")
         self.assertIn(manual.knowledge_id, generic_knowledge_ids)
         self.assertNotIn(archived.knowledge_id, active_ids)
         self.assertNotIn(low_confidence.knowledge_id, active_ids)
 
-    def test_planning_context_includes_active_agent_state_without_raw_payloads(self) -> None:
+    def test_planning_context_includes_janus_state_without_raw_payloads(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)
             config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", planner_provider="explicit").normalized()
-            store = ActiveAgentStore(config.active_agent_db_path)
+            store = JanusStore(config.janus_db_path)
             store.upsert_episode(
-                ActiveEpisode(
+                JanusEpisode(
                     episode_id="episode-acme",
                     status="active",
                     hypothesis="User is drafting the Acme proposal.",
@@ -233,7 +233,7 @@ class OrchestratorTests(unittest.TestCase):
                 )
             )
             store.record_activation(
-                ActiveAgentActivation(
+                JanusActivation(
                     activation_id="act-prepare",
                     decision_id="decision-1",
                     route_id="route-1",
@@ -251,7 +251,7 @@ class OrchestratorTests(unittest.TestCase):
                 )
             )
             store.record_activation(
-                ActiveAgentActivation(
+                JanusActivation(
                     activation_id="act-skipped",
                     decision_id="decision-2",
                     route_id="route-2",
@@ -292,7 +292,7 @@ class OrchestratorTests(unittest.TestCase):
                 )
             )
 
-            state = AgentOrchestrator(config)._planning_context("continue")["active_agent_state"]
+            state = AgentOrchestrator(config)._planning_context("continue")["janus_state"]
             serialized = str(state)
 
         self.assertEqual(state["task_contexts"][0]["task_context_id"], "ctx-proposal")
@@ -312,18 +312,18 @@ class OrchestratorTests(unittest.TestCase):
         self.assertEqual(state["muted_scopes"][0]["mode"], "not_now")
         self.assertNotIn("harness_result", serialized)
 
-    def test_active_agent_planner_context_preview_exposes_only_planner_lanes(self) -> None:
+    def test_janus_planner_context_preview_exposes_only_planner_lanes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)
             config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", planner_provider="explicit").normalized()
             KnowledgeStore(config.cognition_db_path).append(
                 kind=KnowledgeKind.CONTEXT,
-                text="Preview should include promoted active-agent memory.",
-                source="active_agent_memory_candidate",
+                text="Preview should include promoted Janus memory.",
+                source="janus_memory_candidate",
                 evidence_refs=["active_memory_candidate:preview"],
                 confidence=0.72,
             )
-            ActiveAgentStore(config.active_agent_db_path).upsert_task_context(
+            JanusStore(config.janus_db_path).upsert_task_context(
                 TaskContext(
                     task_context_id="ctx-preview",
                     status="active",
@@ -333,15 +333,15 @@ class OrchestratorTests(unittest.TestCase):
                 )
             )
 
-            preview = AgentOrchestrator(config).active_agent_planner_context_preview("Bearer secret-token continue")
+            preview = AgentOrchestrator(config).janus_planner_context_preview("Bearer secret-token continue")
             serialized = json.dumps(preview, sort_keys=True, default=str)
 
         self.assertEqual(preview["source"], "planner_runtime_context_preview")
-        self.assertIn("active_agent_memory", preview)
-        self.assertIn("active_agent_state", preview)
+        self.assertIn("janus_memory", preview)
+        self.assertIn("janus_state", preview)
         self.assertIn("safety", preview)
         self.assertIn("Preview-safe active task.", serialized)
-        self.assertIn("Preview should include promoted active-agent memory.", serialized)
+        self.assertIn("Preview should include promoted Janus memory.", serialized)
         self.assertNotIn("secret-token", serialized)
         self.assertNotIn("private entity text", serialized)
         self.assertNotIn("raw_text", serialized)

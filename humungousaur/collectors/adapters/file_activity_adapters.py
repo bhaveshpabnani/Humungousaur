@@ -20,7 +20,7 @@ FILE_SOURCE_CONTRACTS: dict[str, dict[str, Any]] = {
             "recommended_emitter": "macos_fsevents_helper",
             "api": "FSEvents",
             "implemented": True,
-            "implementation": "native_collectors/macos product HumungousaurMacCollectorHost",
+            "implementation": "collectors/macos product HumungousaurMacCollectorHost",
             "covers": ["file_saved", "file_renamed", "file_moved", "folder_changed", "folder_created", "folder_renamed", "folder_moved"],
         },
         "file_open_close": {
@@ -33,7 +33,7 @@ FILE_SOURCE_CONTRACTS: dict[str, dict[str, Any]] = {
             "recommended_emitter": "macos_finder_accessibility_helper",
             "api": "Accessibility/NSWorkspace/Finder scripting",
             "implemented": True,
-            "implementation": "native_collectors/macos product HumungousaurMacCollectorHost best-effort Finder/Quick Look metadata",
+            "implementation": "collectors/macos product HumungousaurMacCollectorHost best-effort Finder/Quick Look metadata",
             "covers": ["quick_look_opened", "folder_opened"],
         },
     },

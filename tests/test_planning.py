@@ -1384,7 +1384,7 @@ class ModelPlanProviderTests(unittest.TestCase):
         self.assertIn('"url"', prompt)
         self.assertIn("retrieved data", prompt)
 
-    def test_model_prompt_includes_active_agent_memory_with_evidence(self) -> None:
+    def test_model_prompt_includes_janus_memory_with_evidence(self) -> None:
         provider = ModelPlanProvider(
             StaticModelClient('{"steps":[]}'),
             allowed_tools={"conversation_response_prepare"},
@@ -1403,8 +1403,8 @@ class ModelPlanProviderTests(unittest.TestCase):
         prompt = provider._build_prompt(
             "what was I doing?",
             {
-                "active_agent_memory": {
-                    "source": "active_agent_memory_candidate",
+                "janus_memory": {
+                    "source": "janus_memory_candidate",
                     "limit": 5,
                     "privacy": "safe summaries only",
                     "items": [
@@ -1422,12 +1422,12 @@ class ModelPlanProviderTests(unittest.TestCase):
             },
         )
 
-        self.assertIn("active_agent_memory", prompt)
+        self.assertIn("janus_memory", prompt)
         self.assertIn("User was drafting the Acme proposal.", prompt)
         self.assertIn("active_memory_candidate:mem-1", prompt)
         self.assertIn("safe summaries only", prompt)
 
-    def test_model_prompt_includes_active_agent_state_without_harness_output(self) -> None:
+    def test_model_prompt_includes_janus_state_without_harness_output(self) -> None:
         provider = ModelPlanProvider(
             StaticModelClient('{"steps":[]}'),
             allowed_tools={"conversation_response_prepare"},
@@ -1446,9 +1446,9 @@ class ModelPlanProviderTests(unittest.TestCase):
         prompt = provider._build_prompt(
             "continue the current work",
             {
-                "active_agent_state": {
-                    "source": "active_agent_runtime",
-                    "privacy": "safe active-agent summaries only",
+                "janus_state": {
+                    "source": "janus_runtime",
+                    "privacy": "safe janus summaries only",
                     "task_contexts": [{"task_context_id": "ctx-1", "summary": "Drafting Acme proposal.", "evidence_refs": ["correction:helpful"]}],
                     "activations": [
                         {
@@ -1465,7 +1465,7 @@ class ModelPlanProviderTests(unittest.TestCase):
             },
         )
 
-        self.assertIn("active_agent_state", prompt)
+        self.assertIn("janus_state", prompt)
         self.assertIn("Drafting Acme proposal.", prompt)
         self.assertIn("collector_event:12", prompt)
         self.assertIn("Resume Acme proposal.", prompt)

@@ -57,22 +57,22 @@ public sealed class LocalAgentProcess
             info.ArgumentList.Add("--model-base-url");
             info.ArgumentList.Add(settings.ModelBaseUrl);
         }
-        var activeProvider = AppRuntimeDefaults.EffectiveActiveModelProvider(settings.ActiveModelProvider);
+        var activeProvider = AppRuntimeDefaults.EffectiveJanusModelProvider(settings.JanusModelProvider);
         if (!activeProvider.Equals("same-as-main", StringComparison.OrdinalIgnoreCase))
         {
-            info.ArgumentList.Add("--active-model-provider");
-            info.ArgumentList.Add(AppRuntimeDefaults.CliActiveModelProvider(activeProvider));
-            info.ArgumentList.Add("--active-model-api-key-env");
+            info.ArgumentList.Add("--janus-model-provider");
+            info.ArgumentList.Add(AppRuntimeDefaults.CliJanusModelProvider(activeProvider));
+            info.ArgumentList.Add("--janus-model-api-key-env");
             info.ArgumentList.Add(AppRuntimeDefaults.ModelApiKeyName(activeProvider));
-            if (!string.IsNullOrWhiteSpace(settings.ActiveModelName))
+            if (!string.IsNullOrWhiteSpace(settings.JanusModelName))
             {
-                info.ArgumentList.Add("--active-model");
-                info.ArgumentList.Add(settings.ActiveModelName);
+                info.ArgumentList.Add("--janus-model");
+                info.ArgumentList.Add(settings.JanusModelName);
             }
-            if (!string.IsNullOrWhiteSpace(settings.ActiveModelBaseUrl))
+            if (!string.IsNullOrWhiteSpace(settings.JanusModelBaseUrl))
             {
-                info.ArgumentList.Add("--active-model-base-url");
-                info.ArgumentList.Add(settings.ActiveModelBaseUrl);
+                info.ArgumentList.Add("--janus-model-base-url");
+                info.ArgumentList.Add(settings.JanusModelBaseUrl);
             }
         }
         ApplyRuntimeEnvironment(info, settings);
@@ -136,10 +136,10 @@ public sealed class LocalAgentProcess
     private static void ApplyRuntimeEnvironment(ProcessStartInfo info, AppSettings settings)
     {
         AddEnvironmentSecret(info, AppRuntimeDefaults.ModelApiKeyName(settings.ModelProvider), settings.ModelApiKey);
-        var activeProvider = AppRuntimeDefaults.EffectiveActiveModelProvider(settings.ActiveModelProvider);
+        var activeProvider = AppRuntimeDefaults.EffectiveJanusModelProvider(settings.JanusModelProvider);
         if (!activeProvider.Equals("same-as-main", StringComparison.OrdinalIgnoreCase))
         {
-            AddEnvironmentSecret(info, AppRuntimeDefaults.ModelApiKeyName(activeProvider), settings.ActiveModelApiKey);
+            AddEnvironmentSecret(info, AppRuntimeDefaults.ModelApiKeyName(activeProvider), settings.JanusModelApiKey);
         }
         AddEnvironmentSecret(info, "DEEPGRAM_API_KEY", settings.DeepgramApiKey);
         AddEnvironmentSecret(info, "ELEVENLABS_API_KEY", settings.ElevenLabsApiKey);

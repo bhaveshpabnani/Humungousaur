@@ -2,7 +2,7 @@ import Foundation
 
 struct RuntimeSecrets {
     var modelAPIKey = ""
-    var activeModelAPIKey = ""
+    var janusModelAPIKey = ""
     var deepgramAPIKey = ""
     var elevenLabsAPIKey = ""
 }
@@ -221,20 +221,20 @@ final class AgentAPIClient {
         try await get("autonomous/status?limit=10")
     }
 
-    func activeAgentStatus(limit: Int = 20) async throws -> ActiveAgentStatusResponse {
-        try await get("active-agent/status?limit=\(limit)")
+    func janusStatus(limit: Int = 20) async throws -> JanusStatusResponse {
+        try await get("janus/status?limit=\(limit)")
     }
 
-    func activeAgentPlannerContext(request: String = "") async throws -> ActiveAgentPlannerContextPreview {
+    func janusPlannerContext(request: String = "") async throws -> JanusPlannerContextPreview {
         let encoded = request.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        return try await get("active-agent/planner-context?request=\(encoded)")
+        return try await get("janus/planner-context?request=\(encoded)")
     }
 
     func collectorStatus(limit: Int = 10) async throws -> CollectorStatusResponse {
         try await get("collectors/status?limit=\(limit)")
     }
 
-    func declareActiveAgentTaskContext(_ draft: ActiveAgentTaskContextDraft) async throws -> JSONValue {
+    func declareJanusTaskContext(_ draft: JanusTaskContextDraft) async throws -> JSONValue {
         var payload: [String: Any] = [
             "goal": draft.goal,
             "summary": draft.summary,
@@ -243,10 +243,10 @@ final class AgentAPIClient {
             "source": "macos_app"
         ]
         removeEmptyStrings(from: &payload)
-        return try await post("active-agent/task-contexts", body: payload)
+        return try await post("janus/task-contexts", body: payload)
     }
 
-    func createActiveAgentMutedScope(_ draft: ActiveAgentMutedScopeDraft) async throws -> JSONValue {
+    func createJanusMutedScope(_ draft: JanusMutedScopeDraft) async throws -> JSONValue {
         var payload: [String: Any] = [
             "mode": draft.mode,
             "scope_type": draft.scopeType,
@@ -258,12 +258,12 @@ final class AgentAPIClient {
             "reason": draft.reason
         ]
         removeEmptyStrings(from: &payload)
-        return try await post("active-agent/muted-scopes", body: payload)
+        return try await post("janus/muted-scopes", body: payload)
     }
 
-    func approveActiveAgentDeepDive(requestID: String, reason: String) async throws -> JSONValue {
+    func approveJanusDeepDive(requestID: String, reason: String) async throws -> JSONValue {
         try await post(
-            "active-agent/deep-dives/approve",
+            "janus/deep-dives/approve",
             body: [
                 "request_id": requestID,
                 "reason": reason
@@ -271,9 +271,9 @@ final class AgentAPIClient {
         )
     }
 
-    func rejectActiveAgentDeepDive(requestID: String, reason: String) async throws -> JSONValue {
+    func rejectJanusDeepDive(requestID: String, reason: String) async throws -> JSONValue {
         try await post(
-            "active-agent/deep-dives/reject",
+            "janus/deep-dives/reject",
             body: [
                 "request_id": requestID,
                 "reason": reason
@@ -281,13 +281,13 @@ final class AgentAPIClient {
         )
     }
 
-    func recordActiveAgentCorrection(
+    func recordJanusCorrection(
         correctionType: String,
         targetType: String,
         targetID: String,
         note: String,
-        taskContext: ActiveAgentTaskContextDraft? = nil,
-        mutedScope: ActiveAgentMutedScopeDraft? = nil
+        taskContext: JanusTaskContextDraft? = nil,
+        mutedScope: JanusMutedScopeDraft? = nil
     ) async throws -> JSONValue {
         var payload: [String: Any] = [
             "correction_type": correctionType,
@@ -312,14 +312,14 @@ final class AgentAPIClient {
         }
         removeEmptyStrings(from: &payload)
         return try await post(
-            "active-agent/corrections",
+            "janus/corrections",
             body: payload
         )
     }
 
-    func cancelActiveAgentMutedScope(scopeID: String, reason: String) async throws -> JSONValue {
+    func cancelJanusMutedScope(scopeID: String, reason: String) async throws -> JSONValue {
         try await post(
-            "active-agent/muted-scopes/cancel",
+            "janus/muted-scopes/cancel",
             body: [
                 "scope_id": scopeID,
                 "reason": reason
@@ -471,22 +471,22 @@ final class AgentAPIClient {
         if !settings.modelBaseURL.isEmpty {
             payload["model_base_url"] = settings.modelBaseURL
         }
-        let activeProvider = settings.activeModelProvider.trimmingCharacters(in: .whitespacesAndNewlines)
+        let activeProvider = settings.janusModelProvider.trimmingCharacters(in: .whitespacesAndNewlines)
         if !activeProvider.isEmpty, activeProvider != "same-as-main" {
-            payload["active_model_provider"] = apiModelProvider(activeProvider)
-            payload["active_model_api_key_env"] = modelKeyName(activeProvider)
-            if !settings.activeModelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                payload["active_model"] = settings.activeModelName
+            payload["janus_model_provider"] = apiModelProvider(activeProvider)
+            payload["janus_model_api_key_env"] = modelKeyName(activeProvider)
+            if !settings.janusModelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                payload["janus_model"] = settings.janusModelName
             }
-            if !settings.activeModelBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                payload["active_model_base_url"] = settings.activeModelBaseURL
+            if !settings.janusModelBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                payload["janus_model_base_url"] = settings.janusModelBaseURL
             }
         }
 
         var secretPayload: [String: String] = [:]
         addSecret(&secretPayload, name: modelKeyName(settings.modelProvider), value: secrets.modelAPIKey)
         if !activeProvider.isEmpty, activeProvider != "same-as-main" {
-            addSecret(&secretPayload, name: modelKeyName(activeProvider), value: secrets.activeModelAPIKey)
+            addSecret(&secretPayload, name: modelKeyName(activeProvider), value: secrets.janusModelAPIKey)
         }
         addSecret(&secretPayload, name: "DEEPGRAM_API_KEY", value: secrets.deepgramAPIKey)
         addSecret(&secretPayload, name: "ELEVENLABS_API_KEY", value: secrets.elevenLabsAPIKey)

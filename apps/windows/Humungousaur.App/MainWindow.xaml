@@ -98,7 +98,7 @@
                         <FontIcon Glyph="&#xE8FB;" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="Active Agent" Tag="active-agent">
+                <NavigationViewItem Content="Janus" Tag="janus">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xEC24;" />
                     </NavigationViewItem.Icon>
@@ -542,7 +542,7 @@
                     </Border>
                 </Grid>
 
-                <Grid x:Name="ActiveAgentPage" Margin="0,42,0,0" Visibility="Collapsed" RowSpacing="14">
+                <Grid x:Name="JanusPage" Margin="0,42,0,0" Visibility="Collapsed" RowSpacing="14">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
@@ -550,7 +550,7 @@
                     </Grid.RowDefinitions>
                     <StackPanel Spacing="5">
                         <TextBlock Text="Control" FontSize="12" FontWeight="Bold" Foreground="{StaticResource AssistantAccentBrush}" />
-                        <TextBlock Text="Active Agent" Style="{StaticResource PageTitleStyle}" />
+                        <TextBlock Text="Janus" Style="{StaticResource PageTitleStyle}" />
                         <TextBlock Text="Inspect reflex decisions, quiet memory, deep-dive requests, and user corrections for collector-triggered activity." Style="{StaticResource PageSubtitleStyle}" />
                     </StackPanel>
                     <Grid Grid.Row="1" ColumnSpacing="12">
@@ -564,31 +564,31 @@
                         <Border Style="{StaticResource CardBorderStyle}">
                             <StackPanel Spacing="6">
                                 <TextBlock Text="Posture" Style="{StaticResource CardTitleStyle}" />
-                                <TextBlock x:Name="ActiveAgentPostureText" Text="Waiting for status" TextWrapping="WrapWholeWords" />
+                                <TextBlock x:Name="JanusPostureText" Text="Waiting for status" TextWrapping="WrapWholeWords" />
                             </StackPanel>
                         </Border>
                         <Border Grid.Column="1" Style="{StaticResource CardBorderStyle}">
                             <StackPanel Spacing="6">
                                 <TextBlock Text="Decisions" Style="{StaticResource CardTitleStyle}" />
-                                <TextBlock x:Name="ActiveAgentDecisionCountText" Text="Decisions -" />
+                                <TextBlock x:Name="JanusDecisionCountText" Text="Decisions -" />
                             </StackPanel>
                         </Border>
                         <Border Grid.Column="2" Style="{StaticResource CardBorderStyle}">
                             <StackPanel Spacing="6">
                                 <TextBlock Text="Contexts" Style="{StaticResource CardTitleStyle}" />
-                                <TextBlock x:Name="ActiveAgentContextCountText" Text="Contexts -" />
+                                <TextBlock x:Name="JanusContextCountText" Text="Contexts -" />
                             </StackPanel>
                         </Border>
                         <Border Grid.Column="3" Style="{StaticResource CardBorderStyle}">
                             <StackPanel Spacing="6">
                                 <TextBlock Text="Muted" Style="{StaticResource CardTitleStyle}" />
-                                <TextBlock x:Name="ActiveAgentMutedCountText" Text="Muted -" />
+                                <TextBlock x:Name="JanusMutedCountText" Text="Muted -" />
                             </StackPanel>
                         </Border>
                         <Border Grid.Column="4" Style="{StaticResource CardBorderStyle}">
                             <StackPanel Spacing="6">
                                 <TextBlock Text="Collectors" Style="{StaticResource CardTitleStyle}" />
-                                <TextBlock x:Name="ActiveAgentCollectorHealthText" Text="Collectors -" TextWrapping="WrapWholeWords" />
+                                <TextBlock x:Name="JanusCollectorHealthText" Text="Collectors -" TextWrapping="WrapWholeWords" />
                             </StackPanel>
                         </Border>
                     </Grid>
@@ -607,15 +607,15 @@
                             <Border Style="{StaticResource CardBorderStyle}">
                                 <StackPanel Spacing="8">
                                     <TextBlock Text="Feedback" Style="{StaticResource CardTitleStyle}" />
-                                    <TextBox x:Name="ActiveAgentFeedbackNoteBox" Header="Note" Text="Feedback from Windows Active Agent panel." TextWrapping="Wrap" MinHeight="64" />
+                                    <TextBox x:Name="JanusFeedbackNoteBox" Header="Note" Text="Feedback from Windows Janus panel." TextWrapping="Wrap" MinHeight="64" />
                                     <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <Button Content="Helpful" Click="ActiveAgentHelpfulButton_Click" />
-                                        <Button Content="Not relevant" Click="ActiveAgentNotRelevantButton_Click" />
-                                        <Button Content="Private" Click="ActiveAgentPrivateButton_Click" />
-                                        <Button Content="Wrong task" Click="ActiveAgentWrongTaskButton_Click" />
+                                        <Button Content="Helpful" Click="JanusHelpfulButton_Click" />
+                                        <Button Content="Not relevant" Click="JanusNotRelevantButton_Click" />
+                                        <Button Content="Private" Click="JanusPrivateButton_Click" />
+                                        <Button Content="Wrong task" Click="JanusWrongTaskButton_Click" />
                                     </StackPanel>
-                                    <TextBox x:Name="ActiveAgentWrongGoalBox" Header="Correct goal" PlaceholderText="User-declared goal" TextWrapping="Wrap" />
-                                    <TextBox x:Name="ActiveAgentWrongSummaryBox" Header="Correct summary" PlaceholderText="Short task summary" TextWrapping="Wrap" />
+                                    <TextBox x:Name="JanusWrongGoalBox" Header="Correct goal" PlaceholderText="User-declared goal" TextWrapping="Wrap" />
+                                    <TextBox x:Name="JanusWrongSummaryBox" Header="Correct summary" PlaceholderText="Short task summary" TextWrapping="Wrap" />
                                     <Grid ColumnSpacing="8" RowSpacing="8">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
@@ -627,28 +627,28 @@
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
-                                        <ComboBox x:Name="ActiveAgentMuteModeBox" Header="Mute mode" SelectedIndex="0">
+                                        <ComboBox x:Name="JanusMuteModeBox" Header="Mute mode" SelectedIndex="0">
                                             <ComboBoxItem Content="No assistance" Tag="no_assistance" />
                                             <ComboBoxItem Content="Not now" Tag="not_now" />
                                             <ComboBoxItem Content="Private" Tag="private" />
                                             <ComboBoxItem Content="Do not track" Tag="do_not_track" />
                                         </ComboBox>
-                                        <TextBox x:Name="ActiveAgentMuteCollectorBox" Grid.Column="1" Header="Collector" PlaceholderText="device_state" />
-                                        <TextBox x:Name="ActiveAgentMuteSourceBox" Grid.Row="1" Header="Source" PlaceholderText="activity" />
-                                        <TextBox x:Name="ActiveAgentMuteStimulusBox" Grid.Row="1" Grid.Column="1" Header="Stimulus" PlaceholderText="active_window_changed" />
-                                        <TextBox x:Name="ActiveAgentMuteEntityRefsBox" Grid.Row="2" Grid.ColumnSpan="2" Header="Entity refs" PlaceholderText="app:Notes&#x0a;document:proposal" AcceptsReturn="True" MinHeight="58" TextWrapping="NoWrap" />
-                                        <TextBox x:Name="ActiveAgentMuteReasonBox" Grid.Row="3" Grid.ColumnSpan="2" Header="Mute reason" PlaceholderText="User scoped this activity out of assistance." TextWrapping="Wrap" />
+                                        <TextBox x:Name="JanusMuteCollectorBox" Grid.Column="1" Header="Collector" PlaceholderText="device_state" />
+                                        <TextBox x:Name="JanusMuteSourceBox" Grid.Row="1" Header="Source" PlaceholderText="activity" />
+                                        <TextBox x:Name="JanusMuteStimulusBox" Grid.Row="1" Grid.Column="1" Header="Stimulus" PlaceholderText="active_window_changed" />
+                                        <TextBox x:Name="JanusMuteEntityRefsBox" Grid.Row="2" Grid.ColumnSpan="2" Header="Entity refs" PlaceholderText="app:Notes&#x0a;document:proposal" AcceptsReturn="True" MinHeight="58" TextWrapping="NoWrap" />
+                                        <TextBox x:Name="JanusMuteReasonBox" Grid.Row="3" Grid.ColumnSpan="2" Header="Mute reason" PlaceholderText="User scoped this activity out of assistance." TextWrapping="Wrap" />
                                     </Grid>
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <Button Content="Create mute" Click="CreateActiveMutedScopeButton_Click" />
-                                        <Button Content="Refresh" Click="RefreshActiveAgentButton_Click" />
+                                        <Button Content="Refresh" Click="RefreshJanusButton_Click" />
                                     </StackPanel>
                                 </StackPanel>
                             </Border>
                             <Border Grid.Row="1" Style="{StaticResource CardBorderStyle}">
                                 <StackPanel Spacing="8">
                                     <TextBlock Text="Latest Reflex" Style="{StaticResource CardTitleStyle}" />
-                                    <ListView x:Name="ActiveAgentDecisionList" SelectionMode="Single">
+                                    <ListView x:Name="JanusDecisionList" SelectionMode="Single">
                                         <ListView.ItemTemplate>
                                             <DataTemplate>
                                                 <StackPanel Margin="0,5">
@@ -666,7 +666,7 @@
                                 <Button Content="Cancel selected mute" Click="CancelActiveMutedScopeButton_Click" />
                             </StackPanel>
                             <Border Grid.Row="3" Style="{StaticResource CardBorderStyle}">
-                                <ListView x:Name="ActiveAgentMuteList">
+                                <ListView x:Name="JanusMuteList">
                                     <ListView.ItemTemplate>
                                         <DataTemplate>
                                             <StackPanel Margin="0,5">
@@ -694,7 +694,7 @@
                                 <Border Style="{StaticResource CardBorderStyle}">
                                     <StackPanel Spacing="8">
                                         <TextBlock Text="Why" Style="{StaticResource CardTitleStyle}" />
-                                        <ListView x:Name="ActiveAgentExplanationList" SelectionMode="Single">
+                                        <ListView x:Name="JanusExplanationList" SelectionMode="Single">
                                             <ListView.ItemTemplate>
                                                 <DataTemplate>
                                                     <StackPanel Margin="0,5">
@@ -709,7 +709,7 @@
                                 <Border Grid.Column="1" Style="{StaticResource CardBorderStyle}">
                                     <StackPanel Spacing="8">
                                         <TextBlock Text="Task Context" Style="{StaticResource CardTitleStyle}" />
-                                        <ListView x:Name="ActiveAgentTaskContextList" SelectionMode="Single">
+                                        <ListView x:Name="JanusTaskContextList" SelectionMode="Single">
                                             <ListView.ItemTemplate>
                                                 <DataTemplate>
                                                     <StackPanel Margin="0,5">
@@ -734,8 +734,8 @@
                                         <Button Grid.Column="1" Content="Approve" Click="ApproveActiveDeepDiveButton_Click" />
                                         <Button Grid.Column="2" Content="Reject" Click="RejectActiveDeepDiveButton_Click" />
                                     </Grid>
-                                    <TextBox x:Name="ActiveAgentDeepDiveReasonBox" PlaceholderText="Reason for approving or rejecting selected request" TextWrapping="Wrap" />
-                                    <ListView x:Name="ActiveAgentDeepDiveList" SelectionMode="Single">
+                                    <TextBox x:Name="JanusDeepDiveReasonBox" PlaceholderText="Reason for approving or rejecting selected request" TextWrapping="Wrap" />
+                                    <ListView x:Name="JanusDeepDiveList" SelectionMode="Single">
                                         <ListView.ItemTemplate>
                                             <DataTemplate>
                                                 <StackPanel Margin="0,5">
@@ -751,7 +751,7 @@
                             <Border Grid.Row="2" Style="{StaticResource CardBorderStyle}">
                                 <StackPanel Spacing="8">
                                     <TextBlock Text="Collector Source Health" Style="{StaticResource CardTitleStyle}" />
-                                    <ListView x:Name="ActiveAgentCollectorSourceHealthList" SelectionMode="None">
+                                    <ListView x:Name="JanusCollectorSourceHealthList" SelectionMode="None">
                                         <ListView.ItemTemplate>
                                             <DataTemplate>
                                                 <StackPanel Margin="0,5">
@@ -766,7 +766,7 @@
                             </Border>
                             <Border Grid.Row="3" Style="{StaticResource CardBorderStyle}">
                                 <ScrollViewer>
-                                    <TextBlock x:Name="ActiveAgentRawText" TextWrapping="WrapWholeWords" Style="{StaticResource MonoTextStyle}" />
+                                    <TextBlock x:Name="JanusRawText" TextWrapping="WrapWholeWords" Style="{StaticResource MonoTextStyle}" />
                                 </ScrollViewer>
                             </Border>
                         </Grid>
@@ -1075,7 +1075,7 @@
 	                            <TextBox x:Name="ModelNameBox" Grid.Row="3" Grid.Column="1" Header="Model override" />
 	                            <TextBox x:Name="ModelBaseUrlBox" Grid.Row="4" Header="Model base URL" PlaceholderText="https://api.groq.com/openai/v1" />
 	                            <PasswordBox x:Name="ModelApiKeyBox" Grid.Row="4" Grid.Column="1" Header="Model API key" />
-	                            <ComboBox x:Name="ActiveModelProviderBox" Grid.Row="5" Header="Active agent provider" SelectedIndex="0">
+	                            <ComboBox x:Name="JanusModelProviderBox" Grid.Row="5" Header="Janus provider" SelectedIndex="0">
 	                                <ComboBoxItem Content="Same as main agent" Tag="same-as-main" />
 	                                <ComboBoxItem Content="OpenAI" Tag="openai" />
 	                                <ComboBoxItem Content="OpenAI Chat" Tag="openai-chat" />
@@ -1118,9 +1118,9 @@
 	                                <ComboBoxItem Content="AWS Bedrock" Tag="bedrock" />
 	                                <ComboBoxItem Content="Browser Use Cloud" Tag="browser-use-cloud" />
 	                            </ComboBox>
-	                            <TextBox x:Name="ActiveModelNameBox" Grid.Row="5" Grid.Column="1" Header="Active agent model override" PlaceholderText="defaults to selected provider" />
-	                            <TextBox x:Name="ActiveModelBaseUrlBox" Grid.Row="6" Header="Active agent base URL" PlaceholderText="defaults to selected provider" />
-	                            <PasswordBox x:Name="ActiveModelApiKeyBox" Grid.Row="6" Grid.Column="1" Header="Active agent API key" />
+	                            <TextBox x:Name="JanusModelNameBox" Grid.Row="5" Grid.Column="1" Header="Janus model override" PlaceholderText="defaults to selected provider" />
+	                            <TextBox x:Name="JanusModelBaseUrlBox" Grid.Row="6" Header="Janus base URL" PlaceholderText="defaults to selected provider" />
+	                            <PasswordBox x:Name="JanusModelApiKeyBox" Grid.Row="6" Grid.Column="1" Header="Janus API key" />
 	                            <StackPanel Grid.Row="7" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="10">
 	                                <ToggleSwitch x:Name="ApproveHighRiskSwitch" Header="Approve high risk" />
 	                                <Button Content="Save settings" Click="SaveSettingsButton_Click" />

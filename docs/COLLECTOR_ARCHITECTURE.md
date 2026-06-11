@@ -6,11 +6,11 @@ App, SaaS, browser-extension, IDE-plugin, and webhook source integrations are do
 `docs/APP_COLLECTOR_ARCHITECTURE.md`. They should emit this same event envelope instead of
 creating a parallel app-event pipeline.
 
-The active-agent interpretation layer that turns collector events into reflexes,
+The janus interpretation layer that turns collector events into reflexes,
 task context, muted scopes, deep-dive requests, UI state, and main-agent
-activation is documented in `docs/ACTIVE_AGENT_COLLECTOR_WORKFLOW.md`.
+activation is documented in `docs/JANUS_COLLECTOR_WORKFLOW.md`.
 The deeper Reflex LLM, context-memory, event-handling, research, and desktop UI
-design is documented in `docs/ACTIVE_AGENT_REFLEX_ARCHITECTURE.md`.
+design is documented in `docs/JANUS_REFLEX_ARCHITECTURE.md`.
 
 The rule is:
 
@@ -25,7 +25,7 @@ Raw telemetry must not be streamed to the LLM. Collectors emit structured local 
 Collector code lives under `humungousaur/collectors`.
 
 - `definitions.py`: source of truth for collector names, families, defaults, sensitivity, rate limits, and stimulus types.
-- `envelope.py`: normalized `CollectorEventEnvelope` contract shared by Python adapters, native collectors, browser extensions, and helper bridges.
+- `envelope.py`: normalized `CollectorEventEnvelope` contract shared by Python adapters, platform collectors, browser extensions, and helper bridges.
 - `event_log.py`: durable SQLite WAL collector bus with accepted events, independent consumer offsets, retry state, consumer state, and dead letters.
 - `schema.py`: dependency-free validation for the shared collector event envelope before events enter the durable log.
 - `registry.py`: explicit collector registration layer. Every `CollectorDefinition` must have a registered runtime collector function before the registry is complete.
@@ -83,13 +83,13 @@ This matches the important osquery lesson: native publishers and local subscribe
 
 ## Native Collector Organization
 
-Native collectors live outside the Python package under `native_collectors/` so each OS can use the platform-native language and packaging model while sharing one event contract.
+Platform collectors live outside the Python package under `collectors/` so each OS can use the platform-native language and packaging model while sharing one event contract.
 
-- `native_collectors/shared/event-envelope.schema.json`: shared envelope schema.
-- `native_collectors/shared/privacy-tiers.md`: native-side redaction and privacy-tier guidance.
-- `native_collectors/macos`: Swift collector host and event writer for NSWorkspace, FSEvents, Finder/Quick Look metadata, browser/window/profile-store metadata, Accessibility/CoreGraphics/NSEvent system UI metadata, IOKit, SystemConfiguration, input sources, pasteboard metadata, and future media/logging collectors.
-- `native_collectors/windows`: C#/.NET collector host and event writer skeleton for WMI, UI Automation, WinEvent, `ReadDirectoryChangesW`, browser profile-store metadata watches, ETW/auditing, device notifications, and media-session collectors.
-- `native_collectors/linux`: Rust collector host and event writer skeleton for inotify, fanotify, DBus/AT-SPI, desktop, and device collectors.
+- `collectors/shared/event-envelope.schema.json`: shared envelope schema.
+- `collectors/shared/privacy-tiers.md`: native-side redaction and privacy-tier guidance.
+- `collectors/macos`: Swift collector host and event writer for NSWorkspace, FSEvents, Finder/Quick Look metadata, browser/window/profile-store metadata, Accessibility/CoreGraphics/NSEvent system UI metadata, IOKit, SystemConfiguration, input sources, pasteboard metadata, and future media/logging collectors.
+- `collectors/windows`: C#/.NET collector host and event writer skeleton for WMI, UI Automation, WinEvent, `ReadDirectoryChangesW`, browser profile-store metadata watches, ETW/auditing, device notifications, and media-session collectors.
+- `collectors/linux`: Rust collector host and event writer skeleton for inotify, fanotify, DBus/AT-SPI, desktop, and device collectors.
 
 Native helpers should emit periodic helper-health records before they emit high-volume events. A helper that lacks a required OS permission should report `permission_denied` instead of silently disappearing.
 
@@ -119,7 +119,7 @@ The file collectors use Python polling as the safe local fallback, but the corre
 
 Recommended native lanes:
 
-- macOS directory/file-change lane: implemented in `native_collectors/macos` as `HumungousaurMacCollectorHost`, a SwiftPM executable using File System Events for watched directory changes and shared-envelope JSONL output.
+- macOS directory/file-change lane: implemented in `collectors/macos` as `HumungousaurMacCollectorHost`, a SwiftPM executable using File System Events for watched directory changes and shared-envelope JSONL output.
 - macOS open/close lane: `macos_endpoint_security_helper` using Endpoint Security `ES_EVENT_TYPE_NOTIFY_OPEN` / `ES_EVENT_TYPE_NOTIFY_CLOSE`; this requires the Endpoint Security entitlement and should remain opt-in/privileged.
 - macOS file-manager UI lane: partly implemented in `HumungousaurMacCollectorHost` using NSWorkspace/CoreGraphics metadata for Finder folder focus and Quick Look focus; richer tags, share sheet, path bar, restore, and privileged open/close still need dedicated opt-in helpers.
 - Windows directory/file-change lane: `windows_read_directory_changes_helper` using `ReadDirectoryChangesW` with subtree watching and name/size/write-time filters.
@@ -132,7 +132,7 @@ Recommended native lanes:
 Current implementation in `adapters/file_activity_adapters.py`:
 
 - Bridge events remain the highest-fidelity source when a native/helper/app emitter exists.
-- `script/run_macos_file_events.sh --workspace <path> --data-dir <path> --watch <path>` starts the macOS native collector host and writes shared-envelope JSONL into `data_dir/collector_spool/`.
+- `script/run_macos_file_events.sh --workspace <path> --data-dir <path> --watch <path>` starts the macOS platform collector host and writes shared-envelope JSONL into `data_dir/collector_spool/`.
 - Local fallback detects `file_saved`, `file_renamed`, and `file_moved` from watched file signatures and filesystem identity.
 - Local fallback detects `file_opened` and `file_closed` from open-handle transitions when `lsof` is available.
 - Local fallback detects `folder_created`, `folder_changed`, `folder_renamed`, and `folder_moved` from watched directory metadata and filesystem identity.

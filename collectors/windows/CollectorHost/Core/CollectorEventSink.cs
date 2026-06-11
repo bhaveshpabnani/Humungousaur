@@ -19,7 +19,7 @@ internal sealed class CollectorEventSink
         );
     }
 
-    public async Task EmitAsync(NativeCollectorEvent collectorEvent, CancellationToken cancellationToken)
+    public async Task EmitAsync(CollectorHostEvent collectorEvent, CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow.ToString("O");
         var signature = $"windows:{collectorEvent.Collector}:{collectorEvent.StimulusType}:{StableHash(string.Join("|", collectorEvent.Metadata.Select(pair => $"{pair.Key}={pair.Value}")))}";

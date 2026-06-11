@@ -3,15 +3,15 @@ import Foundation
 struct AppSettings: Codable, Equatable {
     var apiBaseURL = "http://127.0.0.1:8765"
     var workspacePath = defaultWorkspacePath()
-    var pythonPath = "python3"
+    var pythonPath = defaultPythonPath()
     var port = 8765
     var planner = "model"
     var modelProvider = "openai"
     var modelName = "gpt-5-mini"
     var modelBaseURL = ""
-    var activeModelProvider = "same-as-main"
-    var activeModelName = ""
-    var activeModelBaseURL = ""
+    var janusModelProvider = "same-as-main"
+    var janusModelName = ""
+    var janusModelBaseURL = ""
     var ttsProvider = "system"
     var voiceId = ""
     var elevenLabsModel = ""
@@ -48,7 +48,30 @@ struct AppSettings: Codable, Equatable {
                 return candidate.path
             }
         }
+        if installedRuntimePythonPath() != nil {
+            return home.path
+        }
         return home.path
+    }
+
+    static func defaultPythonPath() -> String {
+        installedRuntimePythonPath() ?? "python3"
+    }
+
+    private static func installedRuntimePythonPath() -> String? {
+        let candidates = [
+            "/Library/Application Support/Humungousaur/runtime/.venv/bin/python",
+            FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library")
+                .appendingPathComponent("Application Support")
+                .appendingPathComponent("Humungousaur")
+                .appendingPathComponent("runtime")
+                .appendingPathComponent(".venv")
+                .appendingPathComponent("bin")
+                .appendingPathComponent("python")
+                .path,
+        ]
+        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 }
 
@@ -66,6 +89,13 @@ final class SettingsStore {
             settings.workspacePath = AppSettings.defaultWorkspacePath()
             shouldSave = true
         }
+        if settings.pythonPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || settings.pythonPath == "python3" {
+            let defaultPython = AppSettings.defaultPythonPath()
+            if defaultPython != settings.pythonPath {
+                settings.pythonPath = defaultPython
+                shouldSave = true
+            }
+        }
         let wakePhrases = settings.voiceWakePhrases
             .split(separator: ",")
             .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
@@ -80,8 +110,8 @@ final class SettingsStore {
             settings.voiceStopPhrases = "stop humungousaur"
             shouldSave = true
         }
-        if settings.activeModelProvider.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            settings.activeModelProvider = "same-as-main"
+        if settings.janusModelProvider.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            settings.janusModelProvider = "same-as-main"
             shouldSave = true
         }
         if shouldSave {

@@ -22,7 +22,7 @@ public static class AppRuntimeDefaults
         return string.IsNullOrWhiteSpace(modelName) ? ModelName : modelName.Trim();
     }
 
-    public static string EffectiveActiveModelProvider(string provider)
+    public static string EffectiveJanusModelProvider(string provider)
     {
         return string.IsNullOrWhiteSpace(provider) ? "same-as-main" : provider.Trim();
     }
@@ -87,9 +87,9 @@ public static class AppRuntimeDefaults
         };
     }
 
-    public static string CliActiveModelProvider(string provider)
+    public static string CliJanusModelProvider(string provider)
     {
-        return EffectiveActiveModelProvider(provider) switch
+        return EffectiveJanusModelProvider(provider) switch
         {
             "same-as-main" => "same-as-main",
             "openai" => "openai-responses",

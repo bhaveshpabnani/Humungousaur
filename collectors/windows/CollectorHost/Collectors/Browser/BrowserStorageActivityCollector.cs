@@ -6,9 +6,9 @@ namespace Humungousaur.Collectors.Windows.Collectors.Browser;
 internal sealed class BrowserStorageActivityCollector : IDisposable
 {
     private readonly List<FileSystemWatcher> _watchers = [];
-    private readonly Action<NativeCollectorEvent> _emit;
+    private readonly Action<CollectorHostEvent> _emit;
 
-    public BrowserStorageActivityCollector(CollectorHostOptions options, Action<NativeCollectorEvent> emit)
+    public BrowserStorageActivityCollector(CollectorHostOptions options, Action<CollectorHostEvent> emit)
     {
         _emit = emit;
         foreach (var root in ResolveBrowserRoots(options.WatchPaths))
@@ -66,7 +66,7 @@ internal sealed class BrowserStorageActivityCollector : IDisposable
         }
     }
 
-    private static IEnumerable<NativeCollectorEvent> ClassifyPath(BrowserRoot root, string path, string changeKind)
+    private static IEnumerable<CollectorHostEvent> ClassifyPath(BrowserRoot root, string path, string changeKind)
     {
         if (ShouldSuppress(path))
         {
@@ -159,7 +159,7 @@ internal sealed class BrowserStorageActivityCollector : IDisposable
         }
     }
 
-    private static NativeCollectorEvent Sensitive(string collector, string stimulusType, string text, Dictionary<string, string> metadata) =>
+    private static CollectorHostEvent Sensitive(string collector, string stimulusType, string text, Dictionary<string, string> metadata) =>
         new(collector, "browser", stimulusType, text, metadata, PrivacyTier: "sensitive_metadata");
 
     private static bool IsProfileDirectory(BrowserRoot root, string path)

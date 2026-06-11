@@ -10,9 +10,9 @@ import urllib.request
 from pathlib import Path
 
 from humungousaur.api import create_api_server
-from humungousaur.active_agent import active_agent_status
-from humungousaur.active_agent.models import ActiveEpisode, Confidence
-from humungousaur.active_agent.store import ActiveAgentStore
+from humungousaur.janus import janus_status
+from humungousaur.janus.models import JanusEpisode, Confidence
+from humungousaur.janus.store import JanusStore
 from humungousaur.config import AgentConfig
 from humungousaur.cognition import TriggerStore, WakeupStore, WakeupStatus
 from humungousaur.cognition.knowledge import KnowledgeStore
@@ -110,7 +110,7 @@ class APITests(unittest.TestCase):
                 self.assertEqual(updates["latest_tag"], "v0.1.3")
                 self.assertFalse(updates["update_available"])
                 self.assertEqual(updates["platform"], "macos")
-                self.assertTrue(updates["platform_download_url"].endswith("/Humungousaur-macOS.zip"))
+                self.assertTrue(updates["platform_download_url"].endswith("/Humungousaur-macOS.pkg"))
                 self.assertTrue(updates["checksum_url"].endswith("/checksums.txt"))
                 tools = api_get(base_url, "/tools")
                 self.assertGreater(tools["tool_count"], 100)
@@ -466,7 +466,7 @@ class APITests(unittest.TestCase):
                 self.assertIn("local-openai", trace["error"])
                 self.assertNotIn("LOCAL_LLM_API_KEY=", json.dumps(trace))
 
-    def test_api_accepts_active_agent_model_runtime_options(self) -> None:
+    def test_api_accepts_janus_model_runtime_options(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)
             config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts").normalized()
@@ -475,23 +475,23 @@ class APITests(unittest.TestCase):
                 "model_provider": "openai-responses",
                 "model": "gpt-5-mini",
                 "model_api_key_env": "OPENAI_API_KEY",
-                "active_model_provider": "local-openai",
-                "active_model": "llama3.1:8b",
-                "active_model_base_url": "http://127.0.0.1:11434/v1",
-                "active_model_api_key_env": "LOCAL_LLM_API_KEY",
+                "janus_model_provider": "local-openai",
+                "janus_model": "llama3.1:8b",
+                "janus_model_base_url": "http://127.0.0.1:11434/v1",
+                "janus_model_api_key_env": "LOCAL_LLM_API_KEY",
                 "runtime_secrets": {"OPENAI_API_KEY": "main-secret", "LOCAL_LLM_API_KEY": "active-secret"},
             }
             runtime_config = request_config(config, payload)
 
         self.assertEqual(runtime_config.model_provider, "openai-responses")
-        self.assertEqual(runtime_config.active_model_provider, "local-openai")
-        self.assertEqual(runtime_config.active_model_name, "llama3.1:8b")
-        self.assertEqual(runtime_config.active_model_base_url, "http://127.0.0.1:11434/v1")
-        self.assertEqual(runtime_config.active_model_api_key_env, "LOCAL_LLM_API_KEY")
+        self.assertEqual(runtime_config.janus_model_provider, "local-openai")
+        self.assertEqual(runtime_config.janus_model_name, "llama3.1:8b")
+        self.assertEqual(runtime_config.janus_model_base_url, "http://127.0.0.1:11434/v1")
+        self.assertEqual(runtime_config.janus_model_api_key_env, "LOCAL_LLM_API_KEY")
         self.assertEqual(runtime_config.secret_value("OPENAI_API_KEY"), "main-secret")
         self.assertEqual(runtime_config.secret_value("LOCAL_LLM_API_KEY"), "active-secret")
 
-    def test_active_agent_status_reports_effective_reflex_model(self) -> None:
+    def test_janus_status_reports_effective_reflex_model(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)
             config = AgentConfig(
@@ -499,13 +499,13 @@ class APITests(unittest.TestCase):
                 data_dir=workspace / "artifacts",
                 model_provider="openai-responses",
                 model_name="gpt-5-mini",
-                active_model_provider="local-openai",
-                active_model_name="llama3.1:8b",
+                janus_model_provider="local-openai",
+                janus_model_name="llama3.1:8b",
             ).normalized()
-            status = active_agent_status(config)
+            status = janus_status(config)
 
         self.assertEqual(status["reflex_model"]["main_model_provider"], "openai-responses")
-        self.assertEqual(status["reflex_model"]["active_model_provider"], "local-openai")
+        self.assertEqual(status["reflex_model"]["janus_model_provider"], "local-openai")
         self.assertEqual(status["reflex_model"]["effective_model_provider"], "local-openai")
         self.assertEqual(status["reflex_model"]["effective_model_name"], "llama3.1:8b")
 
@@ -770,7 +770,7 @@ class APITests(unittest.TestCase):
             self.assertTrue(helper_health["accepted"])
             self.assertEqual(health_status["event_log"]["helper_health"][0]["helper_id"], "terminal-helper")
 
-    def test_api_exposes_active_agent_state_surfaces(self) -> None:
+    def test_api_exposes_janus_state_surfaces(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
             workspace = root / "workspace"
@@ -779,24 +779,24 @@ class APITests(unittest.TestCase):
             KnowledgeStore(config.cognition_db_path).append(
                 kind=KnowledgeKind.CONTEXT,
                 text="Planner preview can resume the Acme proposal.",
-                source="active_agent_memory_candidate",
+                source="janus_memory_candidate",
                 evidence_refs=["active_memory_candidate:api-preview"],
                 confidence=0.81,
             )
 
             with running_api(config) as base_url:
-                task = api_post(base_url, "/active-agent/task-contexts", {"goal": "Draft the Acme proposal", "allowed_help": ["resume_capsule"]})
-                mute = api_post(base_url, "/active-agent/muted-scopes", {"collector": "device_state", "mode": "no_assistance"})
+                task = api_post(base_url, "/janus/task-contexts", {"goal": "Draft the Acme proposal", "allowed_help": ["resume_capsule"]})
+                mute = api_post(base_url, "/janus/muted-scopes", {"collector": "device_state", "mode": "no_assistance"})
                 deep = api_post(
                     base_url,
-                    "/active-agent/deep-dives",
+                    "/janus/deep-dives",
                     {"purpose": "Prepare a resume capsule", "source": "google_docs", "requested_access": "document_outline"},
                 )
-                status = api_get(base_url, "/active-agent/status?limit=5")
-                preview = api_get(base_url, "/active-agent/planner-context?request=continue")
+                status = api_get(base_url, "/janus/status?limit=5")
+                preview = api_get(base_url, "/janus/planner-context?request=continue")
                 posted_preview = api_post(
                     base_url,
-                    "/active-agent/planner-context",
+                    "/janus/planner-context",
                     {"request": "Bearer secret-token continue"},
                 )
 
@@ -806,25 +806,25 @@ class APITests(unittest.TestCase):
             self.assertEqual(status["task_contexts"][0]["user_declared_goal"], "Draft the Acme proposal")
             self.assertEqual(status["muted_scopes"][0]["collector"], "device_state")
             self.assertEqual(preview["source"], "planner_runtime_context_preview")
-            self.assertIn("active_agent_memory", preview)
-            self.assertIn("active_agent_state", preview)
+            self.assertIn("janus_memory", preview)
+            self.assertIn("janus_state", preview)
             self.assertIn("safety", preview)
-            self.assertEqual(preview["active_agent_state"]["task_contexts"][0]["user_declared_goal"], "Draft the Acme proposal")
-            self.assertEqual(preview["active_agent_memory"]["items"][0]["text"], "Planner preview can resume the Acme proposal.")
+            self.assertEqual(preview["janus_state"]["task_contexts"][0]["user_declared_goal"], "Draft the Acme proposal")
+            self.assertEqual(preview["janus_memory"]["items"][0]["text"], "Planner preview can resume the Acme proposal.")
             self.assertNotIn("routes", preview)
             self.assertNotIn("decisions", preview)
             self.assertNotIn("memory_candidates", json.dumps(preview, sort_keys=True))
             self.assertNotIn("secret-token", json.dumps(posted_preview, sort_keys=True))
             self.assertNotIn("store_path", json.dumps(preview, sort_keys=True))
 
-    def test_api_active_agent_lifecycle_mutation_contracts(self) -> None:
+    def test_api_janus_lifecycle_mutation_contracts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
             workspace = root / "workspace"
             workspace.mkdir()
             config = AgentConfig(workspace=workspace, data_dir=root / "data", planner_provider="explicit").normalized()
-            ActiveAgentStore(config.active_agent_db_path).upsert_episode(
-                ActiveEpisode(
+            JanusStore(config.janus_db_path).upsert_episode(
+                JanusEpisode(
                     episode_id="episode_api",
                     status="active",
                     source="test",
@@ -836,46 +836,46 @@ class APITests(unittest.TestCase):
             )
 
             with running_api(config) as base_url:
-                mute = api_post(base_url, "/active-agent/muted-scopes", {"collector": "device_state", "mode": "no_assistance"})
+                mute = api_post(base_url, "/janus/muted-scopes", {"collector": "device_state", "mode": "no_assistance"})
                 approve_deep = api_post(
                     base_url,
-                    "/active-agent/deep-dives",
+                    "/janus/deep-dives",
                     {"purpose": "Prepare a resume capsule", "source": "google_docs", "requested_access": "document_outline"},
                 )
                 reject_deep = api_post(
                     base_url,
-                    "/active-agent/deep-dives",
+                    "/janus/deep-dives",
                     {"purpose": "Read the rich document body", "source": "google_docs", "requested_access": "rich_document_body"},
                 )
 
                 cancelled = api_post(
                     base_url,
-                    "/active-agent/muted-scopes/cancel",
+                    "/janus/muted-scopes/cancel",
                     {"scope_id": mute["muted_scope"]["scope_id"], "reason": "resume active assistance"},
                 )
                 approved = api_post(
                     base_url,
-                    "/active-agent/deep-dives/approve",
+                    "/janus/deep-dives/approve",
                     {"request_id": approve_deep["deep_dive_request"]["request_id"], "reason": "user approved"},
                 )
                 executed = api_post(
                     base_url,
-                    "/active-agent/deep-dives/execute",
+                    "/janus/deep-dives/execute",
                     {"request_id": approve_deep["deep_dive_request"]["request_id"], "limit": 5},
                 )
                 rejected = api_post(
                     base_url,
-                    "/active-agent/deep-dives/reject",
+                    "/janus/deep-dives/reject",
                     {"request_id": reject_deep["deep_dive_request"]["request_id"], "reason": "user rejected"},
                 )
                 episode = api_post(
                     base_url,
-                    "/active-agent/episodes/operate",
+                    "/janus/episodes/operate",
                     {"operation": "split", "episode_id": "episode_api", "new_episode_id": "episode_api_child", "summary": "API split task"},
                 )
-                exported = api_post(base_url, "/active-agent/privacy/export", {"target_type": "deep_dive_request", "target_id": approve_deep["deep_dive_request"]["request_id"]})
-                eval_run = api_post(base_url, "/active-agent/evals/run", {"scenario": "api"})
-                status = api_get(base_url, "/active-agent/status?limit=10")
+                exported = api_post(base_url, "/janus/privacy/export", {"target_type": "deep_dive_request", "target_id": approve_deep["deep_dive_request"]["request_id"]})
+                eval_run = api_post(base_url, "/janus/evals/run", {"scenario": "api"})
+                status = api_get(base_url, "/janus/status?limit=10")
 
             deep_by_id = {item["request_id"]: item for item in status["deep_dive_requests"]}
             self.assertEqual(cancelled["muted_scope"]["status"], "cancelled")
@@ -893,7 +893,7 @@ class APITests(unittest.TestCase):
             self.assertTrue(status["episode_links"])
             self.assertTrue(status["eval_runs"])
 
-    def test_api_active_agent_user_correction_contract(self) -> None:
+    def test_api_janus_user_correction_contract(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
             workspace = root / "workspace"
@@ -903,18 +903,18 @@ class APITests(unittest.TestCase):
             with running_api(config) as base_url:
                 api_post(
                     base_url,
-                    "/active-agent/task-contexts",
+                    "/janus/task-contexts",
                     {"task_context_id": "ctx_original", "goal": "Draft the Acme proposal", "allowed_help": ["resume_capsule"]},
                 )
                 try:
                     correction = api_post(
                         base_url,
-                        "/active-agent/corrections",
+                        "/janus/corrections",
                         {
                             "target_type": "task_context",
                             "target_id": "ctx_original",
                             "correction_type": "wrong_task",
-                            "reason": "This active-agent context matched the wrong task.",
+                            "reason": "This janus context matched the wrong task.",
                             "task_context": {
                                 "task_context_id": "ctx_corrected",
                                 "goal": "Review the personal finance note",
@@ -925,7 +925,7 @@ class APITests(unittest.TestCase):
                     )
                     private_correction = api_post(
                         base_url,
-                        "/active-agent/corrections",
+                        "/janus/corrections",
                         {
                             "target_type": "task_context",
                             "target_id": "ctx_original",
@@ -937,13 +937,13 @@ class APITests(unittest.TestCase):
                     )
                 except urllib.error.HTTPError as exc:
                     if exc.code == 404:
-                        self.skipTest("Active-agent correction HTTP endpoint is not exposed yet.")
+                        self.skipTest("Janus correction HTTP endpoint is not exposed yet.")
                     raise
-                status = api_get(base_url, "/active-agent/status?limit=10")
+                status = api_get(base_url, "/janus/status?limit=10")
 
-        corrections = _active_agent_corrections(status)
+        corrections = _janus_corrections(status)
         if not corrections:
-            self.skipTest("Active-agent corrections are not exposed by active-agent status yet.")
+            self.skipTest("Janus corrections are not exposed by Janus status yet.")
         serialized = json.dumps({"correction": correction, "private_correction": private_correction, "status": status}, sort_keys=True)
         self.assertIn("wrong_task", serialized)
         self.assertIn("private", serialized)
@@ -1545,8 +1545,8 @@ def api_post_error(base_url: str, path: str, payload: dict):
     raise AssertionError("Expected HTTP error response.")
 
 
-def _active_agent_corrections(status: dict) -> list[dict]:
-    for key in ("corrections", "user_corrections", "active_agent_corrections"):
+def _janus_corrections(status: dict) -> list[dict]:
+    for key in ("corrections", "user_corrections", "janus_corrections"):
         value = status.get(key)
         if isinstance(value, list):
             return [item for item in value if isinstance(item, dict)]

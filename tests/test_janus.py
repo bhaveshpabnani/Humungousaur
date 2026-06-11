@@ -4,12 +4,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from humungousaur.active_agent import (
-    ActiveAgentStore,
-    ActiveEventRouter,
-    active_agent_status,
-    active_agent_privacy_delete,
-    active_agent_privacy_export,
+from humungousaur.janus import (
+    JanusStore,
+    JanusEventRouter,
+    janus_status,
+    janus_privacy_delete,
+    janus_privacy_export,
     apply_episode_operation,
     create_deep_dive_request,
     create_muted_scope,
@@ -17,19 +17,19 @@ from humungousaur.active_agent import (
     execute_deep_dive_request,
     record_user_correction,
     respond_to_activation,
-    run_active_agent_eval,
+    run_janus_eval,
 )
-from humungousaur.active_agent.entities import extract_entity_refs
-from humungousaur.active_agent.activity_guides import (
+from humungousaur.janus.entities import extract_entity_refs
+from humungousaur.janus.activity_guides import (
     ActivityGuideValidationError,
     load_activity_guides,
     select_activity_guides,
     validate_activity_guides,
 )
-from humungousaur.active_agent.models import RouteClass
+from humungousaur.janus.models import RouteClass
 from humungousaur.cognition.knowledge import KnowledgeStore
 from humungousaur.cognition import FocusStore
-from humungousaur.collectors.consumers.active_agent import ActiveAgentConsumer, active_agent_consumer_name
+from humungousaur.collectors.consumers.janus import JanusConsumer, janus_consumer_name
 from humungousaur.collectors.envelope import CollectorEventEnvelope
 from humungousaur.collectors.event_log import CollectorEventLog
 from humungousaur.config import AgentConfig
@@ -37,13 +37,13 @@ from humungousaur.memory.event_store import EventStore
 from humungousaur.planning.model_clients import ModelClientError, StaticModelClient
 
 
-class ActiveAgentTests(unittest.TestCase):
+class JanusTests(unittest.TestCase):
     def test_context_events_are_stored_without_model_decision(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
             event = _event("ctx", collector="document_composition_activity", stimulus_type="document_saved")
-            ActiveEventRouter(config, model_client=StaticModelClient(_decision_payload()), run_agent=False).handle_event(event)
-            status = active_agent_status(config)
+            JanusEventRouter(config, model_client=StaticModelClient(_decision_payload()), run_agent=False).handle_event(event)
+            status = janus_status(config)
 
         self.assertEqual(status["routes"][0]["route_class"], RouteClass.CONTEXT.value)
         self.assertEqual(status["decisions"], [])
@@ -57,8 +57,8 @@ class ActiveAgentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
             event = _event("unlock", collector="device_state", stimulus_type="screen_unlocked")
-            ActiveEventRouter(config, model_client=StaticModelClient(_decision_payload()), run_agent=False).handle_event(event)
-            status = active_agent_status(config)
+            JanusEventRouter(config, model_client=StaticModelClient(_decision_payload()), run_agent=False).handle_event(event)
+            status = janus_status(config)
             memory_events = EventStore(config.memory_db_path).tail(limit=5)
 
         self.assertEqual(status["routes"][0]["route_class"], RouteClass.REFLEX.value)
@@ -68,7 +68,7 @@ class ActiveAgentTests(unittest.TestCase):
         self.assertEqual(status["memory_candidates"][0]["kind"], "working_context")
         self.assertEqual(status["memory_candidates"][0]["summary"], "Resume capsule prepared.")
         self.assertIn("reflex_decision:", json.dumps(status["memory_candidates"][0]["evidence_refs"]))
-        self.assertTrue(any(event["event_type"] == "active_agent_memory_candidate" for event in memory_events))
+        self.assertTrue(any(event["event_type"] == "janus_memory_candidate" for event in memory_events))
         self.assertEqual(status["activations"][0]["posture"], "prepare")
         self.assertEqual(status["activations"][0]["status"], "prepared")
         self.assertEqual(status["activations"][0]["response_mode"], "silent")
@@ -80,8 +80,8 @@ class ActiveAgentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
             event = _event("unlock", collector="device_state", stimulus_type="screen_unlocked")
-            ActiveEventRouter(config, model_client=StaticModelClient(_decision_payload()), run_agent=False).handle_event(event)
-            candidate_id = active_agent_status(config)["memory_candidates"][0]["candidate_id"]
+            JanusEventRouter(config, model_client=StaticModelClient(_decision_payload()), run_agent=False).handle_event(event)
+            candidate_id = janus_status(config)["memory_candidates"][0]["candidate_id"]
 
             accepted = record_user_correction(
                 config,
@@ -123,7 +123,7 @@ class ActiveAgentTests(unittest.TestCase):
         self.assertEqual(accepted_again["promoted_memory"]["created"], False)
         self.assertEqual(len(active_knowledge), 1)
         self.assertEqual(active_knowledge[0].knowledge_id, knowledge_id)
-        self.assertEqual(active_knowledge[0].source, "active_agent_memory_candidate")
+        self.assertEqual(active_knowledge[0].source, "janus_memory_candidate")
         self.assertIn(f"active_memory_candidate:{candidate_id}", active_knowledge[0].evidence_refs)
         self.assertIn("Resume capsule prepared.", active_knowledge[0].text)
         self.assertIn("Resume capsule prepared.", subconscious)
@@ -134,18 +134,18 @@ class ActiveAgentTests(unittest.TestCase):
         self.assertTrue(archived_after_private.archived_at)
         self.assertEqual(private["retracted_memories"][0]["knowledge"]["knowledge_id"], knowledge_id)
         self.assertIn("transition_note:This context is private.", private["memory_candidate"]["evidence_refs"])
-        status_events = [event for event in memory_events if event["event_type"] == "active_agent_memory_candidate_status"]
+        status_events = [event for event in memory_events if event["event_type"] == "janus_memory_candidate_status"]
         self.assertTrue(status_events)
         self.assertTrue(any(event["payload"]["status"] == "private" for event in status_events))
-        self.assertTrue(any(event["event_type"] == "active_agent_memory_promotion" for event in memory_events))
-        self.assertTrue(any(event["event_type"] == "active_agent_memory_retraction" for event in memory_events))
+        self.assertTrue(any(event["event_type"] == "janus_memory_promotion" for event in memory_events))
+        self.assertTrue(any(event["event_type"] == "janus_memory_retraction" for event in memory_events))
 
     def test_helpful_activation_feedback_accepts_and_promotes_related_memory_candidates(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
             event = _event("unlock", collector="device_state", stimulus_type="screen_unlocked")
-            ActiveEventRouter(config, model_client=StaticModelClient(_decision_payload()), run_agent=False).handle_event(event)
-            status_before = active_agent_status(config)
+            JanusEventRouter(config, model_client=StaticModelClient(_decision_payload()), run_agent=False).handle_event(event)
+            status_before = janus_status(config)
             activation_id = status_before["activations"][0]["activation_id"]
             candidate_id = status_before["memory_candidates"][0]["candidate_id"]
 
@@ -158,7 +158,7 @@ class ActiveAgentTests(unittest.TestCase):
                     "reason": "This active suggestion was useful.",
                 },
             )
-            status_after = active_agent_status(config)
+            status_after = janus_status(config)
             knowledge = KnowledgeStore(config.cognition_db_path).list(limit=10)
 
         self.assertEqual(correction["cascaded_memory_candidates"][0]["candidate_id"], candidate_id)
@@ -172,7 +172,7 @@ class ActiveAgentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
             event = _event("unlock", collector="device_state", stimulus_type="screen_unlocked")
-            ActiveEventRouter(
+            JanusEventRouter(
                 config,
                 model_client=StaticModelClient(
                     _posture_payload(
@@ -198,7 +198,7 @@ class ActiveAgentTests(unittest.TestCase):
                 ),
                 run_agent=False,
             ).handle_event(event)
-            candidate = active_agent_status(config)["memory_candidates"][0]
+            candidate = janus_status(config)["memory_candidates"][0]
 
         serialized = json.dumps(candidate, sort_keys=True)
         self.assertEqual(candidate["status"], "candidate")
@@ -222,7 +222,7 @@ class ActiveAgentTests(unittest.TestCase):
                 metadata={"safe_ref": "workspace_hash:abc", "nested": {"token": "metadata-secret-token"}},
                 payload={"email_body": "private email body", "nested": {"raw_text": "raw payload text", "safe_ref": "ok"}},
             )
-            ActiveEventRouter(config, model_client=client, run_agent=False).handle_event(event)
+            JanusEventRouter(config, model_client=client, run_agent=False).handle_event(event)
 
         prompt = client.prompts[0]
         self.assertIn("workspace_hash:abc", prompt)
@@ -234,8 +234,8 @@ class ActiveAgentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
             event = _event("unlock", collector="device_state", stimulus_type="screen_unlocked")
-            ActiveEventRouter(config, model_client=StaticModelClient(_decision_payload()), run_agent=False).handle_event(event)
-            status_before = active_agent_status(config)
+            JanusEventRouter(config, model_client=StaticModelClient(_decision_payload()), run_agent=False).handle_event(event)
+            status_before = janus_status(config)
             decision_id = status_before["decisions"][0]["decision_id"]
             activation_id = status_before["activations"][0]["activation_id"]
             candidate_id = status_before["memory_candidates"][0]["candidate_id"]
@@ -249,7 +249,7 @@ class ActiveAgentTests(unittest.TestCase):
                     "reason": "The whole decision context is private.",
                 },
             )
-            status_after = active_agent_status(config)
+            status_after = janus_status(config)
 
         self.assertEqual(correction["cascaded_memory_candidates"][0]["candidate_id"], candidate_id)
         self.assertEqual(correction["cascaded_memory_candidates"][0]["status"], "private")
@@ -261,9 +261,9 @@ class ActiveAgentTests(unittest.TestCase):
     def test_reflex_prompt_includes_recent_corrections_and_deep_dive_history(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
-            router = ActiveEventRouter(config, model_client=StaticModelClient(_decision_payload()), run_agent=False)
+            router = JanusEventRouter(config, model_client=StaticModelClient(_decision_payload()), run_agent=False)
             router.handle_event(_event("first", collector="device_state", stimulus_type="screen_unlocked"))
-            decision_id = active_agent_status(config)["decisions"][0]["decision_id"]
+            decision_id = janus_status(config)["decisions"][0]["decision_id"]
             record_user_correction(
                 config,
                 {
@@ -283,7 +283,7 @@ class ActiveAgentTests(unittest.TestCase):
                 },
             )
             client = CapturingModelClient(_decision_payload())
-            ActiveEventRouter(config, model_client=client, run_agent=False).handle_event(
+            JanusEventRouter(config, model_client=client, run_agent=False).handle_event(
                 _event("second", collector="device_state", stimulus_type="screen_unlocked")
             )
 
@@ -297,7 +297,7 @@ class ActiveAgentTests(unittest.TestCase):
     def test_model_task_context_update_preserves_safe_structured_fields(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
-            ActiveEventRouter(
+            JanusEventRouter(
                 config,
                 model_client=StaticModelClient(
                     _posture_payload(
@@ -329,7 +329,7 @@ class ActiveAgentTests(unittest.TestCase):
                 ),
                 run_agent=False,
             ).handle_event(_event("unlock", collector="device_state", stimulus_type="screen_unlocked"))
-            context = active_agent_status(config)["task_contexts"][0]
+            context = janus_status(config)["task_contexts"][0]
 
         serialized = json.dumps(context, sort_keys=True)
         self.assertEqual(context["task_context_id"], "ctx_structured")
@@ -346,7 +346,7 @@ class ActiveAgentTests(unittest.TestCase):
     def test_episode_update_upserts_active_episode_and_timeline_event(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
-            ActiveEventRouter(
+            JanusEventRouter(
                 config,
                 model_client=StaticModelClient(
                     _posture_payload(
@@ -371,7 +371,7 @@ class ActiveAgentTests(unittest.TestCase):
                 ),
                 run_agent=False,
             ).handle_event(_event("unlock", collector="device_state", stimulus_type="screen_unlocked"))
-            status = active_agent_status(config)
+            status = janus_status(config)
 
         serialized = json.dumps(status, sort_keys=True)
         self.assertEqual(status["episodes"][0]["episode_id"], "episode_acme")
@@ -388,7 +388,7 @@ class ActiveAgentTests(unittest.TestCase):
     def test_repeated_episode_updates_append_events_without_replacing_episode(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
-            router = ActiveEventRouter(
+            router = JanusEventRouter(
                 config,
                 model_client=StaticModelClient(
                     _posture_payload(
@@ -408,7 +408,7 @@ class ActiveAgentTests(unittest.TestCase):
             )
             router.handle_event(_event("one", collector="device_state", stimulus_type="screen_unlocked"))
             router.handle_event(_event("two", collector="device_state", stimulus_type="screen_unlocked"))
-            status = active_agent_status(config)
+            status = janus_status(config)
 
         self.assertEqual(len(status["episodes"]), 1)
         self.assertEqual(status["episodes"][0]["episode_id"], "episode_acme")
@@ -419,7 +419,7 @@ class ActiveAgentTests(unittest.TestCase):
     def test_reflex_prompt_includes_recent_active_episode_history(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
-            ActiveEventRouter(
+            JanusEventRouter(
                 config,
                 model_client=StaticModelClient(
                     _posture_payload(
@@ -438,7 +438,7 @@ class ActiveAgentTests(unittest.TestCase):
                 run_agent=False,
             ).handle_event(_event("first", collector="device_state", stimulus_type="screen_unlocked"))
             client = CapturingModelClient(_decision_payload())
-            ActiveEventRouter(config, model_client=client, run_agent=False).handle_event(
+            JanusEventRouter(config, model_client=client, run_agent=False).handle_event(
                 _event("second", collector="device_state", stimulus_type="screen_unlocked")
             )
 
@@ -452,7 +452,7 @@ class ActiveAgentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
             event = _event("mail", collector="mail_activity", stimulus_type="email_received")
-            result = ActiveEventRouter(
+            result = JanusEventRouter(
                 config,
                 model_client=StaticModelClient(
                     _posture_payload(
@@ -464,7 +464,7 @@ class ActiveAgentTests(unittest.TestCase):
                 ),
                 run_agent=False,
             ).handle_event(event)
-            status = active_agent_status(config)
+            status = janus_status(config)
 
         activation = status["activations"][0]
         self.assertEqual(result["submission"]["activation"]["activation_id"], activation["activation_id"])
@@ -480,7 +480,7 @@ class ActiveAgentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
             event = _event("hotkey", collector="direct_user", stimulus_type="global_hotkey_pressed")
-            result = ActiveEventRouter(
+            result = JanusEventRouter(
                 config,
                 model_client=StaticModelClient(
                     _posture_payload(
@@ -490,14 +490,14 @@ class ActiveAgentTests(unittest.TestCase):
                 ),
                 run_agent=False,
             ).handle_event(event)
-            status = active_agent_status(config)
+            status = janus_status(config)
 
         activation = status["activations"][0]
         self.assertTrue(result["submission"]["skipped"])
         self.assertEqual(activation["posture"], "wake_main_agent")
         self.assertEqual(activation["status"], "skipped")
         self.assertEqual(activation["response_mode"], "silent")
-        self.assertEqual(activation["stimulus_id"], f"active-agent-{activation['decision_id']}")
+        self.assertEqual(activation["stimulus_id"], f"janus-{activation['decision_id']}")
         self.assertIn("prepare_draft", activation["allowed_actions"])
         self.assertIn("send_message_without_approval", activation["forbidden_actions"])
         self.assertIn("collector_event:", json.dumps(activation["evidence_refs"]))
@@ -506,22 +506,22 @@ class ActiveAgentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
             create_muted_scope(config, {"collector": "device_state", "mode": "no_assistance"})
-            router = ActiveEventRouter(config, model_client=StaticModelClient(_decision_payload()), run_agent=False)
+            router = JanusEventRouter(config, model_client=StaticModelClient(_decision_payload()), run_agent=False)
             router.handle_event(_event("muted", collector="device_state", stimulus_type="screen_unlocked"))
             router.handle_event(_event("blocked", collector="verification_code_activity", stimulus_type="otp_code_detected"))
-            status = active_agent_status(config)
+            status = janus_status(config)
 
         self.assertEqual(status["decisions"], [])
         self.assertEqual(status["activations"], [])
 
-    def test_do_not_track_scope_suppresses_active_agent_persistence(self) -> None:
+    def test_do_not_track_scope_suppresses_janus_persistence(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
             create_muted_scope(config, {"collector": "device_state", "mode": "do_not_track"})
-            result = ActiveEventRouter(config, model_client=StaticModelClient(_decision_payload()), run_agent=False).handle_event(
+            result = JanusEventRouter(config, model_client=StaticModelClient(_decision_payload()), run_agent=False).handle_event(
                 _event("private", collector="device_state", stimulus_type="screen_unlocked")
             )
-            status = active_agent_status(config)
+            status = janus_status(config)
 
         self.assertTrue(result["suppressed"])
         self.assertEqual(result["route"]["route_class"], "blocked")
@@ -535,7 +535,7 @@ class ActiveAgentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
             event = _event("mail", collector="mail_activity", stimulus_type="email_received")
-            ActiveEventRouter(
+            JanusEventRouter(
                 config,
                 model_client=StaticModelClient(
                     _posture_payload(
@@ -550,7 +550,7 @@ class ActiveAgentTests(unittest.TestCase):
                 ),
                 run_agent=False,
             ).handle_event(event)
-            status = active_agent_status(config)
+            status = janus_status(config)
 
         request_id = status["deep_dive_requests"][0]["request_id"]
         activation = status["activations"][0]
@@ -562,12 +562,12 @@ class ActiveAgentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
             event = _event("mail", collector="mail_activity", stimulus_type="email_received")
-            ActiveEventRouter(
+            JanusEventRouter(
                 config,
                 model_client=StaticModelClient(_posture_payload(posture="request_deep_dive", deep_dive_request={"purpose": "missing source"})),
                 run_agent=False,
             ).handle_event(event)
-            status = active_agent_status(config)
+            status = janus_status(config)
 
         self.assertEqual(status["deep_dive_requests"], [])
         self.assertEqual(status["activations"], [])
@@ -578,7 +578,7 @@ class ActiveAgentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
             event = _event("hotkey", collector="direct_user", stimulus_type="global_hotkey_pressed")
-            ActiveEventRouter(
+            JanusEventRouter(
                 config,
                 model_client=StaticModelClient(
                     _posture_payload(
@@ -589,7 +589,7 @@ class ActiveAgentTests(unittest.TestCase):
                 ),
                 run_agent=False,
             ).handle_event(event)
-            status = active_agent_status(config)
+            status = janus_status(config)
 
         self.assertEqual(status["decisions"][0]["posture"], "ask_user")
         self.assertEqual(status["activations"][0]["status"], "prepared")
@@ -598,7 +598,7 @@ class ActiveAgentTests(unittest.TestCase):
     def test_ask_user_at_stable_context_boundary_is_downgraded_to_silent_prepare(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
-            router = ActiveEventRouter(
+            router = JanusEventRouter(
                 config,
                 model_client=StaticModelClient(
                     _posture_payload(
@@ -623,7 +623,7 @@ class ActiveAgentTests(unittest.TestCase):
                 ],
             ):
                 router.handle_event(event)
-            status = active_agent_status(config)
+            status = janus_status(config)
 
         self.assertEqual(status["decisions"][0]["posture"], "prepare")
         self.assertFalse(status["decisions"][0]["should_interrupt_user"])
@@ -633,12 +633,12 @@ class ActiveAgentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
             event = _event("hotkey", collector="direct_user", stimulus_type="global_hotkey_pressed")
-            with patch("humungousaur.active_agent.router.InteractionHarness") as harness_class, patch(
-                "humungousaur.active_agent.router.harness_result_to_dict",
+            with patch("humungousaur.janus.router.InteractionHarness") as harness_class, patch(
+                "humungousaur.janus.router.harness_result_to_dict",
                 return_value={"run": None, "response": "prepared"},
             ):
                 harness_class.return_value.handle.return_value = object()
-                result = ActiveEventRouter(
+                result = JanusEventRouter(
                     config,
                     model_client=StaticModelClient(
                         _posture_payload(
@@ -648,7 +648,7 @@ class ActiveAgentTests(unittest.TestCase):
                     ),
                     run_agent=True,
                 ).handle_event(event)
-            status = active_agent_status(config)
+            status = janus_status(config)
 
         self.assertEqual(result["submission"]["activation"]["status"], "submitted")
         self.assertEqual(status["activations"][0]["status"], "submitted")
@@ -658,9 +658,9 @@ class ActiveAgentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
             event = _event("hotkey", collector="direct_user", stimulus_type="global_hotkey_pressed")
-            with patch("humungousaur.active_agent.router.InteractionHarness") as harness_class:
+            with patch("humungousaur.janus.router.InteractionHarness") as harness_class:
                 harness_class.return_value.handle.side_effect = RuntimeError("boom")
-                result = ActiveEventRouter(
+                result = JanusEventRouter(
                     config,
                     model_client=StaticModelClient(
                         _posture_payload(
@@ -670,7 +670,7 @@ class ActiveAgentTests(unittest.TestCase):
                     ),
                     run_agent=True,
                 ).handle_event(event)
-            status = active_agent_status(config)
+            status = janus_status(config)
 
         self.assertEqual(result["submission"]["activation"]["status"], "failed")
         self.assertEqual(status["activations"][0]["status"], "failed")
@@ -681,10 +681,10 @@ class ActiveAgentTests(unittest.TestCase):
             config = _config(tmp_dir)
             client = CapturingModelClient(_decision_payload())
             event = _event("unlock", collector="device_state", stimulus_type="screen_unlocked")
-            ActiveEventRouter(config, model_client=client, run_agent=False).handle_event(event)
+            JanusEventRouter(config, model_client=client, run_agent=False).handle_event(event)
 
         self.assertEqual(len(client.prompts), 1)
-        self.assertIn("Interpret one local collector route for Humungousaur's active-agent reflex layer.", client.prompts[0])
+        self.assertIn("Interpret one local collector route for Humungousaur's janus reflex layer.", client.prompts[0])
         self.assertIn("Global intelligence rule:", client.prompts[0])
         self.assertIn("Reflex input:", client.prompts[0])
         self.assertIn('"stimulus_type":"screen_unlocked"', client.prompts[0])
@@ -733,8 +733,8 @@ class ActiveAgentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
             event = _event("unlock", collector="device_state", stimulus_type="screen_unlocked")
-            ActiveEventRouter(config, model_client=FailingClient("{}"), run_agent=False).handle_event(event)
-            status = active_agent_status(config)
+            JanusEventRouter(config, model_client=FailingClient("{}"), run_agent=False).handle_event(event)
+            status = janus_status(config)
 
         self.assertEqual(status["decisions"][0]["posture"], "stay_silent")
         self.assertEqual(status["decisions"][0]["model_status"], "unavailable")
@@ -744,8 +744,8 @@ class ActiveAgentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
             event = _event("unlock", collector="device_state", stimulus_type="screen_unlocked")
-            result = ActiveEventRouter(config, model_client=StaticModelClient("{not-json"), run_agent=False).handle_event(event)
-            status = active_agent_status(config)
+            result = JanusEventRouter(config, model_client=StaticModelClient("{not-json"), run_agent=False).handle_event(event)
+            status = janus_status(config)
 
         self.assertEqual(result["decision"]["posture"], "stay_silent")
         self.assertEqual(result["decision"]["model_status"], "unavailable")
@@ -758,8 +758,8 @@ class ActiveAgentTests(unittest.TestCase):
             config = _config(tmp_dir)
             create_muted_scope(config, {"collector": "device_state", "mode": "no_assistance"})
             event = _event("unlock", collector="device_state", stimulus_type="screen_unlocked")
-            ActiveEventRouter(config, model_client=StaticModelClient(_decision_payload()), run_agent=False).handle_event(event)
-            status = active_agent_status(config)
+            JanusEventRouter(config, model_client=StaticModelClient(_decision_payload()), run_agent=False).handle_event(event)
+            status = janus_status(config)
 
         self.assertEqual(status["routes"][0]["route_class"], RouteClass.MUTED.value)
         self.assertEqual(status["decisions"], [])
@@ -768,15 +768,15 @@ class ActiveAgentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
             created = create_muted_scope(config, {"collector": "device_state", "mode": "no_assistance"})
-            router = ActiveEventRouter(config, model_client=StaticModelClient(_decision_payload()), run_agent=False)
+            router = JanusEventRouter(config, model_client=StaticModelClient(_decision_payload()), run_agent=False)
 
             muted = router.handle_event(_event("unlock-muted", collector="device_state", stimulus_type="screen_unlocked"))
-            cancelled = ActiveAgentStore(config.active_agent_db_path).cancel_muted_scope(
+            cancelled = JanusStore(config.janus_db_path).cancel_muted_scope(
                 created["muted_scope"]["scope_id"],
                 reason="resume active assistance",
             )
             unmuted = router.handle_event(_event("unlock-unmuted", collector="device_state", stimulus_type="screen_unlocked"))
-            status = active_agent_status(config)
+            status = janus_status(config)
 
         self.assertEqual(muted["route"]["route_class"], RouteClass.MUTED.value)
         self.assertIsNotNone(cancelled)
@@ -806,10 +806,10 @@ class ActiveAgentTests(unittest.TestCase):
                     "requested_access": "rich_document_body",
                 },
             )
-            store = ActiveAgentStore(config.active_agent_db_path)
+            store = JanusStore(config.janus_db_path)
             approved = store.update_deep_dive_status(approved_request["deep_dive_request"]["request_id"], status="approved", reason="user approved")
             rejected = store.update_deep_dive_status(rejected_request["deep_dive_request"]["request_id"], status="rejected", reason="user rejected")
-            status = active_agent_status(config)
+            status = janus_status(config)
 
         by_id = {item["request_id"]: item for item in status["deep_dive_requests"]}
         self.assertEqual(approved["status"], "approved")
@@ -834,10 +834,10 @@ class ActiveAgentTests(unittest.TestCase):
                     "requested_access": "collector_event_context",
                 },
             )
-            ActiveAgentStore(config.active_agent_db_path).update_deep_dive_status("deep_exec", status="approved", reason="user approved")
+            JanusStore(config.janus_db_path).update_deep_dive_status("deep_exec", status="approved", reason="user approved")
 
             executed = execute_deep_dive_request(config, {"request_id": "deep_exec"})
-            status = active_agent_status(config)
+            status = janus_status(config)
 
         self.assertEqual(executed["deep_dive_request"]["status"], "completed")
         self.assertEqual(executed["deep_dive_result"]["status"], "completed")
@@ -848,7 +848,7 @@ class ActiveAgentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
             declare_task_context(config, {"goal": "Draft proposal", "episode_id": "episode-a"})
-            store = ActiveAgentStore(config.active_agent_db_path)
+            store = JanusStore(config.janus_db_path)
             store.upsert_episode(_episode("episode-a", "Draft proposal"))
             store.upsert_episode(_episode("episode-b", "Research sources"))
 
@@ -872,8 +872,8 @@ class ActiveAgentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
             event = _event("unlock", collector="device_state", stimulus_type="screen_unlocked")
-            ActiveEventRouter(config, model_client=StaticModelClient(_decision_payload()), run_agent=False).handle_event(event)
-            activation_id = active_agent_status(config)["activations"][0]["activation_id"]
+            JanusEventRouter(config, model_client=StaticModelClient(_decision_payload()), run_agent=False).handle_event(event)
+            activation_id = janus_status(config)["activations"][0]["activation_id"]
 
             accepted = respond_to_activation(
                 config,
@@ -898,12 +898,12 @@ class ActiveAgentTests(unittest.TestCase):
                 stimulus_type="document_saved",
                 metadata={"document_id": "doc-raw-id", "title": "SECRET TITLE"},
             )
-            ActiveEventRouter(config, model_client=StaticModelClient(_decision_payload()), run_agent=False).handle_event(event)
+            JanusEventRouter(config, model_client=StaticModelClient(_decision_payload()), run_agent=False).handle_event(event)
 
             refs = extract_entity_refs(event)
-            exported = active_agent_privacy_export(config, {"collector": "document_composition_activity"})
-            eval_run = run_active_agent_eval(config, {"scenario": "unit"})
-            deleted = active_agent_privacy_delete(config, {"collector": "document_composition_activity"})
+            exported = janus_privacy_export(config, {"collector": "document_composition_activity"})
+            eval_run = run_janus_eval(config, {"scenario": "unit"})
+            deleted = janus_privacy_delete(config, {"collector": "document_composition_activity"})
 
         self.assertTrue(any(ref.startswith("document_id_hash:") for ref in refs))
         self.assertNotIn("SECRET TITLE", json.dumps(exported, sort_keys=True))
@@ -915,11 +915,11 @@ class ActiveAgentTests(unittest.TestCase):
             config = _config(tmp_dir)
             log = CollectorEventLog(config.collector_events_db_path)
             appended = log.append(_envelope("unlock", collector="device_state", stimulus_type="screen_unlocked"))
-            result = ActiveAgentConsumer(log).consume(config, run_agent=False)
+            result = JanusConsumer(log).consume(config, run_agent=False)
             status = log.status()
 
         self.assertEqual(result["processed"], 1)
-        offset = next(item for item in status["consumer_offsets"] if item["consumer_name"] == active_agent_consumer_name)
+        offset = next(item for item in status["consumer_offsets"] if item["consumer_name"] == janus_consumer_name)
         self.assertEqual(offset["last_sequence"], appended["sequence"])
 
     def test_task_context_service_persists_user_declared_goal(self) -> None:
@@ -953,14 +953,14 @@ class ActiveAgentTests(unittest.TestCase):
             sort_keys=True,
         )
         if "ctx_focus" not in serialized_focus and "Draft the Acme proposal" not in serialized_focus:
-            self.skipTest("Active-agent user-declared task contexts are not projected into FocusStore yet.")
+            self.skipTest("Janus user-declared task contexts are not projected into FocusStore yet.")
         self.assertIn("Draft the Acme proposal", serialized_focus)
 
     def test_sustained_context_events_persist_generic_boundary_and_invoke_reflex_once(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
             client = CapturingModelClient(_decision_payload())
-            router = ActiveEventRouter(config, model_client=client, run_agent=False)
+            router = JanusEventRouter(config, model_client=client, run_agent=False)
             for event in _events(
                 ["save-1", "save-2", "save-3"],
                 collector="document_composition_activity",
@@ -974,7 +974,7 @@ class ActiveAgentTests(unittest.TestCase):
                 ],
             ):
                 router.handle_event(event)
-            status = active_agent_status(config)
+            status = janus_status(config)
 
         boundary = _require_boundary(status, "generic")
         serialized_boundary = json.dumps(boundary, sort_keys=True)
@@ -987,7 +987,7 @@ class ActiveAgentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
             client = CapturingModelClient(_decision_payload())
-            router = ActiveEventRouter(config, model_client=client, run_agent=False)
+            router = JanusEventRouter(config, model_client=client, run_agent=False)
             for event in _events(
                 ["save-1", "save-2", "save-3", "save-4", "save-5"],
                 collector="document_composition_activity",
@@ -1003,7 +1003,7 @@ class ActiveAgentTests(unittest.TestCase):
                 ],
             ):
                 router.handle_event(event)
-            status = active_agent_status(config)
+            status = janus_status(config)
 
         _require_boundary(status, "generic")
         self.assertEqual(len(client.prompts), 1)
@@ -1013,7 +1013,7 @@ class ActiveAgentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
             client = CapturingModelClient(_decision_payload())
-            router = ActiveEventRouter(config, model_client=client, run_agent=False)
+            router = JanusEventRouter(config, model_client=client, run_agent=False)
             for event in _events(
                 ["save-1", "save-2", "return-save"],
                 collector="document_composition_activity",
@@ -1027,23 +1027,23 @@ class ActiveAgentTests(unittest.TestCase):
                 ],
             ):
                 router.handle_event(event)
-            status = active_agent_status(config)
+            status = janus_status(config)
 
         boundary = _require_boundary(status, "resume")
         self.assertEqual(len(client.prompts), 1)
         self.assertEqual(len(status["decisions"]), 1)
         resume_artifacts = _resume_artifacts(status)
         if not resume_artifacts:
-            self.skipTest("Resume capsule/status artifacts are not exposed by active_agent_status yet.")
+            self.skipTest("Resume capsule/status artifacts are not exposed by janus_status yet.")
         serialized_resume_state = json.dumps({"boundary": boundary, "artifacts": resume_artifacts}, sort_keys=True)
         self.assertIn("resume", serialized_resume_state.lower())
         self.assertIn("document_id_hash:doc123", serialized_resume_state)
 
-    def test_status_exposes_safe_explanation_artifacts_for_active_agent_outcomes(self) -> None:
+    def test_status_exposes_safe_explanation_artifacts_for_janus_outcomes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
             create_muted_scope(config, {"collector": "device_state", "source": "muted_source", "mode": "no_assistance"})
-            router = ActiveEventRouter(config, model_client=StaticModelClient(_decision_payload()), run_agent=False)
+            router = JanusEventRouter(config, model_client=StaticModelClient(_decision_payload()), run_agent=False)
 
             router.handle_event(_event("muted", collector="device_state", source="muted_source", stimulus_type="screen_unlocked"))
             router.handle_event(_event("blocked", collector="verification_code_activity", stimulus_type="otp_code_detected"))
@@ -1061,11 +1061,11 @@ class ActiveAgentTests(unittest.TestCase):
                 ],
             ):
                 router.handle_event(event)
-            status = active_agent_status(config, limit=20)
+            status = janus_status(config, limit=20)
 
         artifacts = _explanation_artifacts(status)
         if not artifacts:
-            self.skipTest("Active-agent explanation/status artifacts are not exposed by active_agent_status yet.")
+            self.skipTest("Janus explanation/status artifacts are not exposed by janus_status yet.")
 
         serialized = json.dumps(artifacts, sort_keys=True).lower()
         self.assertTrue(_contains_any(serialized, ("muted", "mute")))
@@ -1083,9 +1083,9 @@ class ActiveAgentTests(unittest.TestCase):
     def test_user_correction_contract_persists_and_projects_to_status_when_supported(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
-            router = ActiveEventRouter(config, model_client=StaticModelClient(_decision_payload()), run_agent=False)
+            router = JanusEventRouter(config, model_client=StaticModelClient(_decision_payload()), run_agent=False)
             router.handle_event(_event("reflex", collector="device_state", stimulus_type="screen_unlocked"))
-            status_before = active_agent_status(config, limit=10)
+            status_before = janus_status(config, limit=10)
             decision_id = status_before["decisions"][0]["decision_id"]
 
             corrections = []
@@ -1094,7 +1094,7 @@ class ActiveAgentTests(unittest.TestCase):
                     "target_type": "decision",
                     "target_id": decision_id,
                     "correction_type": correction_type,
-                    "reason": f"user marked the active-agent decision as {correction_type}",
+                    "reason": f"user marked the janus decision as {correction_type}",
                     "evidence_refs": [f"reflex_decision:{decision_id}"],
                 }
                 if correction_type == "wrong_task":
@@ -1106,11 +1106,11 @@ class ActiveAgentTests(unittest.TestCase):
                 if correction_type == "private":
                     payload["collector"] = "device_state"
                 corrections.append(_record_user_correction(config, payload))
-            status = active_agent_status(config, limit=20)
+            status = janus_status(config, limit=20)
 
         status_corrections = _corrections(status)
         if not status_corrections:
-            self.skipTest("Active-agent corrections are not exposed by active_agent_status yet.")
+            self.skipTest("Janus corrections are not exposed by janus_status yet.")
         serialized = json.dumps({"results": corrections, "status": status}, sort_keys=True)
         for correction_type in ("wrong_task", "private", "not_relevant", "helpful"):
             self.assertIn(correction_type, serialized)
@@ -1124,9 +1124,9 @@ def _config(tmp_dir: str) -> AgentConfig:
 
 
 def _episode(episode_id: str, summary: str):
-    from humungousaur.active_agent.models import ActiveEpisode, Confidence
+    from humungousaur.janus.models import JanusEpisode, Confidence
 
-    return ActiveEpisode(
+    return JanusEpisode(
         episode_id=episode_id,
         status="active",
         source="test",
@@ -1228,10 +1228,10 @@ def _envelope(
 
 def _require_boundary(status: dict, expected_kind: str) -> dict:
     if not _boundary_api_exposed(status):
-        raise unittest.SkipTest("Active-agent boundary status API is not exposed yet.")
+        raise unittest.SkipTest("Janus boundary status API is not exposed yet.")
     boundaries = _boundaries(status)
     if not boundaries:
-        raise AssertionError(f"expected at least one active-agent {expected_kind} boundary")
+        raise AssertionError(f"expected at least one janus {expected_kind} boundary")
     expected = _boundary_aliases(expected_kind)
     for boundary in boundaries:
         serialized = json.dumps(boundary, sort_keys=True).lower()
@@ -1281,7 +1281,7 @@ def _explanation_artifacts(status: dict) -> list[dict]:
     artifacts = []
     for key in (
         "explanation_artifacts",
-        "active_agent_explanations",
+        "janus_explanations",
         "status_explanations",
         "explanations",
         "status_artifacts",
@@ -1305,7 +1305,7 @@ def _artifact_evidence(artifact: dict) -> object:
 
 
 def _corrections(status: dict) -> list[dict]:
-    for key in ("corrections", "user_corrections", "active_agent_corrections"):
+    for key in ("corrections", "user_corrections", "janus_corrections"):
         value = status.get(key)
         if isinstance(value, list):
             return [item for item in value if isinstance(item, dict)]
@@ -1317,19 +1317,19 @@ def _corrections(status: dict) -> list[dict]:
 
 
 def _record_user_correction(config: AgentConfig, payload: dict) -> dict:
-    import humungousaur.active_agent as active_agent
+    import humungousaur.janus as janus
 
-    for name in ("record_user_correction", "create_user_correction", "submit_user_correction", "correct_active_agent"):
-        handler = getattr(active_agent, name, None)
+    for name in ("record_user_correction", "create_user_correction", "submit_user_correction", "correct_janus"):
+        handler = getattr(janus, name, None)
         if callable(handler):
             return handler(config, payload)
-    store = ActiveAgentStore(config.active_agent_db_path)
+    store = JanusStore(config.janus_db_path)
     for name in ("record_user_correction", "create_user_correction", "submit_user_correction"):
         handler = getattr(store, name, None)
         if callable(handler):
             result = handler(payload)
             return result if isinstance(result, dict) else {"correction": result}
-    raise unittest.SkipTest("Active-agent user correction API/service is not exposed yet.")
+    raise unittest.SkipTest("Janus user correction API/service is not exposed yet.")
 
 
 def _contains_any(text: str, needles: tuple[str, ...]) -> bool:

@@ -32,7 +32,7 @@ if [[ ${#WATCH_ARGS[@]} -eq 0 ]]; then
   WATCH_ARGS+=(--watch "$WORKSPACE")
 fi
 
-exec swift run --package-path "$ROOT_DIR/native_collectors/macos" HumungousaurMacCollectorHost \
+exec swift run --package-path "$ROOT_DIR/collectors/macos" HumungousaurMacCollectorHost \
   --workspace "$WORKSPACE" \
   --data-dir "$DATA_DIR" \
   "${WATCH_ARGS[@]}" \

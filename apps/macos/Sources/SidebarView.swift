@@ -48,7 +48,7 @@ struct SidebarView: View {
                     nav(.workboard)
                     nav(.runs)
                     nav(.approvals)
-                    nav(.activeAgent)
+                    nav(.janus)
                     nav(.autonomy)
                 }
                 Section("Agent") {

@@ -8,7 +8,7 @@ internal sealed class AppLifecycleCollector
 {
     private Dictionary<int, string> _previous = Snapshot();
 
-    public IEnumerable<NativeCollectorEvent> Diff()
+    public IEnumerable<CollectorHostEvent> Diff()
     {
         var current = Snapshot();
         foreach (var pair in current)
@@ -28,9 +28,9 @@ internal sealed class AppLifecycleCollector
         _previous = current;
     }
 
-    public static NativeCollectorEvent CreateFocus(int processId, string processName) => Create("app_focused", processId, processName);
+    public static CollectorHostEvent CreateFocus(int processId, string processName) => Create("app_focused", processId, processName);
 
-    private static NativeCollectorEvent Create(string stimulusType, int processId, string processName)
+    private static CollectorHostEvent Create(string stimulusType, int processId, string processName)
     {
         var safeName = string.IsNullOrWhiteSpace(processName) ? "unknown" : processName.Trim();
         var metadata = new Dictionary<string, string>
@@ -39,7 +39,7 @@ internal sealed class AppLifecycleCollector
             ["process_name"] = safeName,
             ["app_name"] = safeName,
         };
-        return new NativeCollectorEvent(CollectorCatalog.AppLifecycle, "activity", stimulusType, $"App lifecycle changed: {safeName}.", metadata);
+        return new CollectorHostEvent(CollectorCatalog.AppLifecycle, "activity", stimulusType, $"App lifecycle changed: {safeName}.", metadata);
     }
 
     private static Dictionary<int, string> Snapshot()

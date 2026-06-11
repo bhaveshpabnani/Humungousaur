@@ -1,11 +1,11 @@
-# Active Agent Collector Workflow
+# Janus Collector Workflow
 
 This document defines how Humungousaur turns collector events into an always-active
 assistant without turning the desktop into a 24/7 recorder or a noisy notification
 bot.
 
 Detailed product, research, event, Reflex LLM, context-memory, and desktop UI
-architecture is maintained in `docs/ACTIVE_AGENT_REFLEX_ARCHITECTURE.md`.
+architecture is maintained in `docs/JANUS_REFLEX_ARCHITECTURE.md`.
 
 The core idea is a reverse-agent runtime:
 
@@ -13,7 +13,7 @@ The core idea is a reverse-agent runtime:
 normal agent:
 user query -> intent -> skills/tools -> actions -> result
 
-active agent:
+Janus:
 observed actions -> context -> reflex interpretation -> task context -> agent posture
 ```
 
@@ -92,13 +92,13 @@ native/app/browser/SaaS source
   -> InteractionHarness
 ```
 
-The active-agent workflow adds an interpretation layer between the event log and
+The janus workflow adds an interpretation layer between the event log and
 the main attention boundary:
 
 ```text
 CollectorEventEnvelope
   -> hard privacy/source gates
-  -> ActiveEventRouter
+  -> JanusEventRouter
   -> ReflexInterpreter / ContextWindow
   -> TaskContextStore
   -> TriggerPolicy
@@ -112,14 +112,14 @@ and memory importance are intelligent decisions and must be model-led.
 
 First runtime slice implemented:
 
-- `humungousaur/active_agent/` now contains the durable store, route records,
+- `humungousaur/janus/` now contains the durable store, route records,
   task context records, muted scopes, deep-dive request records, activity guide
   loader, Reflex LLM schema/parser, and event router.
 - Reflex interpretation now uses the shared cognition prompt-template resource
   instead of an inline prompt.
-- `humungousaur/collectors/consumers/active_agent.py` consumes the collector WAL
+- `humungousaur/collectors/consumers/janus.py` consumes the collector WAL
   stream with an independent offset.
-- Collector ticks invoke the active-agent consumer after memory/semantic/UI
+- Collector ticks invoke the janus consumer after memory/semantic/UI
   consumers.
 - `do_not_track` muted scopes block durable storage where events enter the
   collector bus, and `do_not_send_to_llm` muted scopes suppress attention-batch
@@ -160,11 +160,11 @@ First runtime slice implemented:
 - Collector-specific entity extraction now converts known provider/app object
   ids into hashed entity refs so continuity can be tracked across collectors
   without leaking raw titles, names, URLs, paths, or content.
-- Active-agent privacy export/delete and replay eval runs are implemented as
-  local auditable operations. Exports are active-agent state only and do not
+- Janus privacy export/delete and replay eval runs are implemented as
+  local auditable operations. Exports are janus state only and do not
   include raw collector payloads.
 - Reflex can use the shared model-provider runtime with local/small model
-  providers such as `ollama` and `local-openai`; active-agent status exposes the
+  providers such as `ollama` and `local-openai`; Janus status exposes the
   configured Reflex model path.
 - Additional activity guides now cover design review, customer support, sales
   CRM, data analysis, financial admin, and learning/study workflows.
@@ -176,7 +176,7 @@ flowchart TD
     A["Native/App/SaaS/Browser Collector"] --> B["CollectorEventEnvelope"]
     B --> C["Source Gate: privacy, profile, dedupe, rate, activity policy"]
     C --> D["SQLite WAL Collector Event Log"]
-    D --> E["ActiveEventRouter Consumer"]
+    D --> E["JanusEventRouter Consumer"]
     E --> F["Muted Scope Gate"]
     F --> G{"Route Class"}
     G -->|reflex| H["Reflex LLM"]
@@ -201,11 +201,11 @@ The current implementation exposes these lifecycle operations:
 
 | Surface | Service/API/CLI | Behavior |
 | --- | --- | --- |
-| Deep-dive execute | `execute_deep_dive_request`, `/active-agent/deep-dives/execute`, `active-agent-deep-dive-execute` | Requires an approved request, gathers metadata-only evidence, records a durable result, marks the request completed, and links the result to the episode when present. |
-| Activation response | `respond_to_activation`, `/active-agent/activations/respond`, `active-agent-activation-respond` | Records accept/decline/not-now/private/clarify/wake-agent responses and updates task context, corrections, mutes, or harness submission accordingly. |
-| Episode operation | `apply_episode_operation`, `/active-agent/episodes/operate`, `active-agent-episode-operate` | Pauses, resumes, completes, abandons, merges, or splits episodes with durable links and evidence refs. |
-| Privacy export/delete | `active_agent_privacy_export`, `active_agent_privacy_delete`, `/active-agent/privacy/export`, `/active-agent/privacy/delete` | Exports or deletes scoped active-agent records. Raw collector payloads are not included in exports. |
-| Replay eval | `run_active_agent_eval`, `/active-agent/evals/run`, `active-agent-eval-run` | Checks active-agent state invariants around episodes, safety notes, approval-gated deep dives, and memory/activation counts. |
+| Deep-dive execute | `execute_deep_dive_request`, `/janus/deep-dives/execute`, `janus-deep-dive-execute` | Requires an approved request, gathers metadata-only evidence, records a durable result, marks the request completed, and links the result to the episode when present. |
+| Activation response | `respond_to_activation`, `/janus/activations/respond`, `janus-activation-respond` | Records accept/decline/not-now/private/clarify/wake-agent responses and updates task context, corrections, mutes, or harness submission accordingly. |
+| Episode operation | `apply_episode_operation`, `/janus/episodes/operate`, `janus-episode-operate` | Pauses, resumes, completes, abandons, merges, or splits episodes with durable links and evidence refs. |
+| Privacy export/delete | `janus_privacy_export`, `janus_privacy_delete`, `/janus/privacy/export`, `/janus/privacy/delete` | Exports or deletes scoped Janus records. Raw collector payloads are not included in exports. |
+| Replay eval | `run_janus_eval`, `/janus/evals/run`, `janus-eval-run` | Checks janus state invariants around episodes, safety notes, approval-gated deep dives, and memory/activation counts. |
 
 The metadata deep-dive executor is intentionally not a rich-content executor.
 Provider-specific document reads, message reads, transcript reads, screenshots,
@@ -307,7 +307,7 @@ meaningful boundary:
 - repeated friction signals
 - completion signal
 - task handoff or meeting boundary
-- user explicitly asks "what am I doing?" or opens the active-agent UI
+- user explicitly asks "what am I doing?" or opens the janus UI
 
 ## Small Reflex LLM
 
@@ -431,7 +431,7 @@ not deterministic routing rules.
 Recommended location:
 
 ```text
-humungousaur/active_agent/activity_guides/
+humungousaur/janus/activity_guides/
   authoring_document.md
   research_session.md
   spreadsheet_analysis.md
@@ -579,7 +579,7 @@ human task continuity without a brittle episode builder per task type.
 
 ## Muted Scopes And Consent
 
-The active agent must make user refusal durable and precise.
+The Janus must make user refusal durable and precise.
 
 When the agent asks:
 
@@ -697,7 +697,7 @@ queue.
 ## Main Agent Bridge
 
 The Reflex LLM does not call tools. It sends a structured activation to the main
-agent only after hard policy accepts the posture. The active-agent layer now
+agent only after hard policy accepts the posture. The janus layer now
 records that handoff first, then either leaves it prepared for UI/status or
 submits it to the interaction harness.
 
@@ -712,7 +712,7 @@ Durable activation record:
   "route_id": "route_123",
   "event_sequence": 912,
   "response_mode": "silent",
-  "stimulus_id": "active-agent-reflex_decision_abc",
+  "stimulus_id": "janus-reflex_decision_abc",
   "agent_stimulus": "The user received a high-priority email related to the current proposal. Prepare a draft reply, but do not send it.",
   "allowed_actions": [
     "prepare_draft",
@@ -841,7 +841,7 @@ workflows:
 
 ## UI Requirements
 
-The UI should make the active agent inspectable and controllable.
+The UI should make the Janus inspectable and controllable.
 
 Required surfaces:
 
@@ -878,7 +878,7 @@ Recommended tables or equivalent SQLite stores:
   `candidate`, `accepted`, `rejected`, `private`, or `archived` lifecycle state.
   Helpful feedback promotes accepted candidates into cognition
   `KnowledgeStore` rows and records `promoted_knowledge_id` on the candidate.
-- `active_agent_activations`: accepted `summarize`, `prepare`, `ask_user`,
+- `janus_activations`: accepted `summarize`, `prepare`, `ask_user`,
   `wake_main_agent`, and `request_deep_dive` bridge records with status,
   `response_mode`, `stimulus_id`, evidence refs, and harness result.
 - `active_user_corrections`: merge/split/private/helpfulness feedback.
@@ -889,23 +889,23 @@ Corrections against `target_type=memory_candidate` update candidate state:
 Helpful corrections against a decision or activation also accept and promote
 related candidates. Invalidating corrections archive any linked
 `promoted_knowledge_id`.
-Each transition is mirrored as a safe `active_agent_memory_candidate_status`
+Each transition is mirrored as a safe `janus_memory_candidate_status`
 memory event without raw collector payloads.
 
-The planner consumes promoted active-agent knowledge through an explicit
-`active_agent_memory` runtime context block. It is source-filtered to
-`active_agent_memory_candidate`, confidence-gated, bounded to recent active
+The planner consumes promoted janus knowledge through an explicit
+`janus_memory` runtime context block. It is source-filtered to
+`janus_memory_candidate`, confidence-gated, bounded to recent active
 records, and carries only safe summaries plus evidence refs. The model decides
 relevance; Python does not route by task keywords.
 
-The planner consumes current active-agent continuity through a separate
-`active_agent_state` runtime context block. It contains active episode
+The planner consumes current janus continuity through a separate
+`janus_state` runtime context block. It contains active episode
 summaries, active task summaries, resume capsule summaries, activation
 posture/status/actions, deep-dive request metadata, active muted scopes, and
 explanation summaries. It does not include route dumps, raw model output,
 memory-candidate payloads, full context-window or boundary evidence, correction
 notes, `harness_result`, or raw collector payloads. Generic `recent_memory`
-excludes internal `active_agent_*` audit events so unaccepted candidates cannot
+excludes internal `janus_*` audit events so unaccepted candidates cannot
 bypass the promotion gate.
 
 The Reflex LLM receives recent safe correction and deep-dive status records
@@ -924,7 +924,7 @@ Every table should support:
 ## Proposed Package Layout
 
 ```text
-humungousaur/active_agent/
+humungousaur/janus/
   __init__.py
   router.py
   reflex_interpreter.py
@@ -953,10 +953,10 @@ humungousaur/active_agent/
 Collector-side consumer:
 
 ```text
-humungousaur/collectors/consumers/active_agent.py
+humungousaur/collectors/consumers/janus.py
 ```
 
-The consumer owns offsets over `CollectorEventLog`, calls the active-agent
+The consumer owns offsets over `CollectorEventLog`, calls the janus
 router, stores local decisions, and emits only accepted activations into the
 interaction harness or autonomous queue.
 
@@ -992,7 +992,7 @@ Model-led decisions:
 ## Collector-To-Active-Agent Developer Contract
 
 Every new native, app, browser, IDE, or SaaS collector should be designed with
-the active-agent consumer in mind. The collector does not infer the user's task,
+the janus consumer in mind. The collector does not infer the user's task,
 but it must emit enough safe structure for the active layer to do so later.
 
 Required event properties:
@@ -1069,7 +1069,7 @@ the activity means.
 
 ## UI State Machine
 
-The desktop UI should render active-agent state as a control loop, not just a
+The desktop UI should render janus state as a control loop, not just a
 log viewer.
 
 | UI state | Backend source | User controls |
@@ -1092,16 +1092,16 @@ already made safe.
 
 ### Phase 1: Contracts And Stores
 
-- Add `humungousaur/active_agent/` package.
+- Add `humungousaur/janus/` package.
 - Add structured models for route records, reflex decisions, task contexts,
   episodes, muted scopes, and deep-dive requests.
 - Add SQLite-backed stores with exact evidence refs.
-- Add read-only API/CLI status for active-agent state.
+- Add read-only API/CLI status for janus state.
 - Add docs for activity guide authoring.
 
-### Phase 2: ActiveEventRouter Consumer
+### Phase 2: JanusEventRouter Consumer
 
-- Add `ActiveAgentConsumer` with independent offset.
+- Add `JanusConsumer` with independent offset.
 - Route events into reflex, triage, context, muted, blocked, or deep-dive.
 - Preserve model-unavailable safe behavior.
 - Store route records and compact windows.
@@ -1131,7 +1131,7 @@ already made safe.
 Status: backend slice implemented.
 
 - Accepted `summarize`, `prepare`, `ask_user`, `wake_main_agent`, and `request_deep_dive`
-  decisions become durable `active_agent_activations` records.
+  decisions become durable `janus_activations` records.
 - Activation records expose `prepared`, `pending`, `submitted`, `skipped`, or `failed`
   status, `response_mode`, `stimulus_id`, allowed/forbidden actions, exact
   evidence refs, and captured harness result.
@@ -1144,12 +1144,12 @@ Status: backend slice implemented.
 
 Status: first slice implemented.
 
-- macOS and Windows apps now have an Active Agent panel.
+- macOS and Windows apps now have a Janus panel.
 - The panels show posture, recent decisions, explanations, task context,
   deep-dive requests, muted scopes, collector/source health, and technical
   evidence.
 - Quick correction controls post `helpful`, `not_relevant`, `private`, and
-  `wrong_task` feedback against the selected/latest active-agent target.
+  `wrong_task` feedback against the selected/latest janus target.
 - Muted scopes can be created and cancelled from the desktop panels.
 - Deep-dive requests can be approved or rejected from the desktop panels.
 
@@ -1197,7 +1197,7 @@ Evaluation assertions:
 
 ## Final Principle
 
-The active agent is not an always-running planner. It is a layered nervous
+The Janus is not an always-running planner. It is a layered nervous
 system:
 
 ```text

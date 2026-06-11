@@ -12,12 +12,12 @@ namespace Humungousaur.Collectors.Windows.Collectors.MailCalendar;
 internal sealed class MailCalendarActivityCollector : IDisposable
 {
     private readonly List<FileSystemWatcher> _watchers = [];
-    private readonly Action<NativeCollectorEvent> _emit;
+    private readonly Action<CollectorHostEvent> _emit;
     private readonly ConcurrentDictionary<string, DateTimeOffset> _lastEmitted = new();
     private Dictionary<int, ProcessSnapshot> _processes = SnapshotProcesses();
     private string _lastForegroundSignature = "";
 
-    public MailCalendarActivityCollector(CollectorHostOptions options, Action<NativeCollectorEvent> emit)
+    public MailCalendarActivityCollector(CollectorHostOptions options, Action<CollectorHostEvent> emit)
     {
         _emit = emit;
         foreach (var root in ResolveWatchRoots(options.WatchPaths))
@@ -35,7 +35,7 @@ internal sealed class MailCalendarActivityCollector : IDisposable
         _watchers.Clear();
     }
 
-    public IEnumerable<NativeCollectorEvent> Diff()
+    public IEnumerable<CollectorHostEvent> Diff()
     {
         var current = SnapshotProcesses();
         foreach (var pair in current)
@@ -58,7 +58,7 @@ internal sealed class MailCalendarActivityCollector : IDisposable
         _processes = current;
     }
 
-    public IEnumerable<NativeCollectorEvent> ObserveForeground(WindowSnapshot snapshot)
+    public IEnumerable<CollectorHostEvent> ObserveForeground(WindowSnapshot snapshot)
     {
         var profile = MailCalendarAppProfile.FromWindow(snapshot);
         if (profile is null)
@@ -90,7 +90,7 @@ internal sealed class MailCalendarActivityCollector : IDisposable
         }
     }
 
-    public IEnumerable<NativeCollectorEvent> ObserveKeyDown(uint virtualKey)
+    public IEnumerable<CollectorHostEvent> ObserveKeyDown(uint virtualKey)
     {
         var snapshot = WindowSnapshot.FromForeground();
         if (snapshot is null)
@@ -127,7 +127,7 @@ internal sealed class MailCalendarActivityCollector : IDisposable
         }
     }
 
-    private IEnumerable<NativeCollectorEvent> ProcessStarted(MailCalendarAppProfile profile, ProcessSnapshot process)
+    private IEnumerable<CollectorHostEvent> ProcessStarted(MailCalendarAppProfile profile, ProcessSnapshot process)
     {
         var metadata = ProcessMetadata(process, profile, "windows_process_snapshot_mail_calendar");
         if (profile.SupportsMail && profile.PrimarySurface is "mail" or "suite" && Throttle($"process:mail:{process.ProcessId}", TimeSpan.FromSeconds(3)))
@@ -146,7 +146,7 @@ internal sealed class MailCalendarActivityCollector : IDisposable
         }
     }
 
-    private IEnumerable<NativeCollectorEvent> ObserveMailShortcut(
+    private IEnumerable<CollectorHostEvent> ObserveMailShortcut(
         MailCalendarAppProfile profile,
         uint virtualKey,
         bool ctrl,
@@ -198,7 +198,7 @@ internal sealed class MailCalendarActivityCollector : IDisposable
         }
     }
 
-    private IEnumerable<NativeCollectorEvent> ObserveCalendarShortcut(
+    private IEnumerable<CollectorHostEvent> ObserveCalendarShortcut(
         MailCalendarAppProfile profile,
         uint virtualKey,
         bool ctrl,
@@ -229,7 +229,7 @@ internal sealed class MailCalendarActivityCollector : IDisposable
         }
     }
 
-    private IEnumerable<NativeCollectorEvent> ObserveReminderShortcut(
+    private IEnumerable<CollectorHostEvent> ObserveReminderShortcut(
         MailCalendarAppProfile profile,
         uint virtualKey,
         bool ctrl,
@@ -296,7 +296,7 @@ internal sealed class MailCalendarActivityCollector : IDisposable
         }
     }
 
-    private IEnumerable<NativeCollectorEvent> ClassifyFileChange(string root, string path, WatcherChangeTypes changeType)
+    private IEnumerable<CollectorHostEvent> ClassifyFileChange(string root, string path, WatcherChangeTypes changeType)
     {
         var normalized = Normalize(path);
         var fileName = Path.GetFileName(normalized);
@@ -334,7 +334,7 @@ internal sealed class MailCalendarActivityCollector : IDisposable
         }
     }
 
-    private static IEnumerable<NativeCollectorEvent> CalendarFileEvents(WatcherChangeTypes changeType, Dictionary<string, string> metadata)
+    private static IEnumerable<CollectorHostEvent> CalendarFileEvents(WatcherChangeTypes changeType, Dictionary<string, string> metadata)
     {
         yield return changeType switch
         {
@@ -345,7 +345,7 @@ internal sealed class MailCalendarActivityCollector : IDisposable
         };
     }
 
-    private static IEnumerable<NativeCollectorEvent> ReminderFileEvents(WatcherChangeTypes changeType, Dictionary<string, string> metadata)
+    private static IEnumerable<CollectorHostEvent> ReminderFileEvents(WatcherChangeTypes changeType, Dictionary<string, string> metadata)
     {
         yield return changeType switch
         {
@@ -369,13 +369,13 @@ internal sealed class MailCalendarActivityCollector : IDisposable
         return true;
     }
 
-    private static NativeCollectorEvent Metadata(string collector, string stimulusType, string text, Dictionary<string, string> metadata) =>
+    private static CollectorHostEvent Metadata(string collector, string stimulusType, string text, Dictionary<string, string> metadata) =>
         Create(collector, SourceFor(collector), stimulusType, text, metadata, "metadata");
 
-    private static NativeCollectorEvent Sensitive(string collector, string stimulusType, string text, Dictionary<string, string> metadata) =>
+    private static CollectorHostEvent Sensitive(string collector, string stimulusType, string text, Dictionary<string, string> metadata) =>
         Create(collector, SourceFor(collector), stimulusType, text, SensitiveMetadata(metadata), "sensitive_metadata");
 
-    private static NativeCollectorEvent Create(string collector, string source, string stimulusType, string text, Dictionary<string, string> metadata, string privacyTier) =>
+    private static CollectorHostEvent Create(string collector, string source, string stimulusType, string text, Dictionary<string, string> metadata, string privacyTier) =>
         new(collector, source, stimulusType, text, metadata, PrivacyTier: privacyTier);
 
     private static string SourceFor(string collector) => collector switch

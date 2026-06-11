@@ -11,9 +11,9 @@ from humungousaur.interaction import InteractionHarness, harness_result_to_dict
 from humungousaur.memory.event_store import EventStore
 
 from .deep_dive import execute_approved_deep_dive
-from .models import ActivationResponse, ActiveEpisode, Confidence, DeepDiveRequest, MutedScope, MutedScopeMode, TaskContext, new_id
+from .models import ActivationResponse, JanusEpisode, Confidence, DeepDiveRequest, MutedScope, MutedScopeMode, TaskContext, new_id
 from .memory_promotion import promote_memory_candidate, retract_promoted_memory_candidate
-from .store import ActiveAgentStore
+from .store import JanusStore
 
 
 CORRECTION_TYPES = {
@@ -27,29 +27,29 @@ CORRECTION_TYPES = {
 }
 
 
-def active_agent_status(config: AgentConfig, *, limit: int = 20) -> dict[str, Any]:
+def janus_status(config: AgentConfig, *, limit: int = 20) -> dict[str, Any]:
     normalized = config.normalized()
-    status = ActiveAgentStore(normalized.active_agent_db_path).status(limit=limit)
-    active_provider = normalized.active_model_provider or "same-as-main"
-    active_model_name = normalized.active_model_name or normalized.model_name
+    status = JanusStore(normalized.janus_db_path).status(limit=limit)
+    active_provider = normalized.janus_model_provider or "same-as-main"
+    janus_model_name = normalized.janus_model_name or normalized.model_name
     status["reflex_model"] = {
         "planner_provider": normalized.planner_provider,
         "main_model_provider": normalized.model_provider,
         "main_model_name": normalized.model_name,
-        "active_model_provider": active_provider,
-        "active_model_name": active_model_name,
+        "janus_model_provider": active_provider,
+        "janus_model_name": janus_model_name,
         "effective_model_provider": normalized.model_provider if active_provider == "same-as-main" else active_provider,
-        "effective_model_name": active_model_name,
+        "effective_model_name": janus_model_name,
         "local_provider_supported": (normalized.model_provider if active_provider == "same-as-main" else active_provider)
         in {"auto", "ollama", "local-openai"},
-        "note": "Active-agent reflex interpretation uses active_model_* when configured; otherwise it uses the main agent model.",
+        "note": "Janus reflex interpretation uses janus_model_* when configured; otherwise it uses the main agent model.",
     }
     return status
 
 
 def declare_task_context(config: AgentConfig, payload: dict[str, Any]) -> dict[str, Any]:
     normalized = config.normalized()
-    store = ActiveAgentStore(normalized.active_agent_db_path)
+    store = JanusStore(normalized.janus_db_path)
     context = TaskContext(
         task_context_id=str(payload.get("task_context_id") or new_id("ctx")),
         status=str(payload.get("status") or "active"),
@@ -87,11 +87,11 @@ def create_muted_scope(config: AgentConfig, payload: dict[str, Any]) -> dict[str
         do_not_deep_dive=bool(payload.get("do_not_deep_dive", True)),
         do_not_send_to_llm=bool(payload.get("do_not_send_to_llm", True)),
         do_not_store=bool(payload.get("do_not_store", mode == MutedScopeMode.DO_NOT_TRACK)),
-        reason=_clean(payload.get("reason") or "User muted active-agent assistance for this scope.", limit=1_000),
+        reason=_clean(payload.get("reason") or "User muted janus assistance for this scope.", limit=1_000),
     )
     if not (scope.entity_refs or scope.collector or scope.source or scope.stimulus_type):
         raise ValueError("muted scope requires entity_refs, collector, source, or stimulus_type")
-    store = ActiveAgentStore(normalized.active_agent_db_path)
+    store = JanusStore(normalized.janus_db_path)
     stored = store.create_muted_scope(scope)
     return {"muted_scope": asdict(stored), "status": store.status(limit=10)}
 
@@ -101,7 +101,7 @@ def cancel_muted_scope(config: AgentConfig, payload: dict[str, Any]) -> dict[str
     scope_id = _clean(payload.get("scope_id") or payload.get("id"), limit=160)
     if not scope_id:
         raise ValueError("scope_id is required")
-    store = ActiveAgentStore(normalized.active_agent_db_path)
+    store = JanusStore(normalized.janus_db_path)
     updated = store.cancel_muted_scope(scope_id, reason=_clean(payload.get("reason"), limit=500))
     if updated is None:
         raise ValueError(f"muted scope not found: {scope_id}")
@@ -113,14 +113,14 @@ def record_user_correction(config: AgentConfig, payload: dict[str, Any]) -> dict
     correction_type = _clean(payload.get("correction_type") or payload.get("type"), limit=80)
     if correction_type not in CORRECTION_TYPES:
         raise ValueError(f"unsupported correction_type: {correction_type or '<empty>'}")
-    target_type = _clean(payload.get("target_type") or "active_agent", limit=120)
+    target_type = _clean(payload.get("target_type") or "janus", limit=120)
     target_id = _clean(payload.get("target_id") or payload.get("id"), limit=200)
     if not target_id:
         raise ValueError("target_id is required")
     note = _clean(payload.get("note") or payload.get("reason"), limit=1_000)
     evidence_refs = [_clean(item, limit=240) for item in _list(payload.get("evidence_refs")) if _clean(item, limit=240)]
     evidence_refs.append(f"{target_type}:{target_id}")
-    store = ActiveAgentStore(normalized.active_agent_db_path)
+    store = JanusStore(normalized.janus_db_path)
     task_context_id = ""
     muted_scope_id = ""
     memory_candidate: dict[str, Any] | None = None
@@ -194,7 +194,7 @@ def record_user_correction(config: AgentConfig, payload: dict[str, Any]) -> dict
                     if retracted is not None:
                         retracted_memories.append(retracted)
                 EventStore(normalized.memory_db_path).append(
-                    "active_agent_memory_candidate_status",
+                    "janus_memory_candidate_status",
                     {
                         "candidate_id": memory_candidate["candidate_id"],
                         "status": memory_candidate["status"],
@@ -230,7 +230,7 @@ def record_user_correction(config: AgentConfig, payload: dict[str, Any]) -> dict
                     promoted_memory = promoted
             cascaded_memory_candidates.append(updated_candidate)
             EventStore(normalized.memory_db_path).append(
-                "active_agent_memory_candidate_status",
+                "janus_memory_candidate_status",
                 {
                     "candidate_id": updated_candidate.get("candidate_id", ""),
                     "status": updated_candidate.get("status", ""),
@@ -277,7 +277,7 @@ def record_user_correction(config: AgentConfig, payload: dict[str, Any]) -> dict
                     cascaded_activations.append(updated_activation)
         if cascaded_memory_candidates or cascaded_activations:
             EventStore(normalized.memory_db_path).append(
-                "active_agent_correction_cascade",
+                "janus_correction_cascade",
                 {
                     "target_type": target_type,
                     "target_id": target_id,
@@ -325,7 +325,7 @@ def create_deep_dive_request(config: AgentConfig, payload: dict[str, Any]) -> di
     )
     if not request.purpose or not request.source or not request.requested_access:
         raise ValueError("purpose, source, and requested_access are required")
-    store = ActiveAgentStore(normalized.active_agent_db_path)
+    store = JanusStore(normalized.janus_db_path)
     stored = store.record_deep_dive_request(request)
     return {"deep_dive_request": asdict(stored), "status": store.status(limit=10)}
 
@@ -346,7 +346,7 @@ def update_deep_dive_request(config: AgentConfig, payload: dict[str, Any], *, st
         raise ValueError("request_id is required")
     if not next_status:
         raise ValueError("status is required")
-    store = ActiveAgentStore(normalized.active_agent_db_path)
+    store = JanusStore(normalized.janus_db_path)
     updated = store.update_deep_dive_status(
         request_id,
         status=next_status,
@@ -370,7 +370,7 @@ def execute_deep_dive_request(config: AgentConfig, payload: dict[str, Any]) -> d
 
 def apply_episode_operation(config: AgentConfig, payload: dict[str, Any]) -> dict[str, Any]:
     normalized = config.normalized()
-    store = ActiveAgentStore(normalized.active_agent_db_path)
+    store = JanusStore(normalized.janus_db_path)
     operation = _clean(payload.get("operation") or payload.get("action"), limit=80)
     episode_id = _clean(payload.get("episode_id"), limit=160)
     reason = _clean(payload.get("reason"), limit=1_000)
@@ -397,7 +397,7 @@ def apply_episode_operation(config: AgentConfig, payload: dict[str, Any]) -> dic
             source_episode_id=episode_id,
             target_episode_id=target_episode_id,
             relation="merged_into",
-            reason=reason or "User/model merged related active-agent episodes.",
+            reason=reason or "User/model merged related janus episodes.",
             evidence_refs=[*evidence_refs, f"episode:{episode_id}", f"episode:{target_episode_id}"],
         )
         updated = store.update_episode_status(
@@ -409,11 +409,11 @@ def apply_episode_operation(config: AgentConfig, payload: dict[str, Any]) -> dic
         result.update({"episode": updated, "episode_link": link})
     elif operation == "split":
         new_episode_id = _clean(payload.get("new_episode_id") or new_id("episode"), limit=160)
-        summary = _clean(payload.get("summary") or current.get("summary") or "Split active-agent episode.", limit=1_000)
+        summary = _clean(payload.get("summary") or current.get("summary") or "Split janus episode.", limit=1_000)
         hypothesis = _clean(payload.get("hypothesis") or summary, limit=1_000)
         refs = [*evidence_refs, f"episode:{episode_id}"]
         new_episode = store.upsert_episode(
-            ActiveEpisode(
+            JanusEpisode(
                 episode_id=new_episode_id,
                 status="active",
                 source="episode_operation",
@@ -441,7 +441,7 @@ def apply_episode_operation(config: AgentConfig, payload: dict[str, Any]) -> dic
 
 def respond_to_activation(config: AgentConfig, payload: dict[str, Any]) -> dict[str, Any]:
     normalized = config.normalized()
-    store = ActiveAgentStore(normalized.active_agent_db_path)
+    store = JanusStore(normalized.janus_db_path)
     activation_id = _clean(payload.get("activation_id") or payload.get("id"), limit=160)
     response_type = _clean(payload.get("response_type") or payload.get("type"), limit=80)
     text = _clean(payload.get("text") or payload.get("message") or payload.get("note"), limit=2_000)
@@ -491,8 +491,8 @@ def respond_to_activation(config: AgentConfig, payload: dict[str, Any]) -> dict[
             task_context_id = str((task.get("task_context") or {}).get("task_context_id") or "")
         if response_type == "wake_agent" or bool(payload.get("run_agent", False)):
             stimulus = {
-                "text": text or activation.get("agent_stimulus") or activation.get("user_visible_text") or "User accepted active-agent help.",
-                "source": "active_agent_activation_response",
+                "text": text or activation.get("agent_stimulus") or activation.get("user_visible_text") or "User accepted janus help.",
+                "source": "janus_activation_response",
                 "metadata": {
                     "activation_id": activation_id,
                     "task_context_id": task_context_id,
@@ -505,10 +505,10 @@ def respond_to_activation(config: AgentConfig, payload: dict[str, Any]) -> dict[
                 approve_high_risk=bool(payload.get("approve_high_risk", False)),
             )
             harness_result = harness_result_to_dict(harness)
-            store.update_activation_status(activation_id, status="submitted", harness_result=harness_result, reason=text or "User accepted active-agent help.")
+            store.update_activation_status(activation_id, status="submitted", harness_result=harness_result, reason=text or "User accepted janus help.")
             action_taken = "woke_agent"
         else:
-            store.update_activation_status(activation_id, status="prepared", reason=text or "User accepted active-agent help.")
+            store.update_activation_status(activation_id, status="prepared", reason=text or "User accepted janus help.")
             action_taken = "accepted"
     response = store.record_activation_response(
         ActivationResponse(
@@ -526,9 +526,9 @@ def respond_to_activation(config: AgentConfig, payload: dict[str, Any]) -> dict[
     return {"activation_response": asdict(response), "status": store.status(limit=10)}
 
 
-def active_agent_privacy_export(config: AgentConfig, payload: dict[str, Any]) -> dict[str, Any]:
+def janus_privacy_export(config: AgentConfig, payload: dict[str, Any]) -> dict[str, Any]:
     normalized = config.normalized()
-    store = ActiveAgentStore(normalized.active_agent_db_path)
+    store = JanusStore(normalized.janus_db_path)
     limit = max(1, min(int(payload.get("limit") or 100), 500))
     scope = _privacy_scope(payload)
     status = store.status(limit=limit)
@@ -536,7 +536,7 @@ def active_agent_privacy_export(config: AgentConfig, payload: dict[str, Any]) ->
     export["privacy_export"] = {
         "scope": scope,
         "raw_collector_payloads_included": False,
-        "note": "Export contains active-agent summaries, state records, ids, and evidence refs from active_agent.sqlite3 only.",
+        "note": "Export contains janus summaries, state records, ids, and evidence refs from janus.sqlite3 only.",
     }
     action = store.record_privacy_action(
         action_id=new_id("privacy"),
@@ -544,15 +544,15 @@ def active_agent_privacy_export(config: AgentConfig, payload: dict[str, Any]) ->
         scope=scope,
         affected_counts={key: len(value) for key, value in export.items() if isinstance(value, list)},
         status="completed",
-        reason=_clean(payload.get("reason") or "User requested active-agent export.", limit=500),
+        reason=_clean(payload.get("reason") or "User requested janus export.", limit=500),
     )
     export["privacy_action"] = action
     return export
 
 
-def active_agent_privacy_delete(config: AgentConfig, payload: dict[str, Any]) -> dict[str, Any]:
+def janus_privacy_delete(config: AgentConfig, payload: dict[str, Any]) -> dict[str, Any]:
     normalized = config.normalized()
-    store = ActiveAgentStore(normalized.active_agent_db_path)
+    store = JanusStore(normalized.janus_db_path)
     scope = _privacy_scope(payload)
     counts = _delete_privacy_scope(store, scope)
     action = store.record_privacy_action(
@@ -561,14 +561,14 @@ def active_agent_privacy_delete(config: AgentConfig, payload: dict[str, Any]) ->
         scope=scope,
         affected_counts=counts,
         status="completed",
-        reason=_clean(payload.get("reason") or "User requested active-agent scoped deletion.", limit=500),
+        reason=_clean(payload.get("reason") or "User requested janus scoped deletion.", limit=500),
     )
     return {"privacy_action": action, "status": store.status(limit=10)}
 
 
-def run_active_agent_eval(config: AgentConfig, payload: dict[str, Any]) -> dict[str, Any]:
+def run_janus_eval(config: AgentConfig, payload: dict[str, Any]) -> dict[str, Any]:
     normalized = config.normalized()
-    store = ActiveAgentStore(normalized.active_agent_db_path)
+    store = JanusStore(normalized.janus_db_path)
     scenario = _clean(payload.get("scenario") or "status_replay", limit=160)
     status = store.status(limit=max(20, min(int(payload.get("limit") or 100), 500)))
     failures: list[dict[str, Any]] = []
@@ -593,7 +593,7 @@ def run_active_agent_eval(config: AgentConfig, payload: dict[str, Any]) -> dict[
         eval_id=_clean(payload.get("eval_id") or new_id("eval"), limit=160),
         scenario=scenario,
         status="failed" if failures else "passed",
-        summary=f"Active-agent replay eval {scenario} checked {metrics['decisions']} decision(s), {metrics['episodes']} episode(s), and {metrics['deep_dive_requests']} deep-dive request(s).",
+        summary=f"Janus replay eval {scenario} checked {metrics['decisions']} decision(s), {metrics['episodes']} episode(s), and {metrics['deep_dive_requests']} deep-dive request(s).",
         metrics=metrics,
         failures=failures,
     )
@@ -616,15 +616,15 @@ def _project_task_context_to_focus(config: AgentConfig, context: TaskContext) ->
     ][:8]
     metadata = {
         **current.metadata,
-        "active_agent_task_context_id": context.task_context_id,
-        "active_agent_episode_id": context.episode_id,
-        "active_agent_source": context.source,
-        "active_agent_assistant_mode": context.assistant_mode,
-        "active_agent_privacy_mode": context.privacy_mode,
-        "active_agent_allowed_help": context.allowed_help,
-        "active_agent_evidence_refs": context.evidence_refs,
-        "active_agent_primary_entities": context.primary_entities[:10],
-        "active_agent_supporting_entities": context.supporting_entities[:10],
+        "janus_task_context_id": context.task_context_id,
+        "janus_episode_id": context.episode_id,
+        "janus_source": context.source,
+        "janus_assistant_mode": context.assistant_mode,
+        "janus_privacy_mode": context.privacy_mode,
+        "janus_allowed_help": context.allowed_help,
+        "janus_evidence_refs": context.evidence_refs,
+        "janus_primary_entities": context.primary_entities[:10],
+        "janus_supporting_entities": context.supporting_entities[:10],
     }
     focus = store.update(
         mode=FocusMode.MONITORING,
@@ -704,12 +704,12 @@ def _target_type_matches(record: dict[str, Any], target_type: str) -> bool:
     return not marker or bool(record.get(marker))
 
 
-def _delete_privacy_scope(store: ActiveAgentStore, scope: dict[str, str]) -> dict[str, int]:
+def _delete_privacy_scope(store: JanusStore, scope: dict[str, str]) -> dict[str, int]:
     if not any(scope.values()):
         raise ValueError("privacy delete requires at least one scope field")
     counts: dict[str, int] = {}
     tables = {
-        "active_agent_activations": ["activation_id", "decision_id", "route_id"],
+        "janus_activations": ["activation_id", "decision_id", "route_id"],
         "active_reflex_decisions": ["decision_id", "route_id"],
         "active_memory_candidates": ["candidate_id", "decision_id", "route_id"],
         "active_task_contexts": ["task_context_id", "episode_id"],
@@ -745,7 +745,7 @@ def _delete_privacy_scope(store: ActiveAgentStore, scope: dict[str, str]) -> dic
     return counts
 
 
-def _cascade_decision_id(store: ActiveAgentStore, *, target_type: str, target_id: str) -> str:
+def _cascade_decision_id(store: JanusStore, *, target_type: str, target_id: str) -> str:
     if target_type == "decision":
         return target_id
     if target_type == "activation":

@@ -6,7 +6,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     case workboard
     case runs
     case approvals
-    case activeAgent
+    case janus
     case tools
     case connectors
     case channels
@@ -23,7 +23,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .workboard: "Workboard"
         case .runs: "Runs"
         case .approvals: "Permissions"
-        case .activeAgent: "Active Agent"
+        case .janus: "Janus"
         case .tools: "Capabilities"
         case .connectors: "Connectors"
         case .channels: "Channels"
@@ -40,7 +40,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .workboard: "rectangle.3.group"
         case .runs: "clock.arrow.circlepath"
         case .approvals: "checkmark.seal"
-        case .activeAgent: "antenna.radiowaves.left.and.right"
+        case .janus: "antenna.radiowaves.left.and.right"
         case .tools: "wrench.and.screwdriver"
         case .connectors: "link.badge.plus"
         case .channels: "point.3.connected.trianglepath.dotted"

@@ -1,6 +1,6 @@
 # Humungousaur macOS Collectors
 
-The macOS native collector host is a SwiftPM helper that emits privacy-first
+The macOS platform collector host is a SwiftPM helper that emits privacy-first
 collector event envelopes into Humungousaur's JSONL bridge spool. The Python
 runtime still owns durable SQLite storage, batching, memory, consumers, and LLM
 boundaries.
@@ -277,7 +277,7 @@ them.
 ## Build
 
 ```sh
-cd native_collectors/macos
+cd collectors/macos
 swift build
 ```
 

@@ -22,7 +22,7 @@ cognitive_decision: |
   {decision_input}
 
 reflex_interpretation: |
-  Interpret one local collector route for Humungousaur's active-agent reflex layer.
+  Interpret one local collector route for Humungousaur's janus reflex layer.
   Return JSON only. Do not execute tools.
   Global intelligence rule: do not use pattern-based, regex-based, keyword-list-based, hardcoded-constant-based, deterministic natural-language handling, static routing, or handcrafted cases for user-activity stimulus interpretation, task inference, interruption posture, proactive assistance, memory importance, or deep-dive usefulness.
   Use model reasoning over the structured collector event, route class, recent context window, active episode hypotheses, episode event history, user-declared task contexts, recent user corrections, deep-dive request history, muted scopes, policy, and activity guides.

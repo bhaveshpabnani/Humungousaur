@@ -1,6 +1,6 @@
 import Foundation
 
-final class NativeCollectorHostRuntime {
+final class CollectorHostRuntime {
     private let coreOSContext: CoreOSContextRuntime
     private let communicationMeetings: CommunicationMeetingsRuntime
     private let osSystemSurfaces: OSSystemSurfacesRuntime

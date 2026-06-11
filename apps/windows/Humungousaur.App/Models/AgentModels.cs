@@ -364,61 +364,61 @@ public sealed class ConnectorAuthorization
     public List<string> Scopes { get; set; } = [];
 }
 
-public sealed class ActiveAgentStatusResponse
+public sealed class JanusStatusResponse
 {
     [JsonPropertyName("routes")]
-    public List<ActiveAgentRecord> Routes { get; set; } = [];
+    public List<JanusRecord> Routes { get; set; } = [];
 
     [JsonPropertyName("decisions")]
-    public List<ActiveAgentRecord> Decisions { get; set; } = [];
+    public List<JanusRecord> Decisions { get; set; } = [];
 
     [JsonPropertyName("activations")]
-    public List<ActiveAgentRecord> Activations { get; set; } = [];
+    public List<JanusRecord> Activations { get; set; } = [];
 
     [JsonPropertyName("memory_candidates")]
-    public List<ActiveAgentRecord> MemoryCandidates { get; set; } = [];
+    public List<JanusRecord> MemoryCandidates { get; set; } = [];
 
     [JsonPropertyName("task_contexts")]
-    public List<ActiveAgentRecord> TaskContexts { get; set; } = [];
+    public List<JanusRecord> TaskContexts { get; set; } = [];
 
     [JsonPropertyName("muted_scopes")]
-    public List<ActiveAgentRecord> MutedScopes { get; set; } = [];
+    public List<JanusRecord> MutedScopes { get; set; } = [];
 
     [JsonPropertyName("deep_dive_requests")]
-    public List<ActiveAgentRecord> DeepDiveRequests { get; set; } = [];
+    public List<JanusRecord> DeepDiveRequests { get; set; } = [];
 
     [JsonPropertyName("deep_dive_results")]
-    public List<ActiveAgentRecord> DeepDiveResults { get; set; } = [];
+    public List<JanusRecord> DeepDiveResults { get; set; } = [];
 
     [JsonPropertyName("activation_responses")]
-    public List<ActiveAgentRecord> ActivationResponses { get; set; } = [];
+    public List<JanusRecord> ActivationResponses { get; set; } = [];
 
     [JsonPropertyName("episode_links")]
-    public List<ActiveAgentRecord> EpisodeLinks { get; set; } = [];
+    public List<JanusRecord> EpisodeLinks { get; set; } = [];
 
     [JsonPropertyName("privacy_actions")]
-    public List<ActiveAgentRecord> PrivacyActions { get; set; } = [];
+    public List<JanusRecord> PrivacyActions { get; set; } = [];
 
     [JsonPropertyName("eval_runs")]
-    public List<ActiveAgentRecord> EvalRuns { get; set; } = [];
+    public List<JanusRecord> EvalRuns { get; set; } = [];
 
     [JsonPropertyName("context_window")]
     public JsonObject? ContextWindow { get; set; }
 
     [JsonPropertyName("context_windows")]
-    public List<ActiveAgentRecord> ContextWindows { get; set; } = [];
+    public List<JanusRecord> ContextWindows { get; set; } = [];
 
     [JsonPropertyName("context_boundaries")]
-    public List<ActiveAgentRecord> ContextBoundaries { get; set; } = [];
+    public List<JanusRecord> ContextBoundaries { get; set; } = [];
 
     [JsonPropertyName("resume_capsules")]
-    public List<ActiveAgentRecord> ResumeCapsules { get; set; } = [];
+    public List<JanusRecord> ResumeCapsules { get; set; } = [];
 
     [JsonPropertyName("explanations")]
-    public List<ActiveAgentRecord> Explanations { get; set; } = [];
+    public List<JanusRecord> Explanations { get; set; } = [];
 
     [JsonPropertyName("corrections")]
-    public List<ActiveAgentRecord> Corrections { get; set; } = [];
+    public List<JanusRecord> Corrections { get; set; } = [];
 
     public (string TargetType, string TargetId)? LatestTarget
     {
@@ -455,7 +455,7 @@ public sealed class ActiveAgentStatusResponse
         ?? "listening";
 }
 
-public sealed class ActiveAgentRecord
+public sealed class JanusRecord
 {
     [JsonExtensionData]
     public Dictionary<string, JsonElement> Values { get; set; } = [];

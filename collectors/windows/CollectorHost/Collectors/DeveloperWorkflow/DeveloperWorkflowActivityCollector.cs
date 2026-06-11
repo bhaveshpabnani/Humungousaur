@@ -13,13 +13,13 @@ namespace Humungousaur.Collectors.Windows.Collectors.DeveloperWorkflow;
 internal sealed class DeveloperWorkflowActivityCollector : IDisposable
 {
     private readonly List<FileSystemWatcher> _watchers = [];
-    private readonly Action<NativeCollectorEvent> _emit;
+    private readonly Action<CollectorHostEvent> _emit;
     private readonly ConcurrentDictionary<string, DateTimeOffset> _lastEmitted = new();
     private Dictionary<int, ProcessSnapshot> _processes = SnapshotProcesses();
     private HashSet<string> _listeners = SnapshotLocalListeners();
     private string _lastForegroundSignature = "";
 
-    public DeveloperWorkflowActivityCollector(CollectorHostOptions options, Action<NativeCollectorEvent> emit)
+    public DeveloperWorkflowActivityCollector(CollectorHostOptions options, Action<CollectorHostEvent> emit)
     {
         _emit = emit;
         foreach (var root in ResolveWatchRoots(options.WatchPaths))
@@ -37,7 +37,7 @@ internal sealed class DeveloperWorkflowActivityCollector : IDisposable
         _watchers.Clear();
     }
 
-    public IEnumerable<NativeCollectorEvent> Diff()
+    public IEnumerable<CollectorHostEvent> Diff()
     {
         foreach (var processEvent in ObserveProcessDiff())
         {
@@ -49,7 +49,7 @@ internal sealed class DeveloperWorkflowActivityCollector : IDisposable
         }
     }
 
-    public IEnumerable<NativeCollectorEvent> ObserveForeground(WindowSnapshot snapshot)
+    public IEnumerable<CollectorHostEvent> ObserveForeground(WindowSnapshot snapshot)
     {
         var process = SafeProcessName(snapshot.ProcessName);
         var signature = $"{process}:{snapshot.TitleHash}:{snapshot.TitleLength}";
@@ -86,7 +86,7 @@ internal sealed class DeveloperWorkflowActivityCollector : IDisposable
         }
     }
 
-    public IEnumerable<NativeCollectorEvent> ObserveKeyDown(uint virtualKey)
+    public IEnumerable<CollectorHostEvent> ObserveKeyDown(uint virtualKey)
     {
         var snapshot = WindowSnapshot.FromForeground();
         if (snapshot is null)
@@ -127,7 +127,7 @@ internal sealed class DeveloperWorkflowActivityCollector : IDisposable
         }
     }
 
-    private IEnumerable<NativeCollectorEvent> ObserveProcessDiff()
+    private IEnumerable<CollectorHostEvent> ObserveProcessDiff()
     {
         var current = SnapshotProcesses();
         foreach (var pair in current)
@@ -153,7 +153,7 @@ internal sealed class DeveloperWorkflowActivityCollector : IDisposable
         _processes = current;
     }
 
-    private IEnumerable<NativeCollectorEvent> ObserveLocalListeners()
+    private IEnumerable<CollectorHostEvent> ObserveLocalListeners()
     {
         var current = SnapshotLocalListeners();
         foreach (var listener in current)
@@ -181,7 +181,7 @@ internal sealed class DeveloperWorkflowActivityCollector : IDisposable
         _listeners = current;
     }
 
-    private IEnumerable<NativeCollectorEvent> ProcessStarted(ProcessSnapshot process)
+    private IEnumerable<CollectorHostEvent> ProcessStarted(ProcessSnapshot process)
     {
         var metadata = ProcessMetadata(process, "windows_process_snapshot_start");
         if (ToolSets.Terminals.Contains(process.Name))
@@ -228,7 +228,7 @@ internal sealed class DeveloperWorkflowActivityCollector : IDisposable
         }
     }
 
-    private IEnumerable<NativeCollectorEvent> ProcessStopped(ProcessSnapshot process)
+    private IEnumerable<CollectorHostEvent> ProcessStopped(ProcessSnapshot process)
     {
         var metadata = ProcessMetadata(process, "windows_process_snapshot_stop");
         if (ToolSets.Terminals.Contains(process.Name))
@@ -296,7 +296,7 @@ internal sealed class DeveloperWorkflowActivityCollector : IDisposable
         }
     }
 
-    private IEnumerable<NativeCollectorEvent> ClassifyDeveloperFileChange(string root, string path, WatcherChangeTypes changeType)
+    private IEnumerable<CollectorHostEvent> ClassifyDeveloperFileChange(string root, string path, WatcherChangeTypes changeType)
     {
         var normalized = Normalize(path);
         var fileName = Path.GetFileName(normalized);
@@ -333,7 +333,7 @@ internal sealed class DeveloperWorkflowActivityCollector : IDisposable
         }
     }
 
-    private IEnumerable<NativeCollectorEvent> ClassifyGitMetadata(string normalized, string fileName, WatcherChangeTypes changeType, Dictionary<string, string> metadata)
+    private IEnumerable<CollectorHostEvent> ClassifyGitMetadata(string normalized, string fileName, WatcherChangeTypes changeType, Dictionary<string, string> metadata)
     {
         if (fileName.Equals("head", StringComparison.OrdinalIgnoreCase) && Throttle($"git-head:{StableHash(normalized)}", TimeSpan.FromSeconds(2)))
         {
@@ -377,7 +377,7 @@ internal sealed class DeveloperWorkflowActivityCollector : IDisposable
         return true;
     }
 
-    private static NativeCollectorEvent Create(string collector, string stimulusType, string text, Dictionary<string, string> metadata, string privacyTier = "metadata") =>
+    private static CollectorHostEvent Create(string collector, string stimulusType, string text, Dictionary<string, string> metadata, string privacyTier = "metadata") =>
         new(collector, "activity", stimulusType, text, metadata, PrivacyTier: privacyTier);
 
     private static Dictionary<string, string> ProcessMetadata(ProcessSnapshot process, string nativeSource)

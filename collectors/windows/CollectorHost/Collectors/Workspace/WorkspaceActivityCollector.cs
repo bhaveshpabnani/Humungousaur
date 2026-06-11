@@ -14,7 +14,7 @@ internal sealed class WorkspaceActivityCollector
     private string _lastAppWorkspaceSignature = "";
     private DisplaySnapshot _displaySnapshot = DisplaySnapshot.Current();
 
-    public IEnumerable<NativeCollectorEvent> Diff()
+    public IEnumerable<CollectorHostEvent> Diff()
     {
         var current = DisplaySnapshot.Current();
         foreach (var collectorEvent in _displaySnapshot.Diff(current))
@@ -24,7 +24,7 @@ internal sealed class WorkspaceActivityCollector
         _displaySnapshot = current;
     }
 
-    public IEnumerable<NativeCollectorEvent> ObserveForeground(WindowSnapshot snapshot)
+    public IEnumerable<CollectorHostEvent> ObserveForeground(WindowSnapshot snapshot)
     {
         foreach (var appWorkspaceEvent in ObserveAppWorkspace(snapshot))
         {
@@ -36,7 +36,7 @@ internal sealed class WorkspaceActivityCollector
         }
     }
 
-    public IEnumerable<NativeCollectorEvent> ObserveWindowGeometry(WindowSnapshot snapshot)
+    public IEnumerable<CollectorHostEvent> ObserveWindowGeometry(WindowSnapshot snapshot)
     {
         if (!snapshot.IsVisible)
         {
@@ -63,7 +63,7 @@ internal sealed class WorkspaceActivityCollector
         metadata["arrangement_confidence"] = arrangement.Confidence;
         metadata["window_title_omitted"] = "true";
         metadata["screen_content_omitted"] = "true";
-        yield return new NativeCollectorEvent(
+        yield return new CollectorHostEvent(
             CollectorCatalog.WindowArrangementActivity,
             "system",
             arrangement.StimulusType,
@@ -73,7 +73,7 @@ internal sealed class WorkspaceActivityCollector
         );
     }
 
-    public IEnumerable<NativeCollectorEvent> ObserveKeyDown(uint virtualKey)
+    public IEnumerable<CollectorHostEvent> ObserveKeyDown(uint virtualKey)
     {
         var foreground = WindowSnapshot.FromForeground();
         var metadata = foreground is null
@@ -91,7 +91,7 @@ internal sealed class WorkspaceActivityCollector
 
         if (win && virtualKey == (uint)NativeMethods.VkTab)
         {
-            yield return new NativeCollectorEvent(
+            yield return new CollectorHostEvent(
                 CollectorCatalog.WorkspaceLayoutActivity,
                 "system",
                 "workspace_overview_opened",
@@ -103,7 +103,7 @@ internal sealed class WorkspaceActivityCollector
         else if (win && ctrl && (virtualKey == (uint)NativeMethods.VkLeft || virtualKey == (uint)NativeMethods.VkRight))
         {
             metadata["desktop_direction"] = virtualKey == (uint)NativeMethods.VkLeft ? "previous" : "next";
-            yield return new NativeCollectorEvent(
+            yield return new CollectorHostEvent(
                 CollectorCatalog.WorkspaceLayoutActivity,
                 "system",
                 "desktop_space_switched",
@@ -115,7 +115,7 @@ internal sealed class WorkspaceActivityCollector
         else if (win && shift && (virtualKey == (uint)NativeMethods.VkLeft || virtualKey == (uint)NativeMethods.VkRight))
         {
             metadata["display_move_direction"] = virtualKey == (uint)NativeMethods.VkLeft ? "previous_display" : "next_display";
-            yield return new NativeCollectorEvent(
+            yield return new CollectorHostEvent(
                 CollectorCatalog.WindowArrangementActivity,
                 "system",
                 "window_moved_to_display",
@@ -127,7 +127,7 @@ internal sealed class WorkspaceActivityCollector
         else if (win && (virtualKey == (uint)NativeMethods.VkLeft || virtualKey == (uint)NativeMethods.VkRight || virtualKey == (uint)NativeMethods.VkUp || virtualKey == (uint)NativeMethods.VkDown))
         {
             metadata["snap_direction"] = SnapDirection(virtualKey);
-            yield return new NativeCollectorEvent(
+            yield return new CollectorHostEvent(
                 CollectorCatalog.WindowArrangementActivity,
                 "system",
                 "window_snapped",
@@ -138,7 +138,7 @@ internal sealed class WorkspaceActivityCollector
         }
     }
 
-    public IEnumerable<NativeCollectorEvent> ObserveMessage(NativeMethods.Message message)
+    public IEnumerable<CollectorHostEvent> ObserveMessage(NativeMethods.Message message)
     {
         if (message.Msg != NativeMethods.WmDisplayChange)
         {
@@ -149,7 +149,7 @@ internal sealed class WorkspaceActivityCollector
         metadata["display_message_observed"] = "true";
         metadata["display_labels_omitted"] = "true";
         metadata["visible_contents_omitted"] = "true";
-        yield return new NativeCollectorEvent(
+        yield return new CollectorHostEvent(
             CollectorCatalog.DisplayArrangementActivity,
             "system",
             "display_arrangement_changed",
@@ -159,7 +159,7 @@ internal sealed class WorkspaceActivityCollector
         _displaySnapshot = current;
     }
 
-    private IEnumerable<NativeCollectorEvent> ObserveAppWorkspace(WindowSnapshot snapshot)
+    private IEnumerable<CollectorHostEvent> ObserveAppWorkspace(WindowSnapshot snapshot)
     {
         var signature = $"{snapshot.ProcessId}:{snapshot.ProcessName}:{snapshot.TitleHash}";
         if (signature == _lastAppWorkspaceSignature)
@@ -176,7 +176,7 @@ internal sealed class WorkspaceActivityCollector
         metadata["path_omitted"] = "true";
         metadata["restored_contents_omitted"] = "true";
 
-        yield return new NativeCollectorEvent(
+        yield return new CollectorHostEvent(
             CollectorCatalog.AppWorkspaceActivity,
             "activity",
             firstSeen ? "app_workspace_opened" : "app_workspace_switched",
@@ -350,7 +350,7 @@ internal sealed class WorkspaceActivityCollector
             );
         }
 
-        public IEnumerable<NativeCollectorEvent> Diff(DisplaySnapshot current)
+        public IEnumerable<CollectorHostEvent> Diff(DisplaySnapshot current)
         {
             if (Signature == current.Signature)
             {
@@ -360,7 +360,7 @@ internal sealed class WorkspaceActivityCollector
             var metadata = current.Metadata("windows_enum_display_monitors");
             metadata["previous_monitor_count"] = MonitorCount.ToStringInvariant();
             metadata["previous_primary_digest"] = PrimaryDigest;
-            yield return new NativeCollectorEvent(
+            yield return new CollectorHostEvent(
                 CollectorCatalog.DisplayArrangementActivity,
                 "system",
                 "display_arrangement_changed",
@@ -370,7 +370,7 @@ internal sealed class WorkspaceActivityCollector
 
             if (ResolutionSignature != current.ResolutionSignature)
             {
-                yield return new NativeCollectorEvent(
+                yield return new CollectorHostEvent(
                     CollectorCatalog.DisplayArrangementActivity,
                     "system",
                     "display_resolution_changed",
@@ -380,7 +380,7 @@ internal sealed class WorkspaceActivityCollector
             }
             if (!string.Equals(PrimaryDigest, current.PrimaryDigest, StringComparison.OrdinalIgnoreCase))
             {
-                yield return new NativeCollectorEvent(
+                yield return new CollectorHostEvent(
                     CollectorCatalog.DisplayArrangementActivity,
                     "system",
                     "primary_display_changed",

@@ -35,24 +35,24 @@ final class LocalAgentProcess: ObservableObject {
         if !settings.modelBaseURL.isEmpty {
             proc.arguments?.append(contentsOf: ["--model-base-url", settings.modelBaseURL])
         }
-        let activeProvider = settings.activeModelProvider.trimmingCharacters(in: .whitespacesAndNewlines)
+        let activeProvider = settings.janusModelProvider.trimmingCharacters(in: .whitespacesAndNewlines)
         if !activeProvider.isEmpty, activeProvider != "same-as-main" {
             proc.arguments?.append(contentsOf: [
-                "--active-model-provider", activeProvider == "openai" ? "openai-responses" : activeProvider,
-                "--active-model-api-key-env", modelKeyName(activeProvider)
+                "--janus-model-provider", activeProvider == "openai" ? "openai-responses" : activeProvider,
+                "--janus-model-api-key-env", modelKeyName(activeProvider)
             ])
-            if !settings.activeModelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                proc.arguments?.append(contentsOf: ["--active-model", settings.activeModelName])
+            if !settings.janusModelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                proc.arguments?.append(contentsOf: ["--janus-model", settings.janusModelName])
             }
-            if !settings.activeModelBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                proc.arguments?.append(contentsOf: ["--active-model-base-url", settings.activeModelBaseURL])
+            if !settings.janusModelBaseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                proc.arguments?.append(contentsOf: ["--janus-model-base-url", settings.janusModelBaseURL])
             }
         }
 
         var environment = ProcessInfo.processInfo.environment
         addSecret(&environment, name: modelKeyName(settings.modelProvider), value: secrets.modelAPIKey)
         if !activeProvider.isEmpty, activeProvider != "same-as-main" {
-            addSecret(&environment, name: modelKeyName(activeProvider), value: secrets.activeModelAPIKey)
+            addSecret(&environment, name: modelKeyName(activeProvider), value: secrets.janusModelAPIKey)
         }
         addSecret(&environment, name: "DEEPGRAM_API_KEY", value: secrets.deepgramAPIKey)
         addSecret(&environment, name: "ELEVENLABS_API_KEY", value: secrets.elevenLabsAPIKey)

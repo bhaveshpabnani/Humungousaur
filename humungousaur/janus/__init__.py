@@ -1,18 +1,18 @@
 from .models import (
-    ActiveAgentDecision,
-    ActiveEpisode,
-    ActiveAgentRoute,
-    ActiveAgentStatus,
+    JanusDecision,
+    JanusEpisode,
+    JanusRoute,
+    JanusStatus,
     DeepDiveRequest,
     MutedScope,
     TaskContext,
 )
-from .store import ActiveAgentStore
+from .store import JanusStore
 
 _SERVICE_EXPORTS = {
-    "active_agent_status",
-    "active_agent_privacy_delete",
-    "active_agent_privacy_export",
+    "janus_status",
+    "janus_privacy_delete",
+    "janus_privacy_export",
     "apply_episode_operation",
     "approve_deep_dive_request",
     "cancel_muted_scope",
@@ -23,16 +23,16 @@ _SERVICE_EXPORTS = {
     "reject_deep_dive_request",
     "record_user_correction",
     "respond_to_activation",
-    "run_active_agent_eval",
+    "run_janus_eval",
     "update_deep_dive_request",
 }
 
 
 def __getattr__(name: str):
-    if name == "ActiveEventRouter":
-        from .router import ActiveEventRouter
+    if name == "JanusEventRouter":
+        from .router import JanusEventRouter
 
-        return ActiveEventRouter
+        return JanusEventRouter
     if name in _SERVICE_EXPORTS:
         from . import service
 
@@ -40,15 +40,15 @@ def __getattr__(name: str):
     raise AttributeError(name)
 
 __all__ = [
-    "ActiveAgentDecision",
-    "ActiveEpisode",
-    "ActiveAgentRoute",
-    "ActiveAgentStatus",
-    "ActiveEventRouter",
-    "ActiveAgentStore",
-    "active_agent_status",
-    "active_agent_privacy_delete",
-    "active_agent_privacy_export",
+    "JanusDecision",
+    "JanusEpisode",
+    "JanusRoute",
+    "JanusStatus",
+    "JanusEventRouter",
+    "JanusStore",
+    "janus_status",
+    "janus_privacy_delete",
+    "janus_privacy_export",
     "apply_episode_operation",
     "approve_deep_dive_request",
     "cancel_muted_scope",
@@ -59,7 +59,7 @@ __all__ = [
     "reject_deep_dive_request",
     "record_user_correction",
     "respond_to_activation",
-    "run_active_agent_eval",
+    "run_janus_eval",
     "update_deep_dive_request",
     "DeepDiveRequest",
     "MutedScope",

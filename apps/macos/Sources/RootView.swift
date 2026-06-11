@@ -137,7 +137,7 @@ struct MainContentView: View {
             case .workboard: WorkboardView()
             case .runs: RunsView()
             case .approvals: ApprovalsView()
-            case .activeAgent: ActiveAgentView()
+            case .janus: JanusView()
             case .tools: ToolsView()
             case .connectors: ConnectorsView()
             case .channels: ChannelsView()

@@ -17,10 +17,10 @@ from urllib.parse import parse_qs, urlparse
 from urllib.request import Request, urlopen
 
 from humungousaur import __version__
-from humungousaur.active_agent import (
-    active_agent_status,
-    active_agent_privacy_delete,
-    active_agent_privacy_export,
+from humungousaur.janus import (
+    janus_status,
+    janus_privacy_delete,
+    janus_privacy_export,
     apply_episode_operation,
     approve_deep_dive_request,
     cancel_muted_scope,
@@ -31,7 +31,7 @@ from humungousaur.active_agent import (
     reject_deep_dive_request,
     record_user_correction,
     respond_to_activation,
-    run_active_agent_eval,
+    run_janus_eval,
 )
 from humungousaur.config import AgentConfig
 from humungousaur.collectors import (
@@ -159,8 +159,8 @@ RELEASE_OWNER = os.environ.get("HUMUNGOUSAUR_RELEASE_OWNER", "bhaveshpabnani")
 RELEASE_REPO = os.environ.get("HUMUNGOUSAUR_RELEASE_REPO", "Humungousaur")
 RELEASE_API_BASE = os.environ.get("HUMUNGOUSAUR_RELEASE_API_BASE", "https://api.github.com")
 RELEASE_WEB_BASE = f"https://github.com/{RELEASE_OWNER}/{RELEASE_REPO}/releases"
-WINDOWS_RELEASE_ASSET = "Humungousaur-Windows.zip"
-MACOS_RELEASE_ASSET = "Humungousaur-macOS.zip"
+WINDOWS_RELEASE_ASSET = "Humungousaur-Windows-Setup.zip"
+MACOS_RELEASE_ASSET = "Humungousaur-macOS.pkg"
 
 
 def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
@@ -434,12 +434,12 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                         )
                     )
                     return
-                if path == "/active-agent/status":
-                    self._send_json(active_agent_status(effective_config(), limit=_int_arg(query, "limit", 20)))
+                if path == "/janus/status":
+                    self._send_json(janus_status(effective_config(), limit=_int_arg(query, "limit", 20)))
                     return
-                if path == "/active-agent/planner-context":
+                if path == "/janus/planner-context":
                     self._send_json(
-                        AgentOrchestrator(effective_config()).active_agent_planner_context_preview(
+                        AgentOrchestrator(effective_config()).janus_planner_context_preview(
                             request=_str_arg(query, "request"),
                         )
                     )
@@ -854,7 +854,7 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                         return
                     self._send_json(result, HTTPStatus.CREATED)
                     return
-                if path == "/active-agent/task-contexts":
+                if path == "/janus/task-contexts":
                     run_config = request_config(effective_config(), payload)
                     try:
                         result = declare_task_context(run_config, payload)
@@ -863,7 +863,7 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                         return
                     self._send_json(result, HTTPStatus.CREATED)
                     return
-                if path == "/active-agent/muted-scopes":
+                if path == "/janus/muted-scopes":
                     run_config = request_config(effective_config(), payload)
                     try:
                         result = create_muted_scope(run_config, payload)
@@ -872,7 +872,7 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                         return
                     self._send_json(result, HTTPStatus.CREATED)
                     return
-                if path == "/active-agent/muted-scopes/cancel":
+                if path == "/janus/muted-scopes/cancel":
                     run_config = request_config(effective_config(), payload)
                     try:
                         result = cancel_muted_scope(run_config, payload)
@@ -881,7 +881,7 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                         return
                     self._send_json(result)
                     return
-                if path == "/active-agent/deep-dives":
+                if path == "/janus/deep-dives":
                     run_config = request_config(effective_config(), payload)
                     try:
                         result = create_deep_dive_request(run_config, payload)
@@ -890,7 +890,7 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                         return
                     self._send_json(result, HTTPStatus.CREATED)
                     return
-                if path == "/active-agent/deep-dives/approve":
+                if path == "/janus/deep-dives/approve":
                     run_config = request_config(effective_config(), payload)
                     try:
                         result = approve_deep_dive_request(run_config, payload)
@@ -899,7 +899,7 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                         return
                     self._send_json(result)
                     return
-                if path == "/active-agent/deep-dives/execute":
+                if path == "/janus/deep-dives/execute":
                     run_config = request_config(effective_config(), payload)
                     try:
                         result = execute_deep_dive_request(run_config, payload)
@@ -908,7 +908,7 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                         return
                     self._send_json(result)
                     return
-                if path == "/active-agent/deep-dives/reject":
+                if path == "/janus/deep-dives/reject":
                     run_config = request_config(effective_config(), payload)
                     try:
                         result = reject_deep_dive_request(run_config, payload)
@@ -917,7 +917,7 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                         return
                     self._send_json(result)
                     return
-                if path == "/active-agent/corrections":
+                if path == "/janus/corrections":
                     run_config = request_config(effective_config(), payload)
                     try:
                         result = record_user_correction(run_config, payload)
@@ -926,7 +926,7 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                         return
                     self._send_json(result, HTTPStatus.CREATED)
                     return
-                if path == "/active-agent/activations/respond":
+                if path == "/janus/activations/respond":
                     run_config = request_config(effective_config(), payload)
                     try:
                         result = respond_to_activation(run_config, payload)
@@ -935,7 +935,7 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                         return
                     self._send_json(result, HTTPStatus.CREATED)
                     return
-                if path == "/active-agent/episodes/operate":
+                if path == "/janus/episodes/operate":
                     run_config = request_config(effective_config(), payload)
                     try:
                         result = apply_episode_operation(run_config, payload)
@@ -944,27 +944,27 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                         return
                     self._send_json(result, HTTPStatus.CREATED)
                     return
-                if path == "/active-agent/privacy/export":
+                if path == "/janus/privacy/export":
                     run_config = request_config(effective_config(), payload)
-                    self._send_json(active_agent_privacy_export(run_config, payload), HTTPStatus.CREATED)
+                    self._send_json(janus_privacy_export(run_config, payload), HTTPStatus.CREATED)
                     return
-                if path == "/active-agent/privacy/delete":
+                if path == "/janus/privacy/delete":
                     run_config = request_config(effective_config(), payload)
                     try:
-                        result = active_agent_privacy_delete(run_config, payload)
+                        result = janus_privacy_delete(run_config, payload)
                     except ValueError as exc:
                         self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
                         return
                     self._send_json(result, HTTPStatus.CREATED)
                     return
-                if path == "/active-agent/evals/run":
+                if path == "/janus/evals/run":
                     run_config = request_config(effective_config(), payload)
-                    self._send_json(run_active_agent_eval(run_config, payload), HTTPStatus.CREATED)
+                    self._send_json(run_janus_eval(run_config, payload), HTTPStatus.CREATED)
                     return
-                if path == "/active-agent/planner-context":
+                if path == "/janus/planner-context":
                     run_config = request_config(effective_config(), payload)
                     self._send_json(
-                        AgentOrchestrator(run_config).active_agent_planner_context_preview(
+                        AgentOrchestrator(run_config).janus_planner_context_preview(
                             request=str(payload.get("request") or ""),
                         ),
                         HTTPStatus.CREATED,

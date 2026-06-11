@@ -18,7 +18,7 @@ internal sealed class SystemSurfaceActivityCollector
     private bool _mediaPlaying;
     private DateTimeOffset? _lastLockAt;
 
-    public IEnumerable<NativeCollectorEvent> Diff()
+    public IEnumerable<CollectorHostEvent> Diff()
     {
         foreach (var collectorEvent in ObserveStoragePressure())
         {
@@ -42,7 +42,7 @@ internal sealed class SystemSurfaceActivityCollector
         }
     }
 
-    public IEnumerable<NativeCollectorEvent> ObserveForeground(WindowSnapshot snapshot)
+    public IEnumerable<CollectorHostEvent> ObserveForeground(WindowSnapshot snapshot)
     {
         var process = SafeProcessName(snapshot.ProcessName);
         var metadata = WindowMetadata(snapshot);
@@ -84,7 +84,7 @@ internal sealed class SystemSurfaceActivityCollector
         }
     }
 
-    public IEnumerable<NativeCollectorEvent> ObserveKeyDown(uint virtualKey)
+    public IEnumerable<CollectorHostEvent> ObserveKeyDown(uint virtualKey)
     {
         var foreground = WindowSnapshot.FromForeground();
         var metadata = foreground is null ? BaseMetadata("windows_keyboard_system_surface") : WindowMetadata(foreground);
@@ -125,7 +125,7 @@ internal sealed class SystemSurfaceActivityCollector
         }
     }
 
-    public IEnumerable<NativeCollectorEvent> ObserveMouse(IntPtr message)
+    public IEnumerable<CollectorHostEvent> ObserveMouse(IntPtr message)
     {
         var foreground = WindowSnapshot.FromForeground();
         if (message.ToInt64() == NativeMethods.WmMouseWheel
@@ -144,7 +144,7 @@ internal sealed class SystemSurfaceActivityCollector
         }
     }
 
-    public IEnumerable<NativeCollectorEvent> ObserveMessage(NativeMethods.Message message)
+    public IEnumerable<CollectorHostEvent> ObserveMessage(NativeMethods.Message message)
     {
         if (message.Msg == NativeMethods.WmDeviceChange)
         {
@@ -207,7 +207,7 @@ internal sealed class SystemSurfaceActivityCollector
         }
     }
 
-    private IEnumerable<NativeCollectorEvent> ObserveStoragePressure()
+    private IEnumerable<CollectorHostEvent> ObserveStoragePressure()
     {
         foreach (var drive in SnapshotDrives().Values)
         {
@@ -229,7 +229,7 @@ internal sealed class SystemSurfaceActivityCollector
         }
     }
 
-    private IEnumerable<NativeCollectorEvent> ObserveDriveTopology()
+    private IEnumerable<CollectorHostEvent> ObserveDriveTopology()
     {
         var current = SnapshotDrives();
         foreach (var pair in current)
@@ -249,7 +249,7 @@ internal sealed class SystemSurfaceActivityCollector
         _drives = current;
     }
 
-    private IEnumerable<NativeCollectorEvent> ObserveResourcePressure()
+    private IEnumerable<CollectorHostEvent> ObserveResourcePressure()
     {
         var memory = NativeMethods.MemoryStatus();
         if (memory is { DwMemoryLoad: >= 90 } && Throttle("resource:memory", TimeSpan.FromMinutes(2)))
@@ -284,7 +284,7 @@ internal sealed class SystemSurfaceActivityCollector
         _cpuSamples = current;
     }
 
-    private IEnumerable<NativeCollectorEvent> ObserveInstallerProcesses()
+    private IEnumerable<CollectorHostEvent> ObserveInstallerProcesses()
     {
         var current = InstallerProcesses();
         foreach (var processId in current)
@@ -302,7 +302,7 @@ internal sealed class SystemSurfaceActivityCollector
         _installerProcesses = current;
     }
 
-    private IEnumerable<NativeCollectorEvent> ObservePrintSpool()
+    private IEnumerable<CollectorHostEvent> ObservePrintSpool()
     {
         var current = PrintSpoolFileCount();
         if (current is null)
@@ -328,7 +328,7 @@ internal sealed class SystemSurfaceActivityCollector
         _printSpoolFileCount = current;
     }
 
-    private IEnumerable<NativeCollectorEvent> ObserveMediaKey(uint virtualKey, Dictionary<string, string> metadata)
+    private IEnumerable<CollectorHostEvent> ObserveMediaKey(uint virtualKey, Dictionary<string, string> metadata)
     {
         if (virtualKey == (uint)NativeMethods.VkMediaPlayPause && Throttle("media:playpause", TimeSpan.FromMilliseconds(750)))
         {
@@ -346,7 +346,7 @@ internal sealed class SystemSurfaceActivityCollector
         }
     }
 
-    private IEnumerable<NativeCollectorEvent> ObserveSettingChange(NativeMethods.Message message)
+    private IEnumerable<CollectorHostEvent> ObserveSettingChange(NativeMethods.Message message)
     {
         var area = "";
         try
@@ -382,7 +382,7 @@ internal sealed class SystemSurfaceActivityCollector
         return true;
     }
 
-    private static NativeCollectorEvent Create(string collector, string source, string stimulusType, string text, Dictionary<string, string> metadata, string privacyTier = "metadata") =>
+    private static CollectorHostEvent Create(string collector, string source, string stimulusType, string text, Dictionary<string, string> metadata, string privacyTier = "metadata") =>
         new(collector, source, stimulusType, text, metadata, PrivacyTier: privacyTier);
 
     private static Dictionary<string, string> WindowMetadata(WindowSnapshot snapshot)

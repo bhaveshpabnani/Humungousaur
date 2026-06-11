@@ -9,13 +9,13 @@ internal sealed class ExplorerFileManagerActivityCollector
 {
     private readonly ConcurrentDictionary<string, DateTimeOffset> _lastEmitted = new();
 
-    public IEnumerable<NativeCollectorEvent> ObserveForeground(WindowSnapshot snapshot)
+    public IEnumerable<CollectorHostEvent> ObserveForeground(WindowSnapshot snapshot)
     {
         if (!IsExplorerWindow(snapshot) || !Throttle($"folder_opened:{snapshot.Handle}", TimeSpan.FromSeconds(5)))
         {
             yield break;
         }
-        yield return new NativeCollectorEvent(
+        yield return new CollectorHostEvent(
             CollectorCatalog.FolderNavigationActivity,
             "activity",
             "folder_opened",
@@ -25,7 +25,7 @@ internal sealed class ExplorerFileManagerActivityCollector
         );
     }
 
-    public IEnumerable<NativeCollectorEvent> ObserveKeyDown(uint virtualKey)
+    public IEnumerable<CollectorHostEvent> ObserveKeyDown(uint virtualKey)
     {
         var foreground = WindowSnapshot.FromForeground();
         if (foreground is null || !IsExplorerWindow(foreground))
@@ -39,7 +39,7 @@ internal sealed class ExplorerFileManagerActivityCollector
 
         if (alt && virtualKey == 0x50 && Throttle("preview_pane_opened", TimeSpan.FromSeconds(2)))
         {
-            yield return new NativeCollectorEvent(
+            yield return new CollectorHostEvent(
                 CollectorCatalog.FilePreviewActivity,
                 "activity",
                 "preview_pane_opened",
@@ -50,7 +50,7 @@ internal sealed class ExplorerFileManagerActivityCollector
         }
         if (alt && virtualKey == 0x0D && Throttle("file_info_panel_opened", TimeSpan.FromSeconds(2)))
         {
-            yield return new NativeCollectorEvent(
+            yield return new CollectorHostEvent(
                 CollectorCatalog.FilePreviewActivity,
                 "activity",
                 "file_info_panel_opened",
@@ -61,7 +61,7 @@ internal sealed class ExplorerFileManagerActivityCollector
         }
         if (ctrl && shift && virtualKey == 0x4E && Throttle("folder_created_shortcut", TimeSpan.FromSeconds(2)))
         {
-            yield return new NativeCollectorEvent(
+            yield return new CollectorHostEvent(
                 CollectorCatalog.FolderNavigationActivity,
                 "activity",
                 "folder_created",
@@ -72,7 +72,7 @@ internal sealed class ExplorerFileManagerActivityCollector
         }
         if (virtualKey == 0x2E && Throttle("trash_shortcut", TimeSpan.FromSeconds(2)))
         {
-            yield return new NativeCollectorEvent(
+            yield return new CollectorHostEvent(
                 CollectorCatalog.TrashActivity,
                 "activity",
                 "file_moved_to_trash",
