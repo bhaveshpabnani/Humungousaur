@@ -73,6 +73,9 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "8.0.x"
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
       - name: Package Windows zip
         shell: pwsh
         run: ./script/package_windows.ps1
@@ -85,5 +88,5 @@ jobs:
           name: Humungousaur-Windows-ci
           path: |
             artifacts/release/Humungousaur-Windows.zip
-            artifacts/release/Humungousaur-Windows-Setup.zip
+            artifacts/release/Humungousaur-Windows-Setup.exe
             artifacts/release/checksums.txt

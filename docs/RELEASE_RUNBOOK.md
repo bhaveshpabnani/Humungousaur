@@ -93,7 +93,7 @@ WINDOWS_TIMESTAMP_URL
 
 `WINDOWS_TIMESTAMP_URL` is optional when the default timestamp URL is acceptable. Unsigned local packages are allowed for development, but public tag releases must pass the signature-required CI gates.
 
-Windows packaging and verification must run on Windows because the app targets `net8.0-windows` and WinUI. Use the GitHub Actions `windows-latest` release job or a local Windows machine with the .NET 8 SDK installed; macOS/Linux release preparation should rely on the workflow artifacts for `Humungousaur-Windows-Setup.zip` and `Humungousaur-Windows.zip`.
+Windows packaging and verification must run on Windows because the app targets `net8.0-windows` and WinUI. Use the GitHub Actions `windows-latest` release job or a local Windows machine with the .NET 8 SDK installed; macOS/Linux release preparation should rely on the workflow artifacts for `Humungousaur-Windows-Setup.exe` and `Humungousaur-Windows.zip`.
 
 For public tag releases, `script/package_macos.sh` must sign the app, sign `Humungousaur-macOS.pkg`, notarize/staple the package, and `script/verify_macos_package.sh --require-signature --require-notarization` must confirm the app code signature, Gatekeeper assessment, package signature, and stapled notarization ticket before upload.
 
@@ -124,7 +124,7 @@ The `.github/workflows/release.yml` workflow must install test extras, compile t
 ```text
 Humungousaur-Windows.zip
 Humungousaur-macOS.zip
-Humungousaur-Windows-Setup.zip
+Humungousaur-Windows-Setup.exe
 Humungousaur-macOS.pkg
 checksums.txt
 release-readiness.md
@@ -136,7 +136,7 @@ The workflow token must be least-privilege: CI and release jobs default to `cont
 
 The `publish` job must also run `actions/setup-python@v6` and `python -m pip install -e ".[browser,pdf,ocr,office,test]"` before generating `release-readiness.md`, because the generated release evidence runs the backend regression a final time.
 
-The workflow is rerunnable. It should use `gh release view`, `gh release create`, or `gh release upload --clobber` so a failed or partial run can be repaired without renaming the release. Post-publish verification should use `gh release download` for `checksums.txt`, both desktop zips, `Humungousaur-Windows-Setup.zip`, and `Humungousaur-macOS.pkg`, then confirm each downloaded zip matches its SHA-256 row or package checksum row.
+The workflow is rerunnable. It should use `gh release view`, `gh release create`, or `gh release upload --clobber` so a failed or partial run can be repaired without renaming the release. Post-publish verification should use `gh release download` for `checksums.txt`, both desktop installers and zips, `Humungousaur-Windows-Setup.exe`, and `Humungousaur-macOS.pkg`, then confirm each downloaded zip matches its SHA-256 row or package checksum row.
 
 The publish job must verify the exact staged upload directory before release creation:
 
@@ -153,7 +153,7 @@ Before publishing, the final upload directory must contain exactly:
 ```text
 Humungousaur-Windows.zip
 Humungousaur-macOS.zip
-Humungousaur-Windows-Setup.zip
+Humungousaur-Windows-Setup.exe
 Humungousaur-macOS.pkg
 checksums.txt
 release-readiness.md
@@ -183,7 +183,7 @@ If both local artifacts have been downloaded to `artifacts/release`, run the str
 python3 script/verify_release_readiness.py --require-website --require-assets --release-tag v0.1.0
 ```
 
-The strict local preflight must see `Humungousaur-Windows-Setup.zip`, `Humungousaur-macOS.pkg`, `Humungousaur-Windows.zip`, `Humungousaur-macOS.zip`, and `checksums.txt`, and `checksums.txt` must contain rows for both desktop zips plus the installer/package assets.
+The strict local preflight must see `Humungousaur-Windows-Setup.exe`, `Humungousaur-macOS.pkg`, `Humungousaur-Windows.zip`, `Humungousaur-macOS.zip`, and `checksums.txt`, and `checksums.txt` must contain rows for both desktop installers and zips plus the installer/package assets.
 
 To collect the desktop installers and zips from a successful GitHub Actions release workflow run into `artifacts/release` and regenerate local checksums, run:
 

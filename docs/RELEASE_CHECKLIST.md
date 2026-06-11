@@ -36,7 +36,7 @@ For the exact order of operations, commands, signing secrets, tag checks, GitHub
 - For signed macOS public releases, configure GitHub secrets `MACOS_CERTIFICATE_P12_BASE64`, `MACOS_CERTIFICATE_PASSWORD`, `MACOS_KEYCHAIN_PASSWORD`, `MACOS_CODESIGN_IDENTITY`, `MACOS_INSTALLER_IDENTITY`, `MACOS_NOTARIZE=1`, `APPLE_ID`, `APPLE_TEAM_ID`, and `APPLE_APP_SPECIFIC_PASSWORD`.
 - For signed Windows public releases, configure GitHub secrets `WINDOWS_CERTIFICATE_PFX_BASE64`, `WINDOWS_CERTIFICATE_PASSWORD`, `WINDOWS_SIGN=1`, and optionally `WINDOWS_TIMESTAMP_URL`.
 - Confirm the macOS release job signs with hardened runtime, notarizes, staples the app, and then regenerates `Humungousaur-macOS.zip` plus the installable `Humungousaur-macOS.pkg`.
-- Confirm the Windows release job signs every packaged `.exe` and Humungousaur-owned `.dll` with timestamped Authenticode before generating `Humungousaur-Windows.zip` plus `Humungousaur-Windows-Setup.zip`.
+- Confirm the Windows release job signs every packaged `.exe` and Humungousaur-owned `.dll` with timestamped Authenticode before generating `Humungousaur-Windows.zip` plus `Humungousaur-Windows-Setup.exe`.
 - For tag releases, CI runs `./script/verify_macos_package.sh --require-signature --require-notarization` and `./script/verify_windows_package.ps1 -RequireSignature` before upload.
 - Start each app against `python -m humungousaur serve --workspace . --port 8765`.
 - Verify chat, tools, channels, voice status, autonomy controls, runs, approvals, and local process start/stop.
@@ -56,7 +56,7 @@ For the exact order of operations, commands, signing secrets, tag checks, GitHub
 - Before promoting website changes, require `npm run check:publication` to pass with tracked website publication files and a clean website working tree.
 - After publishing the tagged release, run `npm run check:release-assets` from the website repo.
 - Publish release assets with the website-targeted names:
-  - `Humungousaur-Windows-Setup.zip`
+  - `Humungousaur-Windows-Setup.exe`
   - `Humungousaur-macOS.pkg`
   - `Humungousaur-Windows.zip`
   - `Humungousaur-macOS.zip`
@@ -68,7 +68,7 @@ For the exact order of operations, commands, signing secrets, tag checks, GitHub
 - Confirm the tag matches `v<project.version>` from `pyproject.toml`.
 - Use `.github/workflows/release.yml` for tagged GitHub releases when publishing from CI.
 - For manual release repair from GitHub Actions, set `publish_release=true` and `release_tag=v<project.version>`; the workflow must check out that exact tag before packaging.
-- Attach Windows installer/package artifacts as `Humungousaur-Windows-Setup.zip` and `Humungousaur-Windows.zip`.
+- Attach Windows installer/package artifacts as `Humungousaur-Windows-Setup.exe` and `Humungousaur-Windows.zip`.
 - Attach macOS installer/package artifacts as `Humungousaur-macOS.pkg` and `Humungousaur-macOS.zip` after signing/notarization checks.
 - Publish checksums.
 - Attach `release-readiness.md` from `script/generate_release_report.py` to the release.

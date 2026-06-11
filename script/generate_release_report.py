@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_WEBSITE_ROOT = ROOT.parent / "Humungousaur-Website"
 DEFAULT_OUTPUT = ROOT / "artifacts/release/release-readiness.md"
 ASSET_NAMES = [
-    "Humungousaur-Windows-Setup.zip",
+    "Humungousaur-Windows-Setup.exe",
     "Humungousaur-macOS.pkg",
     "Humungousaur-Windows.zip",
     "Humungousaur-macOS.zip",

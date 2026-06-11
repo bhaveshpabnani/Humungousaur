@@ -5,10 +5,11 @@ $Project = Join-Path $Root "apps/windows/Humungousaur.App/Humungousaur.App.cspro
 $PublishDir = Join-Path $Root "artifacts/package/windows/publish"
 $ReleaseDir = Join-Path $Root "artifacts/release"
 $ZipPath = Join-Path $ReleaseDir "Humungousaur-Windows.zip"
-$InstallerZipPath = Join-Path $ReleaseDir "Humungousaur-Windows-Setup.zip"
+$InstallerExePath = Join-Path $ReleaseDir "Humungousaur-Windows-Setup.exe"
 $ChecksumPath = Join-Path $ReleaseDir "checksums.txt"
 $InstallDoc = Join-Path $PublishDir "INSTALL.txt"
 $InstallerRoot = Join-Path $Root "artifacts/package/windows/installer"
+$InstallerScriptPath = Join-Path $Root "artifacts/package/windows/Humungousaur-Windows.iss"
 $IsWindowsPlatform = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)
 if (-not $IsWindowsPlatform) {
   throw "Windows packaging must run on Windows because Humungousaur.App targets net8.0-windows and WinUI. Use the GitHub Actions windows-latest release job or a local Windows machine."
@@ -51,6 +52,23 @@ function Copy-RuntimeSource {
   Get-ChildItem -Path $Target -Recurse -Force -Include "*.pyc", ".DS_Store" | Remove-Item -Force
 }
 
+function Find-InnoSetupCompiler {
+  $Command = Get-Command iscc.exe -ErrorAction SilentlyContinue
+  if ($null -ne $Command) {
+    return $Command.Source
+  }
+  $Candidates = @(
+    "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+    "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+  )
+  foreach ($Candidate in $Candidates) {
+    if (Test-Path $Candidate) {
+      return $Candidate
+    }
+  }
+  throw "Inno Setup 6 is required to build Humungousaur-Windows-Setup.exe. Install it with: choco install innosetup -y"
+}
+
 & $Dotnet.Source publish $Project `
   -c Release `
   -r win-x64 `
@@ -67,12 +85,10 @@ Humungousaur Windows setup
 Version: $ProjectVersion
 
 Recommended public install:
-1. Extract Humungousaur-Windows-Setup.zip.
-2. Run PowerShell from the extracted folder:
-   powershell -ExecutionPolicy Bypass -File .\Install-Humungousaur.ps1
-3. If Python 3.12+ is missing and you want the installer to use winget, run:
-   powershell -ExecutionPolicy Bypass -File .\Install-Humungousaur.ps1 -InstallPythonWithWinget
-4. The installer copies the app, installs the bundled runtime source, creates a venv, installs dependencies, installs Playwright Chromium, and creates Start Menu/Desktop shortcuts.
+1. Run Humungousaur-Windows-Setup.exe.
+2. Keep "Bootstrap Python runtime" selected to create or repair the local venv, install dependencies, install Playwright Chromium, and write install status.
+3. If Python 3.12+ is missing, select "Install Python 3.12 with winget" or install Python manually and rerun the installer.
+4. The installer copies the app, installs the bundled runtime source, creates Start Menu/Desktop shortcuts, and registers a normal Windows uninstaller.
 5. Developer source installs can still use:
    python -m pip install -e ".[browser,pdf,ocr,office]"
 6. Start Humungousaur.App.exe, then start the runtime from the app controls, or run:
@@ -130,8 +146,8 @@ if (Test-Path $ZipPath) {
 if (Test-Path $InstallerRoot) {
   Remove-Item -Path $InstallerRoot -Recurse -Force
 }
-if (Test-Path $InstallerZipPath) {
-  Remove-Item $InstallerZipPath -Force
+if (Test-Path $InstallerExePath) {
+  Remove-Item $InstallerExePath -Force
 }
 
 Compress-Archive -Path (Join-Path $PublishDir "*") -DestinationPath $ZipPath -Force
@@ -139,22 +155,142 @@ Compress-Archive -Path (Join-Path $PublishDir "*") -DestinationPath $ZipPath -Fo
 New-Item -ItemType Directory -Force -Path (Join-Path $InstallerRoot "app"), (Join-Path $InstallerRoot "runtime-source") | Out-Null
 Copy-Item -Path (Join-Path $PublishDir "*") -Destination (Join-Path $InstallerRoot "app") -Recurse -Force
 Copy-RuntimeSource -Target (Join-Path $InstallerRoot "runtime-source")
-Copy-Item -Path (Join-Path $Root "script/install_windows.ps1") -Destination (Join-Path $InstallerRoot "Install-Humungousaur.ps1") -Force
 @"
-Humungousaur Windows installer
+param(
+  [switch]`$InstallPythonWithWinget,
+  [switch]`$SkipPlaywright
+)
+
+`$ErrorActionPreference = "Stop"
+`$DataRoot = Join-Path `$env:LOCALAPPDATA "Humungousaur"
+`$RuntimeSource = Join-Path `$DataRoot "runtime-source"
+`$LogPath = Join-Path `$DataRoot "install.log"
+New-Item -ItemType Directory -Force -Path `$DataRoot | Out-Null
+
+function Test-Python312([string]`$Command, [string[]]`$Arguments) {
+  try {
+    `$Version = & `$Command @Arguments -c "import sys; print('.'.join(map(str, sys.version_info[:3]))); raise SystemExit(0 if sys.version_info >= (3, 12) else 1)" 2>`$null
+    if (`$LASTEXITCODE -eq 0) {
+      return @{ Command = `$Command; Arguments = `$Arguments; Version = `$Version }
+    }
+  } catch {}
+  return `$null
+}
+
+function Find-Python312 {
+  foreach (`$Candidate in @(
+    @{ Command = "py"; Arguments = @("-3.12") },
+    @{ Command = "python"; Arguments = @() },
+    @{ Command = "python3"; Arguments = @() }
+  )) {
+    `$Python = Test-Python312 `$Candidate.Command `$Candidate.Arguments
+    if (`$null -ne `$Python) { return `$Python }
+  }
+  return `$null
+}
+
+`$Python = Find-Python312
+if (`$null -eq `$Python -and `$InstallPythonWithWinget) {
+  `$Winget = Get-Command winget -ErrorAction SilentlyContinue
+  if (`$null -eq `$Winget) {
+    throw "Python 3.12+ is missing and winget is not available. Install Python 3.12+, then rerun Humungousaur setup."
+  }
+  & `$Winget.Source install --id Python.Python.3.12 --source winget --accept-package-agreements --accept-source-agreements
+  `$Python = Find-Python312
+}
+if (`$null -eq `$Python) {
+  throw "Python 3.12+ is required. Install Python 3.12+ or rerun setup with the winget task selected."
+}
+
+`$Bootstrap = Join-Path `$RuntimeSource "script\bootstrap_runtime.py"
+`$Args = @(`$Bootstrap, "--source", `$RuntimeSource, "--data-root", `$DataRoot, "--quiet")
+if (`$SkipPlaywright) { `$Args += "--skip-playwright" }
+& `$Python.Command @(`$Python.Arguments + `$Args) *>> `$LogPath
+if (`$LASTEXITCODE -ne 0) {
+  throw "Humungousaur runtime bootstrap failed with exit code `$LASTEXITCODE. See `$LogPath."
+}
+"@ | Set-Content -Path (Join-Path $InstallerRoot "Bootstrap-Humungousaur.ps1") -Encoding utf8
+@"
+Humungousaur Windows installer executable
 Version: $ProjectVersion
 
 Run:
-  powershell -ExecutionPolicy Bypass -File .\Install-Humungousaur.ps1
+  Humungousaur-Windows-Setup.exe
 
-For a machine missing Python 3.12+, run:
-  powershell -ExecutionPolicy Bypass -File .\Install-Humungousaur.ps1 -InstallPythonWithWinget
-
-This installer copies the WinUI app, installs the bundled runtime source, creates or repairs the Humungousaur runtime virtual environment, installs Python dependencies, installs Playwright Chromium unless -SkipPlaywright is passed, and creates Start Menu/Desktop shortcuts.
+This installer copies the WinUI app, installs the bundled runtime source, creates Start Menu/Desktop shortcuts, registers an uninstaller, and runs Bootstrap-Humungousaur.ps1 to create or repair the local Python runtime.
 "@ | Set-Content -Path (Join-Path $InstallerRoot "README.txt") -Encoding utf8
-Compress-Archive -Path (Join-Path $InstallerRoot "*") -DestinationPath $InstallerZipPath -Force
 
-$ChecksumLines = Get-ChildItem -Path $ReleaseDir -Filter "*.zip" |
+$EscapedInstallerRoot = $InstallerRoot.Replace("\", "\\")
+$EscapedReleaseDir = $ReleaseDir.Replace("\", "\\")
+$InstallerIcon = Join-Path $Root "apps/windows/Humungousaur.App/Assets/Humungousaur.ico"
+$EscapedInstallerIcon = $InstallerIcon.Replace("\", "\\")
+@"
+#define AppName "Humungousaur"
+#define AppVersion "$ProjectVersion"
+#define PayloadRoot "$EscapedInstallerRoot"
+
+[Setup]
+AppId={{9A137BA2-1D8B-4CF6-BA7B-9C5E1D2B52F1}
+AppName={#AppName}
+AppVersion={#AppVersion}
+AppPublisher=Humungousaur
+DefaultDirName={localappdata}\Programs\Humungousaur
+DefaultGroupName=Humungousaur
+DisableProgramGroupPage=yes
+PrivilegesRequired=lowest
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+OutputDir=$EscapedReleaseDir
+OutputBaseFilename=Humungousaur-Windows-Setup
+SetupIconFile=$EscapedInstallerIcon
+Compression=lzma2
+SolidCompression=yes
+WizardStyle=modern
+UninstallDisplayIcon={app}\app\Humungousaur.App.exe
+VersionInfoVersion=$WindowsFileVersion
+VersionInfoProductVersion=$ProjectVersion
+VersionInfoCompany=Humungousaur
+VersionInfoDescription=Humungousaur Windows Installer
+
+[Tasks]
+Name: "bootstrap"; Description: "Bootstrap Python runtime"; GroupDescription: "Runtime setup:"; Flags: checkedonce
+Name: "installpython"; Description: "Install Python 3.12 with winget if missing"; GroupDescription: "Runtime setup:"
+Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"; Flags: unchecked
+
+[Files]
+Source: "{#PayloadRoot}\app\*"; DestDir: "{app}\app"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#PayloadRoot}\runtime-source\*"; DestDir: "{localappdata}\Humungousaur\runtime-source"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#PayloadRoot}\Bootstrap-Humungousaur.ps1"; DestDir: "{app}\installer"; Flags: ignoreversion
+Source: "{#PayloadRoot}\README.txt"; DestDir: "{app}"; Flags: ignoreversion
+
+[Icons]
+Name: "{group}\Humungousaur"; Filename: "{app}\app\Humungousaur.App.exe"; WorkingDir: "{app}\app"
+Name: "{autodesktop}\Humungousaur"; Filename: "{app}\app\Humungousaur.App.exe"; WorkingDir: "{app}\app"; Tasks: desktopicon
+
+[Run]
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\installer\Bootstrap-Humungousaur.ps1"""; WorkingDir: "{app}"; StatusMsg: "Bootstrapping Humungousaur runtime..."; Flags: runhidden waituntilterminated; Tasks: bootstrap and not installpython
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\installer\Bootstrap-Humungousaur.ps1"" -InstallPythonWithWinget"; WorkingDir: "{app}"; StatusMsg: "Installing Python if needed and bootstrapping Humungousaur runtime..."; Flags: runhidden waituntilterminated; Tasks: bootstrap and installpython
+"@ | Set-Content -Path $InstallerScriptPath -Encoding utf8
+
+$Iscc = Find-InnoSetupCompiler
+& $Iscc $InstallerScriptPath
+if (-not (Test-Path $InstallerExePath)) {
+  throw "Inno Setup did not create $InstallerExePath"
+}
+
+if ($ShouldSign) {
+  & $Signtool.Source sign `
+    /fd SHA256 `
+    /td SHA256 `
+    /tr $TimestampUrl `
+    /f $SignCertPath `
+    /p $SignCertPassword `
+    $InstallerExePath
+  & $Signtool.Source verify /pa $InstallerExePath
+}
+
+$ChecksumLines = Get-ChildItem -Path $ReleaseDir -File |
+  Where-Object { $_.Name -in @("Humungousaur-Windows-Setup.exe", "Humungousaur-Windows.zip") } |
   Sort-Object Name |
   ForEach-Object {
     $Hash = Get-FileHash -Algorithm SHA256 $_.FullName
@@ -163,4 +299,4 @@ $ChecksumLines = Get-ChildItem -Path $ReleaseDir -Filter "*.zip" |
 $ChecksumLines | Set-Content -Path $ChecksumPath -Encoding utf8
 
 Write-Host "Created $ZipPath"
-Write-Host "Created $InstallerZipPath"
+Write-Host "Created $InstallerExePath"

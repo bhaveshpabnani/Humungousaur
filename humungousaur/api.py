@@ -159,7 +159,7 @@ RELEASE_OWNER = os.environ.get("HUMUNGOUSAUR_RELEASE_OWNER", "bhaveshpabnani")
 RELEASE_REPO = os.environ.get("HUMUNGOUSAUR_RELEASE_REPO", "Humungousaur")
 RELEASE_API_BASE = os.environ.get("HUMUNGOUSAUR_RELEASE_API_BASE", "https://api.github.com")
 RELEASE_WEB_BASE = f"https://github.com/{RELEASE_OWNER}/{RELEASE_REPO}/releases"
-WINDOWS_RELEASE_ASSET = "Humungousaur-Windows-Setup.zip"
+WINDOWS_RELEASE_ASSET = "Humungousaur-Windows-Setup.exe"
 MACOS_RELEASE_ASSET = "Humungousaur-macOS.pkg"
 
 

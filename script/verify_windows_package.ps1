@@ -1,6 +1,6 @@
 param(
   [string]$ZipPath,
-  [string]$InstallerZipPath,
+  [string]$InstallerExePath,
   [string]$ChecksumPath,
   [switch]$RequireSignature
 )
@@ -24,8 +24,8 @@ $WindowsFileVersion = "$($Matches[1]).$($Matches[2]).$($Matches[3]).0"
 if ([string]::IsNullOrWhiteSpace($ZipPath)) {
   $ZipPath = Join-Path $Root "artifacts/release/Humungousaur-Windows.zip"
 }
-if ([string]::IsNullOrWhiteSpace($InstallerZipPath)) {
-  $InstallerZipPath = Join-Path $Root "artifacts/release/Humungousaur-Windows-Setup.zip"
+if ([string]::IsNullOrWhiteSpace($InstallerExePath)) {
+  $InstallerExePath = Join-Path $Root "artifacts/release/Humungousaur-Windows-Setup.exe"
 }
 if ([string]::IsNullOrWhiteSpace($ChecksumPath)) {
   $ChecksumPath = Join-Path $Root "artifacts/release/checksums.txt"
@@ -34,8 +34,8 @@ if ([string]::IsNullOrWhiteSpace($ChecksumPath)) {
 if (-not (Test-Path $ZipPath)) {
   throw "Missing Windows release zip: $ZipPath"
 }
-if (-not (Test-Path $InstallerZipPath)) {
-  throw "Missing Windows installer zip: $InstallerZipPath"
+if (-not (Test-Path $InstallerExePath)) {
+  throw "Missing Windows installer executable: $InstallerExePath"
 }
 
 function Test-ZipEntriesClean {
@@ -67,7 +67,6 @@ function Test-ZipEntriesClean {
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 Test-ZipEntriesClean -Path $ZipPath -Label "Windows package"
-Test-ZipEntriesClean -Path $InstallerZipPath -Label "Windows installer package"
 
 $TempDir = Join-Path ([IO.Path]::GetTempPath()) ("humungousaur-windows-package-" + [Guid]::NewGuid().ToString("N"))
 New-Item -ItemType Directory -Force -Path $TempDir | Out-Null
@@ -130,12 +129,12 @@ try {
     if ($ExpectedHash -ne $ActualHash) {
       throw "Windows checksum mismatch. Expected $ExpectedHash, got $ActualHash"
     }
-    $ExpectedInstallerLine = Get-Content $ChecksumPath | Where-Object { $_ -match "\s+Humungousaur-Windows-Setup\.zip$" } | Select-Object -First 1
+    $ExpectedInstallerLine = Get-Content $ChecksumPath | Where-Object { $_ -match "\s+Humungousaur-Windows-Setup\.exe$" } | Select-Object -First 1
     if ([string]::IsNullOrWhiteSpace($ExpectedInstallerLine)) {
-      throw "checksums.txt is missing Humungousaur-Windows-Setup.zip"
+      throw "checksums.txt is missing Humungousaur-Windows-Setup.exe"
     }
     $ExpectedInstallerHash = ($ExpectedInstallerLine -split "\s+")[0].ToLowerInvariant()
-    $ActualInstallerHash = (Get-FileHash -Algorithm SHA256 $InstallerZipPath).Hash.ToLowerInvariant()
+    $ActualInstallerHash = (Get-FileHash -Algorithm SHA256 $InstallerExePath).Hash.ToLowerInvariant()
     if ($ExpectedInstallerHash -ne $ActualInstallerHash) {
       throw "Windows installer checksum mismatch. Expected $ExpectedInstallerHash, got $ActualInstallerHash"
     }
@@ -151,37 +150,26 @@ try {
         throw "$($Binary.Name) signature is missing a timestamp certificate"
       }
     }
+    $InstallerSignature = Get-AuthenticodeSignature $InstallerExePath
+    if ($InstallerSignature.Status -ne "Valid") {
+      throw "Humungousaur-Windows-Setup.exe signature is $($InstallerSignature.Status): $($InstallerSignature.StatusMessage)"
+    }
+    if ($null -eq $InstallerSignature.TimeStamperCertificate) {
+      throw "Humungousaur-Windows-Setup.exe signature is missing a timestamp certificate"
+    }
   }
 
-  $InstallerTempDir = Join-Path ([IO.Path]::GetTempPath()) ("humungousaur-windows-installer-" + [Guid]::NewGuid().ToString("N"))
-  New-Item -ItemType Directory -Force -Path $InstallerTempDir | Out-Null
-  try {
-    Expand-Archive -Path $InstallerZipPath -DestinationPath $InstallerTempDir -Force
-    foreach ($Expected in @(
-      "Install-Humungousaur.ps1",
-      "README.txt",
-      "runtime-source\script\bootstrap_runtime.py"
-    )) {
-      if (-not (Test-Path (Join-Path $InstallerTempDir $Expected))) {
-        throw "Windows installer zip is missing $Expected"
-      }
-    }
-    $InstallerScript = Get-Content -Raw -Path (Join-Path $InstallerTempDir "Install-Humungousaur.ps1")
-    foreach ($ExpectedText in @("InstallPythonWithWinget", "Playwright Chromium", "Start Menu/Desktop shortcuts", "runtime-source")) {
-      if (-not $InstallerScript.Contains($ExpectedText)) {
-        throw "Windows installer script is missing expected setup text: $ExpectedText"
-      }
-    }
-    if ($null -eq (Get-ChildItem -Path (Join-Path $InstallerTempDir "app") -Filter "Humungousaur.App.exe" -Recurse | Select-Object -First 1)) {
-      throw "Windows installer zip is missing app\Humungousaur.App.exe"
-    }
+  $InstallerVersion = (Get-Item $InstallerExePath).VersionInfo
+  if ($InstallerVersion.FileVersion -ne $WindowsFileVersion) {
+    throw "Humungousaur-Windows-Setup.exe FileVersion mismatch. Expected $WindowsFileVersion, got $($InstallerVersion.FileVersion)"
   }
-  finally {
-    Remove-Item -Path $InstallerTempDir -Recurse -Force -ErrorAction SilentlyContinue
+  $InstallerProductVersion = [string]$InstallerVersion.ProductVersion
+  if ($InstallerProductVersion -ne $ProjectVersion -and -not $InstallerProductVersion.StartsWith("$ProjectVersion+")) {
+    throw "Humungousaur-Windows-Setup.exe ProductVersion mismatch. Expected $ProjectVersion or $ProjectVersion+<source-revision>, got $InstallerProductVersion"
   }
 
   Write-Host "Verified $ZipPath"
-  Write-Host "Verified $InstallerZipPath"
+  Write-Host "Verified $InstallerExePath"
 }
 finally {
   Remove-Item -Path $TempDir -Recurse -Force -ErrorAction SilentlyContinue

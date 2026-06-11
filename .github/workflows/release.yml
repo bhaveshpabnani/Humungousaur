@@ -139,6 +139,9 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "8.0.x"
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
       - name: Materialize Windows signing certificate
         if: ${{ env.WINDOWS_CERTIFICATE_PFX_BASE64 != '' }}
         shell: pwsh
@@ -163,7 +166,7 @@ jobs:
           name: Humungousaur-Windows
           path: |
             artifacts/release/Humungousaur-Windows.zip
-            artifacts/release/Humungousaur-Windows-Setup.zip
+            artifacts/release/Humungousaur-Windows-Setup.exe
 
   publish:
     name: Publish GitHub release
@@ -193,9 +196,9 @@ jobs:
           cp artifacts/release/downloaded/Humungousaur-macOS/Humungousaur-macOS.zip artifacts/release/final/
           cp artifacts/release/downloaded/Humungousaur-macOS/Humungousaur-macOS.pkg artifacts/release/final/
           cp artifacts/release/downloaded/Humungousaur-Windows/Humungousaur-Windows.zip artifacts/release/final/
-          cp artifacts/release/downloaded/Humungousaur-Windows/Humungousaur-Windows-Setup.zip artifacts/release/final/
+          cp artifacts/release/downloaded/Humungousaur-Windows/Humungousaur-Windows-Setup.exe artifacts/release/final/
           cd artifacts/release/final
-          sha256sum Humungousaur-Windows-Setup.zip Humungousaur-macOS.pkg Humungousaur-Windows.zip Humungousaur-macOS.zip > checksums.txt
+          sha256sum Humungousaur-Windows-Setup.exe Humungousaur-macOS.pkg Humungousaur-Windows.zip Humungousaur-macOS.zip > checksums.txt
           cp ./* ..
       - name: Verify release assets
         run: python3 ./script/verify_release_readiness.py --skip-website --require-assets --release-dir artifacts/release/final --release-tag "$HUMUNGOUSAUR_RELEASE_TAG"
@@ -228,7 +231,7 @@ jobs:
           expected = {
               "Humungousaur-Windows.zip",
               "Humungousaur-macOS.zip",
-              "Humungousaur-Windows-Setup.zip",
+              "Humungousaur-Windows-Setup.exe",
               "Humungousaur-macOS.pkg",
               "checksums.txt",
               "release-readiness.md",

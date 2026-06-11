@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_WEBSITE_ROOT = ROOT.parent / "Humungousaur-Website"
 WINDOWS_ASSET = "Humungousaur-Windows.zip"
 MACOS_ASSET = "Humungousaur-macOS.zip"
-WINDOWS_INSTALLER_ASSET = "Humungousaur-Windows-Setup.zip"
+WINDOWS_INSTALLER_ASSET = "Humungousaur-Windows-Setup.exe"
 MACOS_INSTALLER_ASSET = "Humungousaur-macOS.pkg"
 CHECKSUMS_ASSET = "checksums.txt"
 DESKTOP_DOWNLOAD_ASSETS = [WINDOWS_INSTALLER_ASSET, MACOS_INSTALLER_ASSET]
@@ -648,6 +648,7 @@ def check_source_tree(preflight: Preflight) -> None:
             "verify_release_readiness.py --skip-website",
             "verify_release_report.py",
             "swift build --package-path apps/macos",
+            "choco install innosetup --no-progress -y",
             "package_windows.ps1",
             "verify_windows_package.ps1",
         ],
@@ -675,6 +676,7 @@ def check_source_tree(preflight: Preflight) -> None:
             "HUMUNGOUSAUR_RELEASE_BUILD",
             "WINDOWS_CERTIFICATE_PFX_BASE64",
             "HUMUNGOUSAUR_WINDOWS_SIGN",
+            "choco install innosetup --no-progress -y",
             'python -m pip install -e ".[browser,pdf,ocr,office,test]"',
             "python -m py_compile",
             "python -m unittest discover -v",
@@ -819,8 +821,11 @@ def check_source_tree(preflight: Preflight) -> None:
             ".NET SDK is required",
             "Remove-Item -Path $PublishDir -Recurse -Force",
             "INSTALL.txt",
-            "Humungousaur-Windows-Setup.zip",
-            "Install-Humungousaur.ps1",
+            "Humungousaur-Windows-Setup.exe",
+            "Find-InnoSetupCompiler",
+            "Inno Setup",
+            "iscc.exe",
+            "Bootstrap-Humungousaur.ps1",
             "Copy-RuntimeSource",
             "bootstrap_runtime.py",
             "Humungousaur Windows setup",
@@ -835,6 +840,7 @@ def check_source_tree(preflight: Preflight) -> None:
             "$SignableBinaries = Get-ChildItem -Path $PublishDir -Recurse -File",
             '($_.Extension -eq ".dll" -and $_.Name -like "Humungousaur*.dll")',
             "/tr $TimestampUrl",
+            "VersionInfoProductVersion",
         ],
         "Windows package script supports setup docs and Authenticode signing",
     )
@@ -865,7 +871,7 @@ def check_source_tree(preflight: Preflight) -> None:
             "RuntimeInformation",
             "Windows package verification must run on Windows",
             "Humungousaur-Windows.zip",
-            "Humungousaur-Windows-Setup.zip",
+            "Humungousaur-Windows-Setup.exe",
             "INSTALL.txt",
             "Humungousaur.App.exe",
             'Get-ChildItem -Path $TempDir -Filter "*.exe" -Recurse',
@@ -881,7 +887,7 @@ def check_source_tree(preflight: Preflight) -> None:
             "Get-AuthenticodeSignature",
             "TimeStamperCertificate",
             "Get-FileHash",
-            "Install-Humungousaur.ps1",
+            "Humungousaur-Windows-Setup.exe",
         ],
         "Windows package verifier checks app contents, checksum, and signature mode",
     )
@@ -925,14 +931,14 @@ def check_source_tree(preflight: Preflight) -> None:
             "Humungousaur-macOS",
             "Humungousaur-Windows.zip",
             "Humungousaur-macOS.zip",
-            "Humungousaur-Windows-Setup.zip",
+            "Humungousaur-Windows-Setup.exe",
             "Humungousaur-macOS.pkg",
             "checksums.txt",
             "verify_release_readiness.py",
             "--require-assets",
             "--release-tag",
         ],
-        "release artifact collector downloads Actions desktop zips and regenerates checksums",
+        "release artifact collector downloads Actions desktop installers and zips and regenerates checksums",
     )
     preflight.require_text(
         ROOT / "script/verify_desktop_runtime_smoke.py",
@@ -1081,30 +1087,10 @@ def check_artifacts(preflight: Preflight, release_dir: Path, require_assets: boo
             )
 
     if windows_installer.exists():
-        with zipfile.ZipFile(windows_installer) as archive:
-            check_zip_entries_clean(preflight, archive, WINDOWS_INSTALLER_ASSET)
-            names = set(archive.namelist())
-            required_names = {
-                "Install-Humungousaur.ps1",
-                "README.txt",
-                "runtime-source/script/bootstrap_runtime.py",
-            }
-            missing = sorted(required_names - names)
-            if missing:
-                preflight.fail(f"{WINDOWS_INSTALLER_ASSET} is missing installer entries {missing}")
-            else:
-                preflight.ok(f"{WINDOWS_INSTALLER_ASSET} contains setup script and runtime source")
-            if any(name.endswith("app/Humungousaur.App.exe") or name.endswith("/Humungousaur.App.exe") for name in names):
-                preflight.ok(f"{WINDOWS_INSTALLER_ASSET} contains the Windows app payload")
-            else:
-                preflight.fail(f"{WINDOWS_INSTALLER_ASSET} is missing app/Humungousaur.App.exe")
-            require_zip_text(
-                preflight,
-                archive,
-                "Install-Humungousaur.ps1",
-                ["InstallPythonWithWinget", "runtime-source", "Playwright Chromium", "Start Menu/Desktop shortcuts"],
-                f"{WINDOWS_INSTALLER_ASSET} installer script",
-            )
+        if windows_installer.stat().st_size > 0:
+            preflight.ok(f"{WINDOWS_INSTALLER_ASSET} is present and non-empty")
+        else:
+            preflight.fail(f"{WINDOWS_INSTALLER_ASSET} is empty")
 
     if checksums.exists():
         text = checksums.read_text(encoding="utf-8")
@@ -1215,7 +1201,7 @@ def check_website(preflight: Preflight, website_root: Path, require_website: boo
     )
     preflight.require_text(
         website_root / "scripts/check-release-assets.mjs",
-        ["HUMUNGOUSAUR_RELEASE_API_BASE", "releases/latest", "Humungousaur-Windows-Setup.zip", "Humungousaur-macOS.pkg", "checksums.txt", "createHash", "sha256", "actualHash"],
+        ["HUMUNGOUSAUR_RELEASE_API_BASE", "releases/latest", "Humungousaur-Windows-Setup.exe", "Humungousaur-macOS.pkg", "checksums.txt", "createHash", "sha256", "actualHash"],
         "website live release asset verifier",
     )
     preflight.require_text(
@@ -1226,8 +1212,8 @@ def check_website(preflight: Preflight, website_root: Path, require_website: boo
             "missing-row",
             "missing-asset",
             "empty-asset",
-            "SHA-256 mismatch for Humungousaur-Windows-Setup.zip",
-            "checksums.txt is missing a valid SHA-256 row for Humungousaur-Windows-Setup.zip",
+            "SHA-256 mismatch for Humungousaur-Windows-Setup.exe",
+            "checksums.txt is missing a valid SHA-256 row for Humungousaur-Windows-Setup.exe",
             "is missing required assets",
             "has empty required assets",
             "Release asset checker self-test passed",

@@ -200,7 +200,7 @@ class ReleaseReadinessTests(unittest.TestCase):
                     [
                         "# Humungousaur Release Readiness",
                         "## Artifact Manifest",
-                        "- `Humungousaur-Windows-Setup.zip`: 1 bytes, sha256 `aaa`",
+                        "- `Humungousaur-Windows-Setup.exe`: 1 bytes, sha256 `aaa`",
                         "- `Humungousaur-macOS.pkg`: 1 bytes, sha256 `bbb`",
                         "- `Humungousaur-Windows.zip`: 1 bytes, sha256 `abc`",
                         "- `Humungousaur-macOS.zip`: 1 bytes, sha256 `def`",
@@ -699,11 +699,7 @@ class ReleaseReadinessTests(unittest.TestCase):
                 archive.writestr("publish/Humungousaur.App.exe", "")
 
             macos_installer.write_bytes(b"macos installer")
-            with zipfile.ZipFile(windows_installer, "w") as archive:
-                archive.writestr("Install-Humungousaur.ps1", "InstallPythonWithWinget\nruntime-source\nPlaywright Chromium\nStart Menu/Desktop shortcuts\n")
-                archive.writestr("README.txt", "")
-                archive.writestr("runtime-source/script/bootstrap_runtime.py", "")
-                archive.writestr("app/Humungousaur.App.exe", "")
+            windows_installer.write_bytes(b"windows installer")
 
             checksums.write_text(
                 f"{sha256(windows_installer.read_bytes()).hexdigest()}  {module.WINDOWS_INSTALLER_ASSET}\n"
@@ -899,7 +895,7 @@ class ReleaseReadinessTests(unittest.TestCase):
 
         self.assertEqual([], preflight.errors)
         self.assertIn("GitHub v0.1.0 checksums.txt includes desktop installer and package rows", preflight.passed)
-        self.assertIn("GitHub v0.1.0 Humungousaur-Windows-Setup.zip hash matches checksums.txt", preflight.passed)
+        self.assertIn("GitHub v0.1.0 Humungousaur-Windows-Setup.exe hash matches checksums.txt", preflight.passed)
         self.assertIn("GitHub v0.1.0 Humungousaur-macOS.pkg hash matches checksums.txt", preflight.passed)
         self.assertIn("GitHub v0.1.0 Humungousaur-Windows.zip hash matches checksums.txt", preflight.passed)
         self.assertIn("GitHub v0.1.0 Humungousaur-macOS.zip hash matches checksums.txt", preflight.passed)
