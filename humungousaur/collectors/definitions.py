@@ -42,6 +42,7 @@ COLLECTOR_DEFINITIONS: tuple[CollectorDefinition, ...] = (
         rate_limit_per_minute=6,
         description="Foreground app/window metadata without reading screen contents.",
         stimulus_types=("active_window_changed",),
+        bridge_supported=True,
     ),
     CollectorDefinition(
         name="browser",
@@ -77,6 +78,7 @@ COLLECTOR_DEFINITIONS: tuple[CollectorDefinition, ...] = (
         rate_limit_per_minute=10,
         description="Stateful file metadata polling under configured watch paths, with create/modify/delete classification after baseline.",
         stimulus_types=("file_created", "file_modified", "file_deleted", "file_changed"),
+        bridge_supported=True,
     ),
     CollectorDefinition(
         name="downloads",

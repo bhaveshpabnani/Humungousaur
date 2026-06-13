@@ -276,6 +276,7 @@ def build_parser() -> argparse.ArgumentParser:
     collector_tick.add_argument("--data-dir", type=Path, default=Path("artifacts"))
     collector_tick.add_argument("--force", action="store_true")
     collector_tick.add_argument("--dry-run", action="store_true")
+    collector_tick.add_argument("--no-consumers", action="store_true", help="Record collector events without running memory, semantic, Janus, attention, or autonomy consumers")
     collector_tick.add_argument("--json", action="store_true")
     _add_planner_args(collector_tick)
 
@@ -296,6 +297,7 @@ def build_parser() -> argparse.ArgumentParser:
     collector_loop.add_argument("--data-dir", type=Path, default=Path("artifacts"))
     collector_loop.add_argument("--max-ticks", type=int, default=0)
     collector_loop.add_argument("--force", action="store_true")
+    collector_loop.add_argument("--no-consumers", action="store_true", help="Record collector events without running memory, semantic, Janus, attention, or autonomy consumers")
     collector_loop.add_argument("--json", action="store_true")
     _add_planner_args(collector_loop)
 
@@ -881,7 +883,12 @@ def main() -> None:
         return
 
     if args.command == "collectors-tick":
-        result = run_collector_tick(config, force=args.force, dry_run=args.dry_run)
+        result = run_collector_tick(
+            config,
+            force=args.force,
+            dry_run=args.dry_run,
+            process_consumers=not args.no_consumers,
+        )
         payload = asdict(result)
         if args.json:
             print(json.dumps(payload, indent=2, ensure_ascii=False))
@@ -910,7 +917,12 @@ def main() -> None:
         return
 
     if args.command == "collectors-loop":
-        payload = run_collector_loop(config, max_ticks=args.max_ticks, force=args.force)
+        payload = run_collector_loop(
+            config,
+            max_ticks=args.max_ticks,
+            force=args.force,
+            process_consumers=not args.no_consumers,
+        )
         if args.json:
             print(json.dumps(payload, indent=2, ensure_ascii=False))
         else:

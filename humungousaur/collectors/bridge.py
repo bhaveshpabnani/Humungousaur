@@ -39,14 +39,16 @@ def read_bridge_events(
         return []
     offsets = state.setdefault("spool_offsets", {})
     offset = max(0, min(int(offsets.get(collector, 0) or 0), len(lines)))
-    offsets[collector] = len(lines)
     events: list[CollectorEvent] = []
+    consumed = 0
     for line in lines[offset:]:
         if len(events) >= max_events:
             break
+        consumed += 1
         parsed = _parse_bridge_line(line, collector, allowed_stimulus_types, source=source)
         if parsed is not None:
             events.append(parsed)
+    offsets[collector] = offset + consumed
     return events
 
 

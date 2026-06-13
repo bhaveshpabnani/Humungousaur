@@ -53,12 +53,15 @@ KNOWLEDGE_BASE_ACTIVITY_STIMULUS_TYPES = {
     "doc_link_copied",
 }
 WHITEBOARD_ACTIVITY_STIMULUS_TYPES = {
+    "board_created",
     "board_opened",
     "board_edited",
+    "whiteboard_item_created",
     "sticky_created",
     "diagram_exported",
     "collaborator_joined",
     "whiteboard_comment_added",
+    "board_shared",
 }
 FORM_SURVEY_ACTIVITY_STIMULUS_TYPES = {
     "form_opened",

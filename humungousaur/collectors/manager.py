@@ -182,6 +182,7 @@ def run_collector_tick(
     profile: CollectorProfile | None = None,
     force: bool = False,
     dry_run: bool = False,
+    process_consumers: bool = True,
 ) -> CollectorTickResult:
     normalized = config.normalized()
     active = profile or load_collector_profile(normalized)
@@ -256,13 +257,18 @@ def run_collector_tick(
     state["last_tick_at"] = _utc_now()
     state["tick_count"] = int(state.get("tick_count", 0)) + 1
     state["last_collected_count"] = len(result.collected)
-    if not dry_run:
+    if process_consumers and not dry_run:
         memory_result = MemoryMirrorConsumer(collector_event_log).consume(normalized)
         state["last_memory_consumer"] = memory_result
         state["last_semantic_event_consumer"] = SemanticEventConsumer(collector_event_log).consume(normalized)
         state["last_ui_stream_consumer"] = UIStreamConsumer(collector_event_log).consume()
         state["last_janus_consumer"] = JanusConsumer(collector_event_log).consume(normalized)
-    if active.submit_to_harness and not dry_run:
+    elif not process_consumers:
+        state["last_consumer_skip"] = {
+            "reason": "consumer processing disabled for this collector tick",
+            "skipped_at": _utc_now(),
+        }
+    if process_consumers and active.submit_to_harness and not dry_run:
         attention_result = AttentionBatchConsumer(collector_event_log).consume(normalized, active, force=force)
         state["last_attention_consumer"] = {
             key: value
@@ -280,13 +286,13 @@ def run_collector_tick(
             submission = attention_result.get("submission")
             if isinstance(submission, dict):
                 result.submitted.append(submission)
-    if active.run_autonomous_cycle and not dry_run:
+    if process_consumers and active.run_autonomous_cycle and not dry_run:
         state["last_autonomous_trigger_consumer"] = AutonomousTriggerConsumer(collector_event_log).consume()
     if not dry_run:
         state["last_event_log_retention"] = collector_event_log.enforce_retention()
     if not dry_run:
         _save_state(normalized, state)
-    if active.run_autonomous_cycle and not dry_run:
+    if process_consumers and active.run_autonomous_cycle and not dry_run:
         loop = AutonomousLoopRunner(normalized).run(max_cycles=1, stop_after_idle_cycles=1)
         result.loop = autonomous_loop_result_to_dict(loop)
     return _finish_tick(result, started, normalized, save_state=not dry_run)
@@ -298,12 +304,13 @@ def run_collector_loop(
     max_ticks: int = 0,
     profile: CollectorProfile | None = None,
     force: bool = False,
+    process_consumers: bool = True,
 ) -> dict[str, Any]:
     ticks: list[dict[str, Any]] = []
     active = profile or load_collector_profile(config)
     tick_count = 0
     while True:
-        result = run_collector_tick(config, profile=active, force=force)
+        result = run_collector_tick(config, profile=active, force=force, process_consumers=process_consumers)
         ticks.append(asdict(result))
         tick_count += 1
         if max_ticks and tick_count >= max_ticks:
@@ -391,7 +398,7 @@ def _profile_from_payload(payload: dict[str, Any]) -> CollectorProfile:
         response_mode=response_mode,
         submit_to_harness=bool(payload.get("submit_to_harness", True)),
         run_autonomous_cycle=bool(payload.get("run_autonomous_cycle", False)),
-        max_events_per_tick=max(1, min(int(payload.get("max_events_per_tick") or 8), 50)),
+        max_events_per_tick=max(1, min(int(payload.get("max_events_per_tick") or 8), 500)),
         collectors=collectors,
         rich_capture_opt_in=rich_capture_opt_in,
         collector_rate_limits_per_minute=collector_rate_limits,

@@ -68,6 +68,13 @@ CREATIVE_STIMULUS_TYPES = {
     "render_started",
     "render_finished",
     "timeline_marker_changed",
+    "design_file_created",
+    "design_file_opened",
+    "design_file_updated",
+    "design_comment_added",
+    "prototype_presented",
+    "component_published",
+    "design_exported",
 }
 SECURITY_STIMULUS_TYPES = {
     "password_field_focused",

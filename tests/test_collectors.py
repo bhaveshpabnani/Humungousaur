@@ -27,8 +27,11 @@ from humungousaur.collectors import (
 )
 from humungousaur.config import AgentConfig
 from humungousaur.collectors.definitions import COLLECTOR_DEFINITIONS
+from humungousaur.collectors.event_log import CollectorEventLog
 from humungousaur.collectors.registry import collector_registry
+from humungousaur.janus import janus_status
 from humungousaur.memory.event_store import EventStore
+from humungousaur.planning.model_clients import StaticModelClient
 from humungousaur.tools.activity.implementation import ActivityPolicyStore, activity_policy_path
 
 
@@ -378,6 +381,186 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(helper_metadata["source"], "browsers")
         self.assertIn("profile_id_hash", helper_metadata)
         self.assertNotIn("secret.example", serialized)
+
+    def test_bridge_spool_offsets_do_not_drop_batched_events(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            config = AgentConfig(workspace=workspace, data_dir=root / "data", planner_provider="explicit").normalized()
+            save_collector_profile(
+                config,
+                {
+                    "enabled": True,
+                    "submit_to_harness": False,
+                    "collectors": {"active_window": False, "browser": True, "filesystem": False, "agent_runtime": False},
+                },
+            )
+            for index in range(3):
+                append_bridge_event(
+                    config,
+                    {
+                        "collector": "browser",
+                        "stimulus_type": "browser_tab_changed",
+                        "event_id": f"browser-batch-{index}",
+                        "text": f"Browser bridge event {index}",
+                    },
+                )
+
+            first = run_collector_tick(config, force=True, process_consumers=False)
+            second = run_collector_tick(config, force=True, process_consumers=False)
+            third = run_collector_tick(config, force=True, process_consumers=False)
+            events = query_collector_events(config, collector="browser", limit=10)["events"]
+
+        self.assertEqual([item["text"] for item in first.collected], ["Browser bridge event 0"])
+        self.assertEqual([item["text"] for item in second.collected], ["Browser bridge event 1"])
+        self.assertEqual([item["text"] for item in third.collected], ["Browser bridge event 2"])
+        self.assertEqual([event["text"] for event in events], ["Browser bridge event 2", "Browser bridge event 1", "Browser bridge event 0"])
+
+    def test_collector_tick_can_store_events_without_downstream_consumers(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            config = AgentConfig(workspace=workspace, data_dir=root / "data", planner_provider="model").normalized()
+            save_collector_profile(
+                config,
+                {
+                    "enabled": True,
+                    "submit_to_harness": True,
+                    "run_autonomous_cycle": True,
+                    "collectors": {"active_window": False, "browser": False, "filesystem": False, "agent_runtime": True},
+                },
+            )
+            append_bridge_event(
+                config,
+                {
+                    "collector": "agent_runtime",
+                    "stimulus_type": "autonomous_cycle_started",
+                    "event_id": "agent-runtime-no-consumers",
+                    "text": "Collector runtime sample.",
+                },
+            )
+
+            with patch("humungousaur.collectors.manager.JanusConsumer.consume", side_effect=AssertionError("Janus should not run")):
+                result = run_collector_tick(config, force=True, process_consumers=False)
+            state = json.loads((config.data_dir / "collectors_state.json").read_text(encoding="utf-8"))
+            events = query_collector_events(config, collector="agent_runtime", limit=5)["events"]
+
+        self.assertEqual(len(result.collected), 1)
+        self.assertEqual(events[0]["stimulus_type"], "autonomous_cycle_started")
+        self.assertEqual(state["last_consumer_skip"]["reason"], "consumer processing disabled for this collector tick")
+
+    def test_reflex_bridge_event_prepares_text_activation_response(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            config = AgentConfig(workspace=workspace, data_dir=root / "data", planner_provider="model").normalized()
+            collectors = {definition.name: False for definition in COLLECTOR_DEFINITIONS}
+            collectors["device_state"] = True
+            save_collector_profile(
+                config,
+                {
+                    "enabled": True,
+                    "response_mode": "text",
+                    "submit_to_harness": True,
+                    "run_autonomous_cycle": True,
+                    "collectors": collectors,
+                },
+            )
+            append_bridge_event(
+                config,
+                {
+                    "collector": "device_state",
+                    "stimulus_type": "screen_unlocked",
+                    "event_id": "reflex-ask-user-smoke",
+                    "text": "Reflex smoke: user returned to the desktop.",
+                    "metadata": {"operation": "reflex_screen_unlock"},
+                },
+            )
+            model_payload = json.dumps(
+                {
+                    "posture": "ask_user",
+                    "confidence": "high",
+                    "should_interrupt_user": True,
+                    "user_visible_text": "I noticed you returned to the desktop. Want me to reopen the current work context?",
+                    "agent_stimulus": "Prepare a concise resume context from safe collector metadata only if the user confirms.",
+                    "reason": "Reflex smoke response for a screen-unlocked event.",
+                    "task_context_updates": [],
+                    "memory_updates": [],
+                    "safety_notes": [],
+                    "deep_dive_request": None,
+                    "episode_update": None,
+                }
+            )
+
+            with patch("humungousaur.janus.router.build_model_client", return_value=StaticModelClient(model_payload)):
+                result = run_collector_tick(config, force=True)
+            status = janus_status(config, limit=10)
+
+        self.assertEqual([(event["collector"], event["stimulus_type"]) for event in result.collected], [("device_state", "screen_unlocked")])
+        self.assertEqual(status["routes"][0]["route_class"], "reflex")
+        self.assertEqual(status["decisions"][0]["posture"], "ask_user")
+        self.assertEqual(status["decisions"][0]["model_status"], "model")
+        self.assertTrue(status["decisions"][0]["should_interrupt_user"])
+        self.assertEqual(status["activations"][0]["status"], "prepared")
+        self.assertEqual(status["activations"][0]["response_mode"], "text")
+        self.assertIn("Want me to reopen", status["activations"][0]["user_visible_text"])
+        self.assertIn("ask_user_only", status["activations"][0]["allowed_actions"])
+        self.assertIn("collector_event:", json.dumps(status["activations"][0]["evidence_refs"]))
+        self.assertIn("reflex_decision", status["explanations"][0]["explanation_type"])
+
+    def test_every_bridge_supported_collector_operation_enters_event_log(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            workspace = root / "workspace"
+            workspace.mkdir()
+            config = AgentConfig(workspace=workspace, data_dir=root / "data", planner_provider="explicit").normalized()
+            bridge_definitions = [definition for definition in COLLECTOR_DEFINITIONS if definition.bridge_supported]
+            missing: list[str] = []
+
+            for definition in bridge_definitions:
+                collector_profile = {item.name: False for item in COLLECTOR_DEFINITIONS}
+                collector_profile[definition.name] = True
+                rich_profile = {item.name: bool(item.rich_capture_required) for item in COLLECTOR_DEFINITIONS}
+                save_collector_profile(
+                    config,
+                    {
+                        "enabled": True,
+                        "submit_to_harness": False,
+                        "max_events_per_tick": 500,
+                        "collectors": collector_profile,
+                        "rich_capture_opt_in": rich_profile,
+                        "collector_rate_limits_per_minute": {definition.name: 600},
+                    },
+                )
+                before = CollectorEventLog(config.collector_events_db_path).status()["event_count"]
+                for index, stimulus_type in enumerate(definition.stimulus_types):
+                    append_bridge_event(
+                        config,
+                        {
+                            "collector": definition.name,
+                            "stimulus_type": stimulus_type,
+                            "event_id": f"{definition.name}-{stimulus_type}-{index}",
+                            "text": f"{definition.name} {stimulus_type} bridge sample",
+                            "metadata": {
+                                "raw_content_included": False,
+                                "paths_redacted": True,
+                                "operation_index": index,
+                            },
+                            "payload": {"operation_index": index},
+                        },
+                    )
+                result = run_collector_tick(config, force=True, process_consumers=False)
+                collected_pairs = {(item["collector"], item["stimulus_type"]) for item in result.collected}
+                for stimulus_type in definition.stimulus_types:
+                    if (definition.name, stimulus_type) not in collected_pairs:
+                        missing.append(f"{definition.name}:{stimulus_type}")
+                after = CollectorEventLog(config.collector_events_db_path).status()["event_count"]
+                self.assertGreaterEqual(after - before, len(definition.stimulus_types), definition.name)
+
+        self.assertEqual(missing, [])
 
     def test_google_workspace_source_events_enter_collector_log_with_redaction(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

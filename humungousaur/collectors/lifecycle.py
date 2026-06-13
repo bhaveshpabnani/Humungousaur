@@ -24,6 +24,7 @@ INPUT_STIMULUS_TYPES = {
     "mouse_drag_dropped",
     "trackpad_gesture",
     "keyboard_shortcut_pressed",
+    "user_idle_state_changed",
 }
 APP_LIFECYCLE_BRIDGE_STIMULUS_TYPES = {
     "app_opened",
@@ -54,7 +55,7 @@ BROWSER_BRIDGE_STIMULUS_TYPES = {
     "browser_back",
     "browser_forward",
 }
-MAX_LIFECYCLE_EVENTS_PER_TICK = 10
+MAX_LIFECYCLE_EVENTS_PER_TICK = 20
 
 
 def collect_input_device(config: AgentConfig, profile: CollectorProfile, state: dict[str, Any]) -> list[CollectorEvent]:
