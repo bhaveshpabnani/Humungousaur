@@ -12,6 +12,7 @@ struct AppSettings: Codable, Equatable {
     var janusModelProvider = "same-as-main"
     var janusModelName = ""
     var janusModelBaseURL = ""
+    var sttProvider = "system"
     var ttsProvider = "system"
     var voiceId = ""
     var elevenLabsModel = ""
@@ -112,6 +113,14 @@ final class SettingsStore {
         }
         if settings.janusModelProvider.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             settings.janusModelProvider = "same-as-main"
+            shouldSave = true
+        }
+        if !["system", "deepgram"].contains(settings.sttProvider.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) {
+            settings.sttProvider = "system"
+            shouldSave = true
+        }
+        if !["system", "elevenlabs"].contains(settings.ttsProvider.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()) {
+            settings.ttsProvider = "system"
             shouldSave = true
         }
         if shouldSave {
