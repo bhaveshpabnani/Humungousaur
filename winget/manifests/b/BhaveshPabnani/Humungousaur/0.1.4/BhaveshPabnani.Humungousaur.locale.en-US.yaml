@@ -1,0 +1,26 @@
+PackageIdentifier: BhaveshPabnani.Humungousaur
+PackageVersion: 0.1.4
+PackageLocale: en-US
+Publisher: Humungousaur
+PublisherUrl: https://github.com/bhaveshpabnani
+PublisherSupportUrl: https://github.com/bhaveshpabnani/Humungousaur/issues
+Author: Humungousaur contributors
+PackageName: Humungousaur
+PackageUrl: https://github.com/bhaveshpabnani/Humungousaur
+License: MIT
+LicenseUrl: https://github.com/bhaveshpabnani/Humungousaur/blob/main/LICENSE
+Copyright: Copyright (c) Humungousaur contributors
+ShortDescription: Local-first desktop agent runtime.
+Description: Humungousaur is a local-first desktop agent runtime with native apps, collectors, approvals, channels, memory, and model-provider support.
+Moniker: humungousaur
+Tags:
+  - ai
+  - agent
+  - automation
+  - desktop
+  - local-first
+  - collectors
+  - assistant
+ReleaseNotesUrl: https://github.com/bhaveshpabnani/Humungousaur/releases/tag/v0.1.4
+ManifestType: defaultLocale
+ManifestVersion: 1.9.0

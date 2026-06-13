@@ -58,6 +58,7 @@ jobs:
             script/bootstrap_runtime.py \
             script/collect_release_artifacts.py \
             script/verify_desktop_runtime_smoke.py \
+            script/verify_package_managers.py \
             script/verify_release_report.py \
             script/verify_desktop_parity.py \
             script/verify_open_source_hygiene.py \
@@ -67,6 +68,8 @@ jobs:
         run: python3 ./script/verify_release_readiness.py --skip-website
       - name: Verify desktop runtime smoke
         run: python3 ./script/verify_desktop_runtime_smoke.py
+      - name: Verify package manager metadata
+        run: python3 ./script/verify_package_managers.py
       - name: Run backend tests
         run: python -m unittest discover -v
 

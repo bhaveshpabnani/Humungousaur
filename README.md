@@ -130,6 +130,39 @@ cp .env.example .env
 
 Do not commit `.env` or real secrets.
 
+## Package Manager Installs
+
+Desktop package-manager metadata is checked into this repository. See [Package Manager Distribution](docs/PACKAGE_MANAGERS.md) for publishing and registry-submission details.
+
+macOS with Homebrew:
+
+```bash
+brew tap bhaveshpabnani/humungousaur https://github.com/bhaveshpabnani/Humungousaur
+brew install --cask humungousaur
+```
+
+Windows with WinGet local manifest:
+
+```powershell
+winget install --manifest .\winget\manifests\b\BhaveshPabnani\Humungousaur\0.1.4
+```
+
+Windows with Scoop:
+
+```powershell
+scoop bucket add humungousaur https://github.com/bhaveshpabnani/Humungousaur
+scoop install humungousaur
+```
+
+Windows with Chocolatey package source:
+
+```powershell
+choco pack .\chocolatey\humungousaur\humungousaur.nuspec --out .
+choco install humungousaur --source . -y
+```
+
+Official WinGet and Chocolatey registry availability requires external repository/review or account/API-key submission. Public production macOS installs should use a Developer ID signed and notarized package; until that certificate flow is complete, Gatekeeper may warn that Apple cannot verify the macOS package.
+
 ## First Run
 
 Run a safe explicit tool call:
@@ -295,6 +328,7 @@ python3 -m py_compile script/verify_open_source_hygiene.py script/verify_publica
 python3 -m unittest discover -v
 python3 script/verify_desktop_parity.py
 python3 script/verify_desktop_runtime_smoke.py
+python3 script/verify_package_managers.py
 python3 script/verify_open_source_hygiene.py
 python3 scripts/smoke_real_world_tasks.py --workspace .
 python3 script/verify_release_readiness.py --require-website --release-tag v0.1.0

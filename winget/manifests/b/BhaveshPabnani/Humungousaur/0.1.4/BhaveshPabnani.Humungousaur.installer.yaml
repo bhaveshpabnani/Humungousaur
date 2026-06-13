@@ -1,0 +1,15 @@
+PackageIdentifier: BhaveshPabnani.Humungousaur
+PackageVersion: 0.1.4
+InstallerType: inno
+Scope: user
+UpgradeBehavior: install
+ReleaseDate: 2026-06-11
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/bhaveshpabnani/Humungousaur/releases/download/v0.1.4/Humungousaur-Windows-Setup.exe
+    InstallerSha256: 6232FAF02ACAFE1FE66560E728CCB05ADD8956D775636397B4D0CDE8500FB2A1
+    InstallerSwitches:
+      Silent: /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+      SilentWithProgress: /SILENT /SUPPRESSMSGBOXES /NORESTART
+ManifestType: installer
+ManifestVersion: 1.9.0

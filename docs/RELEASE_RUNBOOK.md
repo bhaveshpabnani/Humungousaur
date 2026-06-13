@@ -7,10 +7,11 @@ This is the ordered path for publishing a production Humungousaur release with m
 Run from the agent repository:
 
 ```bash
-python3 -m py_compile script/verify_open_source_hygiene.py script/verify_publication_state.py script/verify_release_readiness.py script/generate_release_report.py script/collect_release_artifacts.py script/verify_desktop_parity.py script/verify_desktop_runtime_smoke.py
+python3 -m py_compile script/verify_open_source_hygiene.py script/verify_publication_state.py script/verify_release_readiness.py script/generate_release_report.py script/collect_release_artifacts.py script/verify_desktop_parity.py script/verify_desktop_runtime_smoke.py script/verify_package_managers.py
 python3 -m unittest discover -v
 python3 script/verify_desktop_parity.py
 python3 script/verify_desktop_runtime_smoke.py
+python3 script/verify_package_managers.py
 python3 script/verify_open_source_hygiene.py
 python3 scripts/smoke_real_world_tasks.py --workspace .
 python3 script/verify_release_readiness.py --require-website --release-tag v0.1.0

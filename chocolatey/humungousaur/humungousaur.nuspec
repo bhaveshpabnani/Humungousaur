@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>humungousaur</id>
+    <version>0.1.4</version>
+    <packageSourceUrl>https://github.com/bhaveshpabnani/Humungousaur</packageSourceUrl>
+    <owners>Humungousaur</owners>
+    <title>Humungousaur</title>
+    <authors>Humungousaur contributors</authors>
+    <projectUrl>https://github.com/bhaveshpabnani/Humungousaur</projectUrl>
+    <licenseUrl>https://github.com/bhaveshpabnani/Humungousaur/blob/main/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <projectSourceUrl>https://github.com/bhaveshpabnani/Humungousaur</projectSourceUrl>
+    <docsUrl>https://github.com/bhaveshpabnani/Humungousaur#readme</docsUrl>
+    <bugTrackerUrl>https://github.com/bhaveshpabnani/Humungousaur/issues</bugTrackerUrl>
+    <tags>humungousaur janus ai agent desktop local-first automation collectors</tags>
+    <summary>Local-first desktop agent runtime.</summary>
+    <description>Humungousaur is a local-first desktop agent runtime with native apps, collectors, approvals, channels, memory, and model-provider support.</description>
+    <releaseNotes>https://github.com/bhaveshpabnani/Humungousaur/releases/tag/v0.1.4</releaseNotes>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>
