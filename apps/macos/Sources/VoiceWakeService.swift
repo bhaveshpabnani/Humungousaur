@@ -59,6 +59,10 @@ final class VoiceWakeService: NSObject, NSSpeechRecognizerDelegate {
         guard microphoneGranted else {
             throw VoiceWakeServiceError.microphoneDenied
         }
+        let speechGranted = await Self.requestSpeechRecognitionAccess()
+        guard speechGranted else {
+            throw VoiceWakeServiceError.speechRecognitionDenied
+        }
         let cleanCommands = commands
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }

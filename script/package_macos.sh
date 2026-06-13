@@ -15,6 +15,7 @@ APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_MACOS="$APP_CONTENTS/MacOS"
 APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$APP_NAME"
+COLLECTOR_BINARY="$APP_MACOS/HumungousaurMacCollectorHost"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
 ZIP_PATH="$RELEASE_DIR/Humungousaur-macOS.zip"
 PKG_PATH="$RELEASE_DIR/Humungousaur-macOS.pkg"
@@ -74,13 +75,18 @@ stage_runtime_source() {
 }
 
 swift build --package-path "$MACOS_DIR" -c release
+swift build --package-path "$ROOT_DIR/collectors/macos" -c release
 BUILD_DIR="$(swift build --package-path "$MACOS_DIR" -c release --show-bin-path)"
 BUILD_BINARY="$BUILD_DIR/$APP_NAME"
+COLLECTOR_BUILD_DIR="$(swift build --package-path "$ROOT_DIR/collectors/macos" -c release --show-bin-path)"
+COLLECTOR_BUILD_BINARY="$COLLECTOR_BUILD_DIR/HumungousaurMacCollectorHost"
 
 rm -rf "$STAGE_DIR"
 mkdir -p "$APP_MACOS" "$APP_RESOURCES" "$RELEASE_DIR"
 cp "$BUILD_BINARY" "$APP_BINARY"
 chmod +x "$APP_BINARY"
+cp "$COLLECTOR_BUILD_BINARY" "$COLLECTOR_BINARY"
+chmod +x "$COLLECTOR_BINARY"
 cp "$MACOS_DIR/Sources/Resources/HumungousaurIcon.icns" "$APP_RESOURCES/HumungousaurIcon.icns"
 find "$BUILD_DIR" -maxdepth 1 -type d \( -name "*.resources" -o -name "*.bundle" \) -exec cp -R {} "$APP_RESOURCES/" \;
 stage_runtime_source "$RUNTIME_SOURCE_DIR"

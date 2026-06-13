@@ -10,8 +10,8 @@ struct VoiceView: View {
                 SectionHeader(eyebrow: "Voice", title: "Voice", subtitle: "Set up listening and spoken replies for hands-free work.")
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                     MetricTile(title: "Wake-up", value: model.settings.voiceWakeEnabled ? (model.voiceWakeIsAwake ? "Awake" : "Listening") : "Off", symbol: "waveform.badge.mic")
-                    MetricTile(title: "Speaking", value: model.secrets.elevenLabsAPIKey.isEmpty ? "System voice" : "ElevenLabs", symbol: "speaker.wave.2")
-                    MetricTile(title: "Voice engine", value: model.settings.ttsProvider.humanizedIdentifier, symbol: "slider.horizontal.3")
+                    MetricTile(title: "Listening", value: model.settings.sttProvider.humanizedIdentifier, symbol: "ear")
+                    MetricTile(title: "Speaking", value: model.settings.ttsProvider.humanizedIdentifier, symbol: "speaker.wave.2")
                 }
                 Form {
                     Section("Wake-up") {
@@ -38,23 +38,27 @@ struct VoiceView: View {
                         }
                     }
                     Section("Speech") {
-                    Picker("Speaking voice", selection: $model.settings.ttsProvider) {
-                        Text("System voice").tag("system")
-                        Text("ElevenLabs").tag("elevenlabs")
-                    }
-                    TextField("Voice ID", text: $model.settings.voiceId)
-                    SecureField("Listening API key", text: $model.secrets.deepgramAPIKey)
-                    SecureField("Speaking API key", text: $model.secrets.elevenLabsAPIKey)
-                    TextField("ElevenLabs model", text: $model.settings.elevenLabsModel)
-                    TextField("Test phrase", text: $testPhrase)
-                    HStack {
-                        Button("Save") {
-                            Task { await model.saveVoiceSettings() }
+                        Picker("Listening engine", selection: $model.settings.sttProvider) {
+                            Text("System speech").tag("system")
+                            Text("Deepgram").tag("deepgram")
                         }
-                        Button("Test Voice") {
-                            Task { await model.send(testPhrase, source: "voice_transcript", responseMode: "voice_speak") }
+                        Picker("Speaking voice", selection: $model.settings.ttsProvider) {
+                            Text("System voice").tag("system")
+                            Text("ElevenLabs").tag("elevenlabs")
                         }
-                    }
+                        TextField("Voice ID", text: $model.settings.voiceId)
+                        SecureField("Listening API key", text: $model.secrets.deepgramAPIKey)
+                        SecureField("Speaking API key", text: $model.secrets.elevenLabsAPIKey)
+                        TextField("ElevenLabs model", text: $model.settings.elevenLabsModel)
+                        TextField("Test phrase", text: $testPhrase)
+                        HStack {
+                            Button("Save") {
+                                Task { await model.saveVoiceSettings() }
+                            }
+                            Button("Test Voice") {
+                                Task { await model.testVoiceOutput(testPhrase) }
+                            }
+                        }
                     }
                 }
                 .formStyle(.grouped)

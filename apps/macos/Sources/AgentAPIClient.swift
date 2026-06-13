@@ -195,12 +195,23 @@ final class AgentAPIClient {
         try await post("voice/status", body: runtimePayload(settings: settings, secrets: secrets))
     }
 
+    func speakText(_ text: String, settings: AppSettings, secrets: RuntimeSecrets) async throws -> JSONValue {
+        var payload = runtimePayload(settings: settings, secrets: secrets)
+        payload["text"] = text
+        payload["provider"] = settings.ttsProvider
+        payload["voice_id"] = settings.voiceId
+        payload["model"] = settings.elevenLabsModel
+        payload["reason"] = "macOS app is speaking the visible assistant response."
+        payload["playback"] = true
+        return try await post("voice/speak", body: payload)
+    }
+
     func transcribeAudio(_ audioURL: URL, settings: AppSettings, secrets: RuntimeSecrets) async throws -> String {
         let audioData = try Data(contentsOf: audioURL)
         var payload = runtimePayload(settings: settings, secrets: secrets)
         payload["audio_base64"] = audioData.base64EncodedString()
         payload["filename"] = audioURL.lastPathComponent
-        payload["provider"] = secrets.deepgramAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "local-whisper" : "deepgram"
+        payload["provider"] = settings.sttProvider == "deepgram" ? "deepgram" : "local-whisper"
         payload["smart_format"] = true
         payload["mime_type"] = "audio/mp4"
         payload["reason"] = "macOS wake listener captured the user's post-wake task."

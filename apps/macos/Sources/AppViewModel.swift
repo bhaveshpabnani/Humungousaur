@@ -53,6 +53,7 @@ final class AppViewModel: ObservableObject {
     @Published var notice: String?
 
     let agentProcess = LocalAgentProcess()
+    let nativeCollectorProcess = NativeCollectorProcess()
 
     var displayName: String {
         let fullName = NSFullUserName().trimmingCharacters(in: .whitespacesAndNewlines)
@@ -76,6 +77,7 @@ final class AppViewModel: ObservableObject {
     private var activeVoiceResponseTask: Task<Void, Never>?
     private var voiceAcknowledgementIndex = 0
     private let wakeAcknowledgementSpeaker = AVSpeechSynthesizer()
+    private let responseSpeaker = AVSpeechSynthesizer()
 
     init() {
         let loaded = settingsStore.load()
@@ -92,6 +94,9 @@ final class AppViewModel: ObservableObject {
 
     func bootstrap() async {
         await refreshAll()
+        if status == .online {
+            startNativeCollectorsIfPossible()
+        }
         if settings.voiceWakeEnabled {
             await setVoiceWakeEnabled(true, persist: false)
         }
@@ -324,9 +329,10 @@ final class AppViewModel: ObservableObject {
         }
     }
 
-    func send(_ prompt: String, source: String, responseMode: String, displayText: String? = nil) async {
+    @discardableResult
+    func send(_ prompt: String, source: String, responseMode: String, displayText: String? = nil) async -> String? {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty else { return nil }
         messages.append(ChatMessage(role: .user, text: displayText ?? trimmed))
         let assistantMessage = ChatMessage(
             role: .assistant,
@@ -370,6 +376,7 @@ final class AppViewModel: ObservableObject {
             await refreshRuns()
             await refreshApprovals()
             await refreshAutonomy()
+            return messageText(for: assistantID)
         } catch {
             if error is CancellationError {
                 updateMessage(assistantID) { message in
@@ -377,29 +384,42 @@ final class AppViewModel: ObservableObject {
                     message.activities = []
                     message.isStreaming = false
                 }
-                return
+                return nil
             }
             if isLegacyStreamError(error) {
-                await sendLegacyStimulus(
+                return await sendLegacyStimulus(
                     trimmed,
                     source: source,
                     responseMode: responseMode,
                     assistantID: assistantID
                 )
-                return
             }
             updateMessage(assistantID) { message in
                 message.role = .error
                 message.text = error.localizedDescription
                 message.isStreaming = false
             }
+            return nil
         }
+    }
+
+    func sendSpokenResponse(_ prompt: String, source: String = "voice_transcript", displayText: String? = nil) async {
+        guard let response = await send(prompt, source: source, responseMode: "text", displayText: displayText) else {
+            return
+        }
+        await speakVisibleResponse(response)
     }
 
     func runQuickCommand(_ command: String, display: String? = nil) {
         Task {
             await send(command, source: "user_text", responseMode: "text", displayText: display)
         }
+    }
+
+    func testVoiceOutput(_ phrase: String) async {
+        let trimmed = phrase.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        await speakVisibleResponse(trimmed)
     }
 
     func startNewSession() {
@@ -532,6 +552,7 @@ final class AppViewModel: ObservableObject {
 
     func toggleAgentProcess() async {
         if agentProcess.isRunning {
+            nativeCollectorProcess.stop()
             agentProcess.stop()
             status = .offline
             return
@@ -540,11 +561,20 @@ final class AppViewModel: ObservableObject {
             status = .starting
             saveSettings()
             try agentProcess.start(settings: settingsWithChannelSecrets(), secrets: secrets)
+            startNativeCollectorsIfPossible()
             try? await Task.sleep(for: .seconds(1))
             await refreshAll()
         } catch {
             status = .offline
             notice = error.localizedDescription
+        }
+    }
+
+    private func startNativeCollectorsIfPossible() {
+        do {
+            try nativeCollectorProcess.start(settings: settings)
+        } catch {
+            notice = "Could not start native collectors: \(error.localizedDescription)"
         }
     }
 
@@ -720,7 +750,7 @@ final class AppViewModel: ObservableObject {
         let responseTask = Task { [weak self] in
             guard let self else { return }
             pauseVoiceListeningForResponse()
-            await send(trimmed, source: "voice_transcript", responseMode: "voice_speak", displayText: "Voice: \(trimmed)")
+            await sendSpokenResponse(trimmed, displayText: "Voice: \(trimmed)")
             if Task.isCancelled { return }
             voiceWakePausedForResponse = false
             if keepListening && settings.voiceContinuousAfterWake {
@@ -761,15 +791,16 @@ final class AppViewModel: ObservableObject {
         activeVoiceResponseTask = nil
         stopLocalSpeechPlayback()
         voiceWakePausedForResponse = false
-        voiceWakeIsAwake = false
-        voiceWakeStatusText = "Response stopped."
-        Task {
-            await resumeWakeDetection()
+        voiceWakeIsAwake = true
+        voiceWakeStatusText = "Response stopped. Listening for your task..."
+        if settings.voiceWakeEnabled {
+            startVoiceTaskCapture(acknowledge: false)
         }
     }
 
     private func stopLocalSpeechPlayback() {
         wakeAcknowledgementSpeaker.stopSpeaking(at: .immediate)
+        responseSpeaker.stopSpeaking(at: .immediate)
         for processName in ["say", "afplay"] {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
@@ -1261,7 +1292,15 @@ final class AppViewModel: ObservableObject {
         update(&messages[index])
     }
 
-    private func sendLegacyStimulus(_ text: String, source: String, responseMode: String, assistantID: UUID) async {
+    private func messageText(for id: UUID) -> String? {
+        guard let message = messages.first(where: { $0.id == id }), message.role != .error else {
+            return nil
+        }
+        let text = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : text
+    }
+
+    private func sendLegacyStimulus(_ text: String, source: String, responseMode: String, assistantID: UUID) async -> String? {
         updateMessage(assistantID) { message in
             message.activities.append(
                 StreamActivityItem(
@@ -1288,13 +1327,74 @@ final class AppViewModel: ObservableObject {
             await refreshRuns()
             await refreshApprovals()
             await refreshAutonomy()
+            return messageText(for: assistantID)
         } catch {
             updateMessage(assistantID) { message in
                 message.role = .error
                 message.text = error.localizedDescription
                 message.isStreaming = false
             }
+            return nil
         }
+    }
+
+    private func speakVisibleResponse(_ response: String) async {
+        let spokenText = Self.speechText(from: response)
+        guard !spokenText.isEmpty else { return }
+        voiceWakeStatusText = "Speaking the visible response."
+        let provider = settings.ttsProvider.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if provider != "system" {
+            do {
+                let result = try await api.speakText(spokenText, settings: settingsWithChannelSecrets(), secrets: secrets)
+                let status = result["status"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                if status == "succeeded" {
+                    return
+                }
+                notice = "Voice provider did not play audio; using system voice."
+            } catch {
+                notice = "Voice provider failed; using system voice."
+            }
+        }
+        do {
+            try await speakWithSystemVoice(spokenText)
+        } catch {
+            notice = "Could not speak response: \(error.localizedDescription)"
+        }
+    }
+
+    private func speakWithSystemVoice(_ text: String) async throws {
+        stopLocalSpeechPlayback()
+        try await withTaskCancellationHandler {
+            let utterance = AVSpeechUtterance(string: text)
+            utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+            responseSpeaker.speak(utterance)
+            try await Task.sleep(for: .milliseconds(120))
+            while responseSpeaker.isSpeaking || responseSpeaker.isPaused {
+                try Task.checkCancellation()
+                try await Task.sleep(for: .milliseconds(100))
+            }
+        } onCancel: {
+            Task { @MainActor in
+                self.stopLocalSpeechPlayback()
+            }
+        }
+    }
+
+    private static func speechText(from markdown: String) -> String {
+        var text = markdown
+        let replacements = [
+            ("```[\\s\\S]*?```", " "),
+            ("`([^`]*)`", "$1"),
+            ("\\[([^\\]]+)\\]\\([^\\)]*\\)", "$1"),
+            ("(?m)^\\s{0,3}#{1,6}\\s*", ""),
+            ("(?m)^\\s{0,3}>\\s?", ""),
+            ("[*_~]", ""),
+            ("\\n{3,}", "\n\n")
+        ]
+        for (pattern, replacement) in replacements {
+            text = text.replacingOccurrences(of: pattern, with: replacement, options: .regularExpression)
+        }
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func isLegacyStreamError(_ error: Error) -> Bool {

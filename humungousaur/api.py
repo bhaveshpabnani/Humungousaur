@@ -141,7 +141,7 @@ from humungousaur.tools.cognition_tools import (
 from humungousaur.tools.os_tools import list_screenshot_captures
 from humungousaur.tools.plugin_tools import discover_plugin_manifests, load_plugin_catalog
 from humungousaur.tools.system_tools import collect_system_status
-from humungousaur.tools.voice_tools import VoiceProviderStatusTool, VoiceStopPlaybackTool, VoiceTranscribeTool
+from humungousaur.tools.voice_tools import VoiceProviderStatusTool, VoiceSpeakTool, VoiceStopPlaybackTool, VoiceTranscribeTool
 from humungousaur.tools.workflow_tools import (
     CanvasA2uiCreateTool,
     CanvasA2uiRenderTool,
@@ -596,6 +596,26 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                             return
                         transcribe_payload.pop("audio_base64", None)
                     result = VoiceTranscribeTool().execute(transcribe_payload, run_config)
+                    status = HTTPStatus.CREATED if result.status == ActionStatus.SUCCEEDED else HTTPStatus.ACCEPTED
+                    self._send_json({"status": result.status.value, "summary": result.summary, **result.output}, status)
+                    return
+                if path == "/voice/speak":
+                    text = str(payload.get("text", "")).strip()
+                    if not text:
+                        self._send_error(HTTPStatus.BAD_REQUEST, "Field 'text' is required.")
+                        return
+                    run_config = request_config(effective_config(), payload)
+                    speak_payload = {
+                        "text": text,
+                        "reason": str(payload.get("reason") or "Speak the visible assistant response."),
+                        "provider": payload.get("provider") or payload.get("tts_provider"),
+                        "voice_id": payload.get("voice_id", ""),
+                        "model": payload.get("model", ""),
+                        "output_format": payload.get("output_format", ""),
+                        "allow_voice_lookup": bool(payload.get("allow_voice_lookup", False)),
+                        "playback": bool(payload.get("playback", True)),
+                    }
+                    result = VoiceSpeakTool().execute(speak_payload, run_config)
                     status = HTTPStatus.CREATED if result.status == ActionStatus.SUCCEEDED else HTTPStatus.ACCEPTED
                     self._send_json({"status": result.status.value, "summary": result.summary, **result.output}, status)
                     return
