@@ -137,7 +137,8 @@ Desktop package-manager metadata is checked into this repository. See [Package M
 macOS with Homebrew:
 
 ```bash
-brew tap bhaveshpabnani/humungousaur https://github.com/bhaveshpabnani/Humungousaur
+brew tap bhaveshpabnani/humungousaur
+brew trust bhaveshpabnani/humungousaur
 brew install --cask humungousaur
 ```
 
@@ -150,7 +151,7 @@ winget install --manifest .\winget\manifests\b\BhaveshPabnani\Humungousaur\0.1.4
 Windows with Scoop:
 
 ```powershell
-scoop bucket add humungousaur https://github.com/bhaveshpabnani/Humungousaur
+scoop bucket add humungousaur https://github.com/bhaveshpabnani/scoop-humungousaur
 scoop install humungousaur
 ```
 

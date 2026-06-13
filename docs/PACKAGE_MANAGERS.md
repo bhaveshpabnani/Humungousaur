@@ -7,7 +7,8 @@ Humungousaur publishes package-manager metadata from this repository so users ca
 ### Homebrew
 
 ```bash
-brew tap bhaveshpabnani/humungousaur https://github.com/bhaveshpabnani/Humungousaur
+brew tap bhaveshpabnani/humungousaur
+brew trust bhaveshpabnani/humungousaur
 brew install --cask humungousaur
 ```
 
@@ -43,7 +44,7 @@ Official Chocolatey community availability requires a Chocolatey account/API key
 ### Scoop
 
 ```powershell
-scoop bucket add humungousaur https://github.com/bhaveshpabnani/Humungousaur
+scoop bucket add humungousaur https://github.com/bhaveshpabnani/scoop-humungousaur
 scoop install humungousaur
 ```
 
