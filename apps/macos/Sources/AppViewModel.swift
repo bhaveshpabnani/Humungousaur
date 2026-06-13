@@ -74,10 +74,12 @@ final class AppViewModel: ObservableObject {
     private var lastHandledVoiceTranscript = ""
     private var isCapturingVoiceTask = false
     private var voiceWakePausedForResponse = false
+    private var voiceResponseStopRequested = false
     private var activeVoiceResponseTask: Task<Void, Never>?
     private var voiceAcknowledgementIndex = 0
     private let wakeAcknowledgementSpeaker = AVSpeechSynthesizer()
     private let responseSpeaker = AVSpeechSynthesizer()
+    private var responseSpeechWaiter: SpeechPlaybackWaiter?
 
     init() {
         let loaded = settingsStore.load()
@@ -330,7 +332,13 @@ final class AppViewModel: ObservableObject {
     }
 
     @discardableResult
-    func send(_ prompt: String, source: String, responseMode: String, displayText: String? = nil) async -> String? {
+    func send(
+        _ prompt: String,
+        source: String,
+        responseMode: String,
+        displayText: String? = nil,
+        speakWhenVisible: Bool = false
+    ) async -> String? {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         messages.append(ChatMessage(role: .user, text: displayText ?? trimmed))
@@ -349,6 +357,7 @@ final class AppViewModel: ObservableObject {
         let assistantID = assistantMessage.id
         messages.append(assistantMessage)
         isSending = true
+        var didSpeakVisibleResponse = false
         defer { isSending = false }
         do {
             let stream = try api.streamStimulus(
@@ -363,6 +372,12 @@ final class AppViewModel: ObservableObject {
                     throw CancellationError()
                 }
                 applyStreamEvent(event, to: assistantID)
+                if speakWhenVisible,
+                   !didSpeakVisibleResponse,
+                   let response = completedMessageText(for: assistantID) {
+                    didSpeakVisibleResponse = true
+                    await speakVisibleResponse(response)
+                }
             }
             updateMessage(assistantID) { message in
                 message.isStreaming = false
@@ -376,6 +391,12 @@ final class AppViewModel: ObservableObject {
             await refreshRuns()
             await refreshApprovals()
             await refreshAutonomy()
+            if speakWhenVisible,
+               !didSpeakVisibleResponse,
+               let response = messageText(for: assistantID) {
+                didSpeakVisibleResponse = true
+                await speakVisibleResponse(response)
+            }
             return messageText(for: assistantID)
         } catch {
             if error is CancellationError {
@@ -404,10 +425,7 @@ final class AppViewModel: ObservableObject {
     }
 
     func sendSpokenResponse(_ prompt: String, source: String = "voice_transcript", displayText: String? = nil) async {
-        guard let response = await send(prompt, source: source, responseMode: "text", displayText: displayText) else {
-            return
-        }
-        await speakVisibleResponse(response)
+        _ = await send(prompt, source: source, responseMode: "text", displayText: displayText, speakWhenVisible: true)
     }
 
     func runQuickCommand(_ command: String, display: String? = nil) {
@@ -749,9 +767,11 @@ final class AppViewModel: ObservableObject {
         }
         let responseTask = Task { [weak self] in
             guard let self else { return }
-            pauseVoiceListeningForResponse()
+            voiceResponseStopRequested = false
+            await pauseVoiceListeningForResponse()
+            if Task.isCancelled || voiceResponseStopRequested { return }
             await sendSpokenResponse(trimmed, displayText: "Voice: \(trimmed)")
-            if Task.isCancelled { return }
+            if Task.isCancelled || voiceResponseStopRequested { return }
             voiceWakePausedForResponse = false
             if keepListening && settings.voiceContinuousAfterWake {
                 scheduleNextVoiceCapture()
@@ -772,21 +792,24 @@ final class AppViewModel: ObservableObject {
         }
     }
 
-    private func pauseVoiceListeningForResponse() {
+    private func pauseVoiceListeningForResponse() async {
         voiceWakePausedForResponse = true
         isCapturingVoiceTask = false
         voiceWakeService.stop()
-        Task {
-            do {
-                try await voiceWakeService.start(commands: stopCommandList())
+        do {
+            try await voiceWakeService.start(commands: stopCommandList())
+            if !voiceResponseStopRequested {
                 voiceWakeStatusText = "Responding. Say \(stopPhraseList().first ?? "stop humungousaur") to stop."
-            } catch {
+            }
+        } catch {
+            if !voiceResponseStopRequested {
                 voiceWakeStatusText = "Responding. Stop phrase unavailable: \(error.localizedDescription)"
             }
         }
     }
 
     private func stopCurrentVoiceResponse() {
+        voiceResponseStopRequested = true
         activeVoiceResponseTask?.cancel()
         activeVoiceResponseTask = nil
         stopLocalSpeechPlayback()
@@ -1300,6 +1323,16 @@ final class AppViewModel: ObservableObject {
         return text.isEmpty ? nil : text
     }
 
+    private func completedMessageText(for id: UUID) -> String? {
+        guard let message = messages.first(where: { $0.id == id }),
+              message.role != .error,
+              !message.isStreaming else {
+            return nil
+        }
+        let text = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : text
+    }
+
     private func sendLegacyStimulus(_ text: String, source: String, responseMode: String, assistantID: UUID) async -> String? {
         updateMessage(assistantID) { message in
             message.activities.append(
@@ -1341,38 +1374,54 @@ final class AppViewModel: ObservableObject {
     private func speakVisibleResponse(_ response: String) async {
         let spokenText = Self.speechText(from: response)
         guard !spokenText.isEmpty else { return }
+        guard !voiceResponseStopRequested, !Task.isCancelled else { return }
         voiceWakeStatusText = "Speaking the visible response."
         let provider = settings.ttsProvider.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if provider != "system" {
             do {
                 let result = try await api.speakText(spokenText, settings: settingsWithChannelSecrets(), secrets: secrets)
+                if voiceResponseStopRequested || Task.isCancelled { return }
                 let status = result["status"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
                 if status == "succeeded" {
                     return
                 }
                 notice = "Voice provider did not play audio; using system voice."
             } catch {
+                if error is CancellationError || voiceResponseStopRequested || Task.isCancelled {
+                    return
+                }
                 notice = "Voice provider failed; using system voice."
             }
         }
         do {
             try await speakWithSystemVoice(spokenText)
         } catch {
+            if error is CancellationError || voiceResponseStopRequested || Task.isCancelled {
+                return
+            }
             notice = "Could not speak response: \(error.localizedDescription)"
         }
     }
 
     private func speakWithSystemVoice(_ text: String) async throws {
         stopLocalSpeechPlayback()
+        try Task.checkCancellation()
+        guard !voiceResponseStopRequested else {
+            throw CancellationError()
+        }
+        let waiter = SpeechPlaybackWaiter()
+        responseSpeechWaiter = waiter
+        responseSpeaker.delegate = waiter
+        defer {
+            responseSpeaker.delegate = nil
+            if responseSpeechWaiter === waiter {
+                responseSpeechWaiter = nil
+            }
+        }
         try await withTaskCancellationHandler {
             let utterance = AVSpeechUtterance(string: text)
             utterance.rate = AVSpeechUtteranceDefaultSpeechRate
-            responseSpeaker.speak(utterance)
-            try await Task.sleep(for: .milliseconds(120))
-            while responseSpeaker.isSpeaking || responseSpeaker.isPaused {
-                try Task.checkCancellation()
-                try await Task.sleep(for: .milliseconds(100))
-            }
+            try await waiter.speak(utterance, with: responseSpeaker)
         } onCancel: {
             Task { @MainActor in
                 self.stopLocalSpeechPlayback()
@@ -1464,6 +1513,66 @@ final class AppViewModel: ObservableObject {
         ]))
         channelSetupStepsText = formatSetupSteps(channel.setup)
         channelPolicyText = formatPolicySummary(policies: channel.policies, delivery: channel.delivery, runtime: channel.runtime)
+    }
+}
+
+private enum SpeechPlaybackError: LocalizedError {
+    case timedOut
+
+    var errorDescription: String? {
+        switch self {
+        case .timedOut:
+            "System speech timed out."
+        }
+    }
+}
+
+private final class SpeechPlaybackWaiter: NSObject, AVSpeechSynthesizerDelegate, @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Void, Error>?
+    private var timeoutWorkItem: DispatchWorkItem?
+
+    @MainActor
+    func speak(_ utterance: AVSpeechUtterance, with speaker: AVSpeechSynthesizer) async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            lock.lock()
+            self.continuation = continuation
+            lock.unlock()
+
+            let workItem = DispatchWorkItem { [weak self] in
+                self?.finish(error: SpeechPlaybackError.timedOut)
+            }
+            timeoutWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + 180, execute: workItem)
+            speaker.speak(utterance)
+        }
+    }
+
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        finish(error: nil)
+    }
+
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        finish(error: CancellationError())
+    }
+
+    private func finish(error: Error?) {
+        lock.lock()
+        guard let continuation else {
+            lock.unlock()
+            return
+        }
+        self.continuation = nil
+        let timeoutWorkItem = timeoutWorkItem
+        self.timeoutWorkItem = nil
+        lock.unlock()
+
+        timeoutWorkItem?.cancel()
+        if let error {
+            continuation.resume(throwing: error)
+        } else {
+            continuation.resume()
+        }
     }
 }
 

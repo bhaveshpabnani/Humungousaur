@@ -15,6 +15,9 @@ final class AgentAPIClient {
     private let responseFormattingInstruction = """
     Respond with a detailed final answer in GitHub-flavored Markdown. Use clear sections, bullets, and tables where they make the answer easier to scan. Include caveats, source/tool evidence, and next steps when relevant. Do not return a single unformatted paragraph unless the user explicitly asks for a very short answer.
     """
+    private let voiceResponseFormattingInstruction = """
+    The user is speaking by voice. Reply warmly and conversationally in a voice-friendly style: lead with the direct answer, keep sentences short, use short paragraphs, avoid tables unless essential, and use bullets only when they make the spoken answer clearer. Keep the final answer easy to read aloud.
+    """
 
     init(baseURL: String) {
         self.baseURL = AgentAPIClient.normalizedBaseURL(baseURL)
@@ -349,7 +352,8 @@ final class AgentAPIClient {
 
     func sendStimulus(_ text: String, source: String, responseMode: String, settings: AppSettings, secrets: RuntimeSecrets) async throws -> AgentRunResponse {
         var payload = runtimePayload(settings: settings, secrets: secrets)
-        payload["text"] = formattedRequestText(text)
+        let voiceFriendly = isVoiceRequest(source: source, responseMode: responseMode)
+        payload["text"] = formattedRequestText(text, source: source, responseMode: responseMode)
         payload["source"] = source
         payload["response_mode"] = responseMode
         payload["metadata"] = [
@@ -357,14 +361,16 @@ final class AgentAPIClient {
             "tts_provider": settings.ttsProvider,
             "voice_id": settings.voiceId,
             "response_format": "markdown",
-            "response_detail": "detailed"
+            "response_detail": voiceFriendly ? "voice_friendly" : "detailed",
+            "response_style": voiceFriendly ? "spoken_conversation" : "written_markdown"
         ]
         return try await post("stimuli", body: payload)
     }
 
     func streamStimulus(_ text: String, source: String, responseMode: String, settings: AppSettings, secrets: RuntimeSecrets) throws -> AsyncThrowingStream<AgentStreamEvent, Error> {
         var payload = runtimePayload(settings: settings, secrets: secrets)
-        payload["text"] = formattedRequestText(text)
+        let voiceFriendly = isVoiceRequest(source: source, responseMode: responseMode)
+        payload["text"] = formattedRequestText(text, source: source, responseMode: responseMode)
         payload["source"] = source
         payload["response_mode"] = responseMode
         payload["metadata"] = [
@@ -372,7 +378,8 @@ final class AgentAPIClient {
             "tts_provider": settings.ttsProvider,
             "voice_id": settings.voiceId,
             "response_format": "markdown",
-            "response_detail": "detailed"
+            "response_detail": voiceFriendly ? "voice_friendly" : "detailed",
+            "response_style": voiceFriendly ? "spoken_conversation" : "written_markdown"
         ]
 
         var request = URLRequest(url: try routeURL("stimuli/stream"))
@@ -460,15 +467,24 @@ final class AgentAPIClient {
         }
     }
 
-    private func formattedRequestText(_ text: String) -> String {
+    private func formattedRequestText(_ text: String, source: String, responseMode: String) -> String {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return text }
+        let instruction = isVoiceRequest(source: source, responseMode: responseMode)
+            ? voiceResponseFormattingInstruction
+            : responseFormattingInstruction
         return """
         \(trimmed)
 
         Response formatting requirements:
-        \(responseFormattingInstruction)
+        \(instruction)
         """
+    }
+
+    private func isVoiceRequest(source: String, responseMode: String) -> Bool {
+        let normalizedSource = source.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalizedMode = responseMode.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalizedSource.contains("voice") || normalizedMode.contains("voice")
     }
 
     private func runtimePayload(settings: AppSettings, secrets: RuntimeSecrets) -> [String: Any] {
