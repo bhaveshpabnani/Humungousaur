@@ -9,6 +9,13 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-2ea44f?style=for-the-badge" alt="MIT License"></a>
   <a href="pyproject.toml"><img src="https://img.shields.io/badge/Python-3.12+-3776ab?style=for-the-badge" alt="Python 3.12+"></a>
   <a href="docs/RELEASE_RUNBOOK.md"><img src="https://img.shields.io/badge/Release-verified%20gates-111827?style=for-the-badge" alt="Verified release gates"></a>
+  <a href="https://github.com/bhaveshpabnani/Humungousaur/releases/latest"><img src="https://img.shields.io/github/v/release/bhaveshpabnani/Humungousaur?style=for-the-badge&label=Desktop%20release" alt="Latest desktop release"></a>
+  <a href="https://github.com/bhaveshpabnani/Humungousaur/releases/download/v0.1.4/Humungousaur-Windows-Setup.exe"><img src="https://img.shields.io/badge/Windows-EXE%20installer-0078d4?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows EXE installer"></a>
+  <a href="https://github.com/bhaveshpabnani/Humungousaur/releases/download/v0.1.4/Humungousaur-macOS.pkg"><img src="https://img.shields.io/badge/macOS-PKG%20installer-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Download macOS PKG installer"></a>
+  <a href="https://github.com/bhaveshpabnani/homebrew-humungousaur"><img src="https://img.shields.io/badge/Homebrew-tap-fbb040?style=for-the-badge&logo=homebrew&logoColor=111111" alt="Homebrew tap"></a>
+  <a href="https://github.com/bhaveshpabnani/scoop-humungousaur"><img src="https://img.shields.io/badge/Scoop-bucket-0f172a?style=for-the-badge" alt="Scoop bucket"></a>
+  <a href="https://github.com/bhaveshpabnani/chocolatey-humungousaur"><img src="https://img.shields.io/badge/Chocolatey-package%20source-80b5e3?style=for-the-badge&logo=chocolatey&logoColor=111111" alt="Chocolatey package source"></a>
+  <a href="winget/manifests/b/BhaveshPabnani/Humungousaur/0.1.4"><img src="https://img.shields.io/badge/WinGet-local%20manifest-4f46e5?style=for-the-badge" alt="WinGet local manifest"></a>
 </p>
 
 **Local-first cognition for Janus, the named agent inside a real desktop assistant.**
@@ -132,7 +139,15 @@ Do not commit `.env` or real secrets.
 
 ## Package Manager Installs
 
-Desktop package-manager metadata is checked into this repository. See [Package Manager Distribution](docs/PACKAGE_MANAGERS.md) for publishing and registry-submission details.
+Desktop installers are published on the latest GitHub release:
+
+- [Download the Windows EXE installer](https://github.com/bhaveshpabnani/Humungousaur/releases/download/v0.1.4/Humungousaur-Windows-Setup.exe)
+- [Download the Windows ZIP archive](https://github.com/bhaveshpabnani/Humungousaur/releases/download/v0.1.4/Humungousaur-Windows.zip)
+- [Download the macOS PKG installer](https://github.com/bhaveshpabnani/Humungousaur/releases/download/v0.1.4/Humungousaur-macOS.pkg)
+- [Download the macOS ZIP archive](https://github.com/bhaveshpabnani/Humungousaur/releases/download/v0.1.4/Humungousaur-macOS.zip)
+- [Verify release checksums](https://github.com/bhaveshpabnani/Humungousaur/releases/download/v0.1.4/checksums.txt)
+
+Package-manager metadata is checked into this repository and mirrored to dedicated package-manager repos where needed. See [Package Manager Distribution](docs/PACKAGE_MANAGERS.md) for publishing and registry-submission details.
 
 macOS with Homebrew:
 
