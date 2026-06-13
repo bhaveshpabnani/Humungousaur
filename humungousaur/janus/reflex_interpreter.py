@@ -148,8 +148,8 @@ def parse_reflex_decision(payload: dict[str, Any], *, route: JanusRoute, model_s
     posture = ReflexPosture(str(payload["posture"]))
     confidence = Confidence(str(payload["confidence"]))
     should_interrupt = bool(payload["should_interrupt_user"])
-    user_visible_text = redact_secrets(str(payload.get("user_visible_text") or ""))[:1_000]
-    agent_stimulus = redact_secrets(str(payload.get("agent_stimulus") or ""))[:2_000]
+    user_visible_text = _model_text(payload.get("user_visible_text"), limit=1_000)
+    agent_stimulus = _model_text(payload.get("agent_stimulus"), limit=2_000)
     if posture in {ReflexPosture.STAY_SILENT, ReflexPosture.REMEMBER, ReflexPosture.SUMMARIZE, ReflexPosture.PREPARE}:
         should_interrupt = False
         if posture != ReflexPosture.PREPARE:
@@ -166,7 +166,7 @@ def parse_reflex_decision(payload: dict[str, Any], *, route: JanusRoute, model_s
         should_interrupt_user=should_interrupt,
         user_visible_text=user_visible_text,
         agent_stimulus=agent_stimulus,
-        reason=redact_secrets(str(payload.get("reason") or "Model-led reflex decision."))[:1_000],
+        reason=_model_text(payload.get("reason"), limit=1_000) or "Model-led reflex decision.",
         task_context_updates=_safe_dicts(payload.get("task_context_updates")),
         memory_updates=_safe_dicts(payload.get("memory_updates")),
         safety_notes=[redact_secrets(str(item))[:400] for item in _list(payload.get("safety_notes"))],
@@ -258,6 +258,19 @@ def _safe_no_model_decision(route: JanusRoute) -> JanusDecision:
 
 def _list(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
+
+
+def _model_text(value: Any, *, limit: int) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, (dict, list)):
+        text = json.dumps(value, ensure_ascii=False, sort_keys=True, default=str, separators=(",", ":"))
+    else:
+        text = str(value)
+    cleaned = " ".join(text.split())
+    if cleaned.strip().lower() in {"[object object]", "object object", "{}", "[]", "null", "none"}:
+        return ""
+    return redact_secrets(cleaned)[:limit]
 
 
 def _list_of_dicts(value: Any) -> list[dict[str, Any]]:

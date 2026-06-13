@@ -753,6 +753,26 @@ class JanusTests(unittest.TestCase):
         self.assertEqual(status["decisions"][0]["model_status"], "unavailable")
         self.assertEqual(status["decisions"][0]["agent_stimulus"], "")
 
+    def test_reflex_model_object_placeholder_text_is_dropped(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = _config(tmp_dir)
+            event = _event("mail", collector="mail_activity", stimulus_type="email_received")
+            JanusEventRouter(
+                config,
+                model_client=StaticModelClient(
+                    _posture_payload(
+                        posture="summarize",
+                        agent_stimulus="[object Object]",
+                    )
+                ),
+                run_agent=False,
+            ).handle_event(event)
+            status = janus_status(config)
+
+        self.assertEqual(status["decisions"][0]["posture"], "summarize")
+        self.assertEqual(status["decisions"][0]["agent_stimulus"], "")
+        self.assertEqual(status["activations"][0]["agent_stimulus"], "")
+
     def test_muted_scope_suppresses_matching_event(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             config = _config(tmp_dir)
