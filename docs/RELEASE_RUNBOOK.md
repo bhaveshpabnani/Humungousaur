@@ -97,6 +97,8 @@ Windows packaging and verification must run on Windows because the app targets `
 
 For public tag releases, `script/package_macos.sh` must sign the app, sign `Humungousaur-macOS.pkg`, notarize/staple the package, and `script/verify_macos_package.sh --require-signature --require-notarization` must confirm the app code signature, Gatekeeper assessment, package signature, and stapled notarization ticket before upload.
 
+The macOS release job must stop immediately when any Developer ID certificate, installer identity, notarization flag, Apple ID, team ID, or app-specific password secret is missing. Do not publish `Humungousaur-macOS.pkg` from an unsigned or unstapled build; Gatekeeper will show "Apple could not verify" to users.
+
 For public tag releases, `script/package_windows.ps1` signs every packaged `.exe` and Humungousaur-owned `.dll`, and `script/verify_windows_package.ps1 -RequireSignature` must confirm every one of those app-owned Windows binaries has a valid timestamped Authenticode signature.
 
 Both desktop package scripts must rebuild from clean staging directories before creating public installers and legacy zips. The macOS script clears `artifacts/package/macos` and `artifacts/package/macos-pkg`, and the Windows script clears `artifacts/package/windows/publish` and `artifacts/package/windows/installer`, so stale local publish output cannot leak into release assets.

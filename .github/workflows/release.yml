@@ -90,6 +90,30 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref }}
           fetch-depth: 0
+      - name: Validate macOS release signing secrets
+        if: ${{ env.HUMUNGOUSAUR_RELEASE_BUILD == 'true' }}
+        run: |
+          missing=()
+          for name in \
+            MACOS_CERTIFICATE_P12_BASE64 \
+            MACOS_CERTIFICATE_PASSWORD \
+            MACOS_KEYCHAIN_PASSWORD \
+            HUMUNGOUSAUR_MACOS_CODESIGN_IDENTITY \
+            HUMUNGOUSAUR_MACOS_INSTALLER_IDENTITY \
+            APPLE_ID \
+            APPLE_TEAM_ID \
+            APPLE_APP_SPECIFIC_PASSWORD; do
+            if [[ -z "${!name:-}" ]]; then
+              missing+=("$name")
+            fi
+          done
+          if [[ "$HUMUNGOUSAUR_MACOS_NOTARIZE" != "1" ]]; then
+            missing+=("HUMUNGOUSAUR_MACOS_NOTARIZE=1")
+          fi
+          if [[ "${#missing[@]}" -gt 0 ]]; then
+            printf 'Public macOS releases must be Developer ID signed, notarized, and stapled. Missing: %s\n' "${missing[*]}" >&2
+            exit 1
+          fi
       - name: Import macOS signing certificate
         if: ${{ env.MACOS_CERTIFICATE_P12_BASE64 != '' }}
         run: |

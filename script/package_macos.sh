@@ -27,6 +27,7 @@ PKG_IDENTIFIER="ai.humungousaur.mac.installer"
 MACOS_CODESIGN_IDENTITY="${HUMUNGOUSAUR_MACOS_CODESIGN_IDENTITY:-}"
 MACOS_INSTALLER_IDENTITY="${HUMUNGOUSAUR_MACOS_INSTALLER_IDENTITY:-}"
 MACOS_NOTARIZE="${HUMUNGOUSAUR_MACOS_NOTARIZE:-0}"
+RELEASE_BUILD="${HUMUNGOUSAUR_RELEASE_BUILD:-0}"
 APPLE_ID="${APPLE_ID:-}"
 APPLE_TEAM_ID="${APPLE_TEAM_ID:-}"
 APPLE_APP_SPECIFIC_PASSWORD="${APPLE_APP_SPECIFIC_PASSWORD:-}"
@@ -34,6 +35,19 @@ PROJECT_VERSION="$(awk -F'"' '/^version[[:space:]]*=/ { print $2; exit }' "$ROOT
 if [[ -z "$PROJECT_VERSION" ]]; then
   echo "Unable to read project.version from pyproject.toml" >&2
   exit 1
+fi
+if [[ "$RELEASE_BUILD" == "1" || "$RELEASE_BUILD" == "true" ]]; then
+  missing=()
+  [[ -n "$MACOS_CODESIGN_IDENTITY" ]] || missing+=("HUMUNGOUSAUR_MACOS_CODESIGN_IDENTITY")
+  [[ -n "$MACOS_INSTALLER_IDENTITY" ]] || missing+=("HUMUNGOUSAUR_MACOS_INSTALLER_IDENTITY")
+  [[ "$MACOS_NOTARIZE" == "1" ]] || missing+=("HUMUNGOUSAUR_MACOS_NOTARIZE=1")
+  [[ -n "$APPLE_ID" ]] || missing+=("APPLE_ID")
+  [[ -n "$APPLE_TEAM_ID" ]] || missing+=("APPLE_TEAM_ID")
+  [[ -n "$APPLE_APP_SPECIFIC_PASSWORD" ]] || missing+=("APPLE_APP_SPECIFIC_PASSWORD")
+  if [[ "${#missing[@]}" -gt 0 ]]; then
+    printf 'Public macOS release builds must be Developer ID signed, notarized, and stapled. Missing: %s\n' "${missing[*]}" >&2
+    exit 1
+  fi
 fi
 
 stage_runtime_source() {

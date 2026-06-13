@@ -35,6 +35,7 @@ For the exact order of operations, commands, signing secrets, tag checks, GitHub
 - Confirm installer assets include the bundled runtime source, `script/bootstrap_runtime.py`, and platform setup entrypoints.
 - For signed macOS public releases, configure GitHub secrets `MACOS_CERTIFICATE_P12_BASE64`, `MACOS_CERTIFICATE_PASSWORD`, `MACOS_KEYCHAIN_PASSWORD`, `MACOS_CODESIGN_IDENTITY`, `MACOS_INSTALLER_IDENTITY`, `MACOS_NOTARIZE=1`, `APPLE_ID`, `APPLE_TEAM_ID`, and `APPLE_APP_SPECIFIC_PASSWORD`.
 - For signed Windows public releases, configure GitHub secrets `WINDOWS_CERTIFICATE_PFX_BASE64`, `WINDOWS_CERTIFICATE_PASSWORD`, `WINDOWS_SIGN=1`, and optionally `WINDOWS_TIMESTAMP_URL`.
+- Public tag releases must fail before packaging if any macOS Developer ID signing, installer signing, notarization, or Apple credential secret is missing.
 - Confirm the macOS release job signs with hardened runtime, notarizes, staples the app, and then regenerates `Humungousaur-macOS.zip` plus the installable `Humungousaur-macOS.pkg`.
 - Confirm the Windows release job signs every packaged `.exe` and Humungousaur-owned `.dll` with timestamped Authenticode before generating `Humungousaur-Windows.zip` plus `Humungousaur-Windows-Setup.exe`.
 - For tag releases, CI runs `./script/verify_macos_package.sh --require-signature --require-notarization` and `./script/verify_windows_package.ps1 -RequireSignature` before upload.
