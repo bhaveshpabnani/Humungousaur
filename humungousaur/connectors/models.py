@@ -28,6 +28,8 @@ class ConnectorProviderManifest:
     brand_color: str = ""
     logo_asset: str = ""
     logo_url: str = ""
+    api_auth_scheme: str = "bearer"
+    supported_connection_types: tuple[str, ...] = ()
 
     def to_record(self) -> dict[str, Any]:
         record = asdict(self)
@@ -35,6 +37,7 @@ class ConnectorProviderManifest:
         record["workspace_apps"] = list(self.workspace_apps)
         record["tool_hints"] = list(self.tool_hints)
         record["credential_fields"] = list(self.credential_fields)
+        record["supported_connection_types"] = list(self.supported_connection_types or (self.auth_type,))
         record["advanced_client_config"] = bool(self.advanced_client_config)
         record["icon"] = self.icon or connector_icon(self.provider_id, self.category)
         record["brand_color"] = self.brand_color or connector_brand_color(self.provider_id, self.category)

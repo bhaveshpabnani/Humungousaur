@@ -23,7 +23,14 @@ def configure_connector_client(
     client_id: str,
     client_secret: str = "",
     redirect_uri: str = DEFAULT_REDIRECT_URI,
+    credentials: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    if credentials:
+        return ConnectorRuntime(config).configure_credentials(
+            provider_id,
+            credentials=credentials,
+            redirect_uri=redirect_uri,
+        )
     return ConnectorRuntime(config).configure_client(
         provider_id,
         client_id=client_id,

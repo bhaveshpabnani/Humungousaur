@@ -53,7 +53,7 @@ class WorkspaceConnectorConfigureTool(Tool):
     def __init__(self) -> None:
         super().__init__(
             name="workspace_connector_configure",
-            description="Store OAuth client metadata for a workspace connector. Client secrets are kept in the local connector config file.",
+            description="Store OAuth client metadata, API-key credentials, or local/MCP connection profiles for a workspace connector. Secrets are kept in the connector vault.",
             risk_level=RiskLevel.MEDIUM,
             requires_approval=True,
             input_schema=object_input_schema(
@@ -61,9 +61,10 @@ class WorkspaceConnectorConfigureTool(Tool):
                     "provider_id": {"type": "string"},
                     "client_id": {"type": "string"},
                     "client_secret": {"type": "string"},
+                    "credentials": {"type": "object", "description": "Optional manifest-field credentials such as api_key/application_key/from_number. Values are stored in the connector vault."},
                     "redirect_uri": {"type": "string"},
                 },
-                required=["provider_id", "client_id"],
+                required=["provider_id"],
             ),
             capability_group="connectors",
         )
@@ -76,6 +77,7 @@ class WorkspaceConnectorConfigureTool(Tool):
                 client_id=str(tool_input.get("client_id") or "").strip(),
                 client_secret=str(tool_input.get("client_secret") or "").strip(),
                 redirect_uri=str(tool_input.get("redirect_uri") or "").strip(),
+                credentials=tool_input.get("credentials") if isinstance(tool_input.get("credentials"), dict) else None,
             )
         except (KeyError, ValueError) as exc:
             return ToolResult(self.name, ActionStatus.FAILED, self.risk_level, str(exc))

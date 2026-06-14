@@ -33,6 +33,7 @@ class ConnectorRuntime:
     def catalog(self) -> dict[str, Any]:
         clients = self.oauth.public_client_configs()
         tokens = self.oauth.public_token_statuses()
+        collector_sources = _collector_sources_by_provider()
         providers = []
         for provider in self.registry.providers():
             client = clients.get(provider.provider_id)
@@ -40,21 +41,30 @@ class ConnectorRuntime:
             configured = bool(client and client.client_id)
             uses_oauth = provider.auth_type == "oauth2_authorization_code"
             managed_oauth_available = self.oauth.managed_oauth_available(provider.provider_id)
-            connected = _provider_connected(provider, client, token)
+            connected = self._provider_connected(provider, client, token)
+            public_client = client.public_record() if client else {}
+            granted_scopes = list(token.scopes) if token else []
+            missing_default_scopes = _missing_scopes(provider.default_scopes, granted_scopes) if token else []
             providers.append(
                 {
                     **provider.to_record(),
                     "configured": configured,
                     "managed_oauth_available": managed_oauth_available,
                     "advanced_client_configured": bool(uses_oauth and configured and not managed_oauth_available),
-                    "client_id": client.public_record()["client_id"] if client else "",
+                    "client_id": public_client.get("client_id", ""),
+                    "credential_profile": public_client.get("client_id", ""),
+                    "has_credential_secret": bool(public_client.get("has_client_secret")),
+                    "configuration_source": _configuration_source(provider, client, token, managed_oauth_available),
                     "connected": connected,
                     "connected_at": token.connected_at if token else "",
                     "expires_at": token.expires_at if token else 0,
                     "has_refresh_token": bool(token and token.has_refresh_token),
+                    "granted_scopes": granted_scopes,
+                    "missing_default_scopes": missing_default_scopes,
                     "connection_ready": connected,
                     "collector_ready": connected,
                     "tool_ready": connected,
+                    "collector_source": collector_sources.get(provider.provider_id),
                 }
             )
         return {"providers": providers, "provider_count": len(providers), "redirect_uri": DEFAULT_REDIRECT_URI}
@@ -72,6 +82,7 @@ class ConnectorRuntime:
                     "display_name": provider["display_name"],
                     "category": provider["category"],
                     "auth_type": provider["auth_type"],
+                    "supported_connection_types": provider["supported_connection_types"],
                     "credential_fields": provider["credential_fields"],
                     "oauth_management": provider["oauth_management"],
                     "managed_oauth_available": provider["managed_oauth_available"],
@@ -81,15 +92,21 @@ class ConnectorRuntime:
                     "brand_color": provider["brand_color"],
                     "logo_asset": provider["logo_asset"],
                     "configured": provider["configured"],
+                    "credential_profile": provider["credential_profile"],
+                    "has_credential_secret": provider["has_credential_secret"],
+                    "configuration_source": provider["configuration_source"],
                     "connected": provider["connected"],
                     "connected_at": provider["connected_at"],
                     "expires_at": provider["expires_at"],
                     "has_refresh_token": provider["has_refresh_token"],
+                    "granted_scopes": provider["granted_scopes"],
+                    "missing_default_scopes": provider["missing_default_scopes"],
                     "workspace_apps": provider["workspace_apps"],
                     "tool_hints": provider["tool_hints"],
                     "connection_ready": provider["connection_ready"],
                     "collector_ready": provider["collector_ready"],
                     "tool_ready": provider["tool_ready"],
+                    "collector_source": provider["collector_source"],
                 }
                 for provider in providers
             ],
@@ -103,6 +120,9 @@ class ConnectorRuntime:
             client_secret=client_secret,
             redirect_uri=redirect_uri,
         )
+
+    def configure_credentials(self, provider_id: str, *, credentials: dict[str, Any], redirect_uri: str = DEFAULT_REDIRECT_URI) -> dict[str, Any]:
+        return self.oauth.configure_credentials(provider_id, credentials=credentials, redirect_uri=redirect_uri)
 
     def prepare_authorization(self, provider_id: str, *, scopes: list[str] | None = None, redirect_uri: str = "") -> dict[str, Any]:
         return self.oauth.prepare_authorization(provider_id, scopes=scopes, redirect_uri=redirect_uri)
@@ -120,7 +140,8 @@ class ConnectorRuntime:
         provider = self.registry.provider(provider_id)
         token = self.oauth.token_status(provider_id)
         client = self.oauth.public_client_configs().get(provider_id)
-        connected = _provider_connected(provider, client, token)
+        connected = self._provider_connected(provider, client, token)
+        granted_scopes = list(token.scopes) if token else []
         return {
             "provider_id": provider_id,
             "display_name": provider.display_name,
@@ -130,11 +151,16 @@ class ConnectorRuntime:
             "managed_oauth_available": self.oauth.managed_oauth_available(provider_id),
             "advanced_client_config": provider.advanced_client_config,
             "configured": bool(client and client.client_id),
+            "credential_profile": client.public_record()["client_id"] if client else "",
+            "has_credential_secret": bool(client and client.public_record().get("has_client_secret")),
+            "configuration_source": _configuration_source(provider, client, token, self.oauth.managed_oauth_available(provider_id)),
             "connected": connected,
             "connection_ready": connected,
             "tool_ready": connected,
             "collector_ready": connected,
-            "scopes": list(token.scopes) if token else [],
+            "scopes": granted_scopes,
+            "granted_scopes": granted_scopes,
+            "missing_default_scopes": _missing_scopes(provider.default_scopes, granted_scopes) if token else [],
             "expires_at": token.expires_at if token else 0,
         }
 
@@ -145,9 +171,45 @@ class ConnectorRuntime:
                 return self.vault.get_secret(client.client_secret_ref)
         return self.oauth.token_value(provider_id, key)
 
+    def credential_value(self, provider_id: str, key: str) -> str | None:
+        provider = self.registry.provider(provider_id)
+        clean_key = str(key or "").strip()
+        if not clean_key:
+            return None
+        token_value = self.oauth.token_value(provider_id, clean_key)
+        if token_value:
+            return token_value
+        if clean_key in {"bot_token", "api_key", "access_token", "token"}:
+            token_value = self.oauth.token_value(provider_id, "bot_access_token") or self.oauth.token_value(provider_id, "access_token")
+            if token_value:
+                return token_value
+        client = self.oauth.public_client_configs().get(provider_id)
+        if client is None:
+            return None
+        fields = tuple(str(field) for field in provider.credential_fields)
+        first_field = fields[0] if fields else "profile_name"
+        if clean_key in {first_field, "profile_name", "connection_name", "bot_name", "client_id", "webhook_url", "account_sid", "phone_number_id"}:
+            if clean_key == "webhook_url" and first_field != "webhook_url":
+                return self.vault.get_secret(self.oauth.secret_ref(provider_id, clean_key))
+            if clean_key == "account_sid" and first_field != "account_sid":
+                return self.vault.get_secret(self.oauth.secret_ref(provider_id, clean_key))
+            if clean_key == "phone_number_id" and first_field != "phone_number_id":
+                return self.vault.get_secret(self.oauth.secret_ref(provider_id, clean_key))
+            return client.client_id
+        if clean_key in {"client_secret", "credential"}:
+            return self.vault.get_secret(client.client_secret_ref)
+        return self.vault.get_secret(self.oauth.secret_ref(provider_id, clean_key))
+
     def execute_operation(self, request: ConnectorOperationRequest) -> dict[str, Any]:
+        provider = self.registry.provider(request.provider_id)
         token = self.oauth.token_status(request.provider_id)
-        self.policy.check_scopes(request, token)
+        client = self.oauth.public_client_configs().get(request.provider_id)
+        if token is not None:
+            self.policy.check_scopes(request, token)
+        elif not self._provider_connected(provider, client, token):
+            raise ValueError(f"{request.provider_id} is not connected.")
+        elif request.required_scopes:
+            raise PermissionError(f"{request.provider_id} connector does not expose OAuth scopes for this connection type.")
         result = self.http.request(request)
         self.store.audit_operation(
             request.provider_id,
@@ -158,6 +220,23 @@ class ConnectorRuntime:
         )
         return result
 
+    def _provider_connected(self, provider: Any, client: Any, token: Any) -> bool:
+        auth_type = str(getattr(provider, "auth_type", ""))
+        if auth_type == "oauth2_authorization_code":
+            return bool(token and token.connected)
+        if auth_type == "mcp_oauth":
+            return bool((token and token.connected) or (client and client.client_id))
+        if auth_type == "none":
+            return True
+        if auth_type in {"local_permission", "browser_session", "mcp_oauth"}:
+            return bool(client and client.client_id)
+        if not (client and client.client_id):
+            return False
+        for field in tuple(str(field) for field in getattr(provider, "credential_fields", ()) or ())[1:]:
+            if not self.credential_value(str(provider.provider_id), field):
+                return False
+        return True
+
 
 def _now_iso() -> str:
     import time
@@ -165,10 +244,35 @@ def _now_iso() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
-def _provider_connected(provider: Any, client: Any, token: Any) -> bool:
-    if str(getattr(provider, "auth_type", "")) == "oauth2_authorization_code":
-        return bool(token and token.connected)
-    if str(getattr(provider, "auth_type", "")) in {"none", "local_permission", "browser_session", "mcp_oauth"}:
-        return bool(client and client.client_id)
-    public_record = client.public_record() if client else {}
-    return bool(client and client.client_id and public_record.get("has_client_secret"))
+def _configuration_source(provider: Any, client: Any, token: Any, managed_oauth_available: bool) -> str:
+    auth_type = str(getattr(provider, "auth_type", ""))
+    if token and token.connected:
+        return "oauth_token"
+    if client and client.client_id:
+        return "connector_profile"
+    if auth_type == "oauth2_authorization_code" and managed_oauth_available:
+        return "managed_oauth"
+    return ""
+
+
+def _missing_scopes(required_scopes: Any, granted_scopes: Any) -> list[str]:
+    required = [str(scope) for scope in required_scopes or () if str(scope)]
+    if not required:
+        return []
+    granted = {str(scope) for scope in granted_scopes or () if str(scope)}
+    if not granted:
+        return required
+    return [scope for scope in required if scope not in granted]
+
+
+def _collector_sources_by_provider() -> dict[str, dict[str, Any]]:
+    try:
+        from humungousaur.collectors.sources import connector_source_manifest_records
+
+        return {
+            str(source.get("provider_id")): source
+            for source in connector_source_manifest_records().get("sources", [])
+            if isinstance(source, dict) and source.get("provider_id")
+        }
+    except Exception:
+        return {}

@@ -55,26 +55,67 @@ class ConnectorOAuthService:
         client_secret: str = "",
         redirect_uri: str = DEFAULT_REDIRECT_URI,
     ) -> dict[str, Any]:
-        self.registry.provider(provider_id)
-        clean_client_id = " ".join(str(client_id or "").split())
-        if not clean_client_id:
-            raise ValueError("client_id is required.")
+        provider = self.registry.provider(provider_id)
+        fields = tuple(provider.credential_fields or ("client_id", "client_secret"))
+        credentials = {fields[0]: client_id}
+        if len(fields) > 1:
+            credentials[fields[1]] = client_secret
+        return self.configure_credentials(provider_id, credentials=credentials, redirect_uri=redirect_uri)
+
+    def configure_credentials(
+        self,
+        provider_id: str,
+        *,
+        credentials: dict[str, Any],
+        redirect_uri: str = DEFAULT_REDIRECT_URI,
+    ) -> dict[str, Any]:
+        provider = self.registry.provider(provider_id)
+        fields = tuple(str(field) for field in (provider.credential_fields or ("client_id", "client_secret")) if str(field))
+        if not fields:
+            fields = ("profile_name",)
+        clean_credentials = {
+            str(key).strip(): str(value).strip()
+            for key, value in (credentials or {}).items()
+            if str(key).strip() and str(value).strip()
+        }
+        primary_field = fields[0]
+        primary_value = clean_credentials.get(primary_field, "")
+        if not primary_value and primary_field in {"profile_name", "connection_name", "bot_name"}:
+            primary_value = provider.display_name
+        if not primary_value:
+            raise ValueError(f"{primary_field} is required.")
         secret_ref = ""
-        if str(client_secret or "").strip():
-            secret_ref = self._secret_ref(provider_id, "client_secret")
-            self.vault.set_secret(secret_ref, str(client_secret or "").strip())
-        else:
+        for index, field in enumerate(fields[1:], start=1):
+            value = clean_credentials.get(field, "")
+            existing = self.store.get_client(provider_id)
+            if not value:
+                continue
+            field_ref = self._secret_ref(provider_id, field)
+            self.vault.set_secret(field_ref, value)
+            if index == 1:
+                secret_ref = field_ref
+            if field in {"client_secret", "api_key", "bot_token", "access_token", "token", "auth_token"}:
+                self.vault.set_secret(self._secret_ref(provider_id, "client_secret"), value)
+                if index == 1:
+                    secret_ref = self._secret_ref(provider_id, "client_secret")
+        if not secret_ref:
             existing = self.store.get_client(provider_id)
             secret_ref = existing.client_secret_ref if existing else ""
         client = ConnectorClientConfig(
             provider_id=provider_id,
-            client_id=clean_client_id,
+            client_id=" ".join(primary_value.split()),
             client_secret_ref=secret_ref,
             redirect_uri=str(redirect_uri or DEFAULT_REDIRECT_URI).strip() or DEFAULT_REDIRECT_URI,
             updated_at=_now_iso(),
         )
         self.store.save_client(client)
-        return {"provider_id": provider_id, "configured": True, **client.public_record()}
+        return {
+            "provider_id": provider_id,
+            "configured": True,
+            "credential_fields": list(fields),
+            "configured_fields": [field for field in fields if field == primary_field or bool(clean_credentials.get(field, ""))],
+            **client.public_record(),
+        }
 
     def prepare_authorization(
         self,
@@ -107,7 +148,7 @@ class ConnectorOAuthService:
                 "provider_id": provider_id,
                 "redirect_uri": callback_uri,
                 "state": state,
-                "scope": " ".join(requested_scopes),
+                "scope": _scope_param(provider_id, requested_scopes),
             }
             return {
                 "provider_id": provider_id,
@@ -138,7 +179,7 @@ class ConnectorOAuthService:
             "client_id": client.client_id,
             "redirect_uri": callback_uri,
             "response_type": "code",
-            "scope": " ".join(requested_scopes),
+            "scope": _scope_param(provider.provider_id, requested_scopes),
             "state": state,
         }
         params.update(_authorization_extras(provider.provider_id))
@@ -245,6 +286,8 @@ class ConnectorOAuthService:
             removed_client = self.store.delete_client(provider_id)
             if removed_client and removed_client.client_secret_ref:
                 self.vault.delete_secret(removed_client.client_secret_ref)
+            for field in provider.credential_fields:
+                self.vault.delete_secret(self.secret_ref(provider_id, str(field)))
         return {
             "provider_id": provider_id,
             "display_name": provider.display_name,
@@ -295,7 +338,7 @@ class ConnectorOAuthService:
 
     def sync_env_client_configs(self) -> None:
         for provider in self.registry.providers():
-            if provider.auth_type == "oauth2_authorization_code" and self.store.get_client(provider.provider_id) is None:
+            if self.store.get_client(provider.provider_id) is None:
                 self._client_config_from_env(provider.provider_id)
 
     def migrate_legacy_json(self) -> None:
@@ -375,16 +418,36 @@ class ConnectorOAuthService:
     def _secret_ref(self, provider_id: str, key: str) -> str:
         return f"connector:{provider_id}:{key}"
 
+    def secret_ref(self, provider_id: str, key: str) -> str:
+        return self._secret_ref(provider_id, key)
+
     def _client_config_from_env(self, provider_id: str) -> ConnectorClientConfig | None:
+        provider = self.registry.provider(provider_id)
         env_prefix = provider_id.upper().replace("-", "_")
-        env_client_id = _env_client_id(provider_id)
+        if provider.auth_type == "oauth2_authorization_code":
+            env_client_id = _env_client_id(provider_id)
+            env_client_secret = str(os.environ.get(f"HUMUNGOUSAUR_{env_prefix}_CLIENT_SECRET") or "").strip()
+        else:
+            fields = tuple(provider.credential_fields or ("profile_name", "api_key"))
+            primary_field = fields[0] if fields else "profile_name"
+            secret_field = fields[1] if len(fields) > 1 else ""
+            env_client_id = _env_credential_value(provider_id, primary_field)
+            env_client_secret = _env_credential_value(provider_id, secret_field) if secret_field else ""
+            if not env_client_id and env_client_secret:
+                env_client_id = str(os.environ.get(f"HUMUNGOUSAUR_{env_prefix}_PROFILE_NAME") or provider.display_name).strip()
         if not env_client_id:
             return None
-        env_client_secret = str(os.environ.get(f"HUMUNGOUSAUR_{env_prefix}_CLIENT_SECRET") or "").strip()
         secret_ref = ""
         if env_client_secret:
             secret_ref = self._secret_ref(provider_id, "client_secret")
             self.vault.set_secret(secret_ref, env_client_secret)
+            if provider.auth_type != "oauth2_authorization_code" and len(provider.credential_fields) > 1:
+                self.vault.set_secret(self._secret_ref(provider_id, str(provider.credential_fields[1])), env_client_secret)
+        if provider.auth_type != "oauth2_authorization_code":
+            for extra_field in tuple(provider.credential_fields)[2:]:
+                extra_value = _env_credential_value(provider_id, str(extra_field))
+                if extra_value:
+                    self.vault.set_secret(self._secret_ref(provider_id, str(extra_field)), extra_value)
         client = ConnectorClientConfig(
             provider_id=provider_id,
             client_id=env_client_id,
@@ -401,6 +464,23 @@ def _env_client_id(provider_id: str) -> str:
     return str(os.environ.get(f"HUMUNGOUSAUR_{env_prefix}_CLIENT_ID") or "").strip()
 
 
+def _env_credential_value(provider_id: str, field_name: str) -> str:
+    if not field_name:
+        return ""
+    env_prefix = provider_id.upper().replace("-", "_")
+    field = str(field_name).upper().replace("-", "_")
+    aliases = [f"HUMUNGOUSAUR_{env_prefix}_{field}"]
+    if field in {"PROFILE_NAME", "CONNECTION_NAME", "BOT_NAME"}:
+        aliases.append(f"HUMUNGOUSAUR_{env_prefix}_CLIENT_ID")
+    if field in {"API_KEY", "ACCESS_TOKEN", "BOT_TOKEN", "TOKEN", "SECRET"}:
+        aliases.append(f"HUMUNGOUSAUR_{env_prefix}_CLIENT_SECRET")
+    for name in aliases:
+        value = str(os.environ.get(name) or "").strip()
+        if value:
+            return value
+    return ""
+
+
 def _managed_oauth_broker_url() -> str:
     return str(os.environ.get("HUMUNGOUSAUR_CONNECTOR_OAUTH_BROKER_URL") or "").strip().rstrip("/")
 
@@ -413,6 +493,11 @@ def _managed_oauth_start_path() -> str:
 def _managed_oauth_token_path() -> str:
     path = str(os.environ.get("HUMUNGOUSAUR_CONNECTOR_OAUTH_TOKEN_PATH") or "/connectors/oauth/token").strip()
     return path if path.startswith("/") else f"/{path}"
+
+
+def _scope_param(provider_id: str, scopes: tuple[str, ...]) -> str:
+    separator = "," if provider_id == "linear" else " "
+    return separator.join(scopes)
 
 
 _BROKER_STATE_MARKER = "__humungousaur_oauth_broker__"
@@ -477,7 +562,7 @@ def _authorization_extras(provider_id: str) -> dict[str, str]:
 
 def _scope_list(scope_value: Any) -> list[str]:
     if isinstance(scope_value, str):
-        return [item for item in scope_value.split() if item]
+        return [item for chunk in scope_value.split(",") for item in chunk.split() if item]
     if isinstance(scope_value, list) or isinstance(scope_value, tuple):
         return [str(item) for item in scope_value if str(item).strip()]
     return []
