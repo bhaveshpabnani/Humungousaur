@@ -385,9 +385,9 @@ def build_capability_surface(
         "surfaces": [_surface_status(item, tools, groups) for item in CAPABILITY_SURFACES],
         "tool_groups": groups,
         "voice": voice_status,
-        "model_providers": _model_provider_status(plugins),
+        "model_providers": _model_provider_status(plugins, normalized),
         "channels": _channel_summary(channels),
-        "plugins": _plugin_summary(plugins),
+        "plugins": _plugin_summary(plugins, normalized),
         "native_parity": native_parity,
         "skills": {
             "workspace": workspace_skills[:24],
@@ -474,7 +474,7 @@ def capability_records(config: AgentConfig, *, include_tool_schemas: bool = Fals
                     "skills": plugin.get("skills", []),
                     "channels": plugin.get("channels", []),
                     "providers": plugin.get("providers", []),
-                    "setup": _setup_summary(plugin.get("setup", {})),
+                    "setup": _setup_summary(plugin.get("setup", {}), config),
                     "contracts": plugin.get("contracts", {}),
                 }
             )
@@ -656,7 +656,7 @@ def _channel_summary(channels: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
-def _plugin_summary(plugins: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _plugin_summary(plugins: list[dict[str, Any]], config: AgentConfig) -> list[dict[str, Any]]:
     return [
         {
             "plugin_id": plugin.get("plugin_id", ""),
@@ -667,13 +667,13 @@ def _plugin_summary(plugins: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "skills": plugin.get("skills", []),
             "channels": plugin.get("channels", []),
             "providers": plugin.get("providers", []),
-            "setup": _setup_summary(plugin.get("setup", {})),
+            "setup": _setup_summary(plugin.get("setup", {}), config),
         }
         for plugin in plugins
     ]
 
 
-def _model_provider_status(plugins: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _model_provider_status(plugins: list[dict[str, Any]], config: AgentConfig) -> list[dict[str, Any]]:
     providers = []
     for plugin in plugins:
         if plugin.get("kind") != "model_provider":
@@ -686,7 +686,7 @@ def _model_provider_status(plugins: list[dict[str, Any]]) -> list[dict[str, Any]
                 "display_name": plugin.get("display_name", ""),
                 "status": plugin.get("status", ""),
                 "required_env": required_env,
-                "configured": all(os.environ.get(name) for name in required_env),
+                "configured": all(_credential_value(config, name) for name in required_env),
                 "contracts": plugin.get("contracts", {}),
             }
         )
@@ -781,7 +781,7 @@ def _mcp_server_records(config: AgentConfig) -> list[dict[str, Any]]:
 
         records = []
         for server in _load_mcp_manifests(config):
-            readiness = _credential_readiness(server)
+            readiness = _credential_readiness(server, config)
             records.append(
                 {
                     "record_id": f"mcp_server:{server.get('server_id', '')}",
@@ -793,6 +793,8 @@ def _mcp_server_records(config: AgentConfig) -> list[dict[str, Any]]:
                     "transport": str(server.get("transport") or ""),
                     "configured": readiness["configured"],
                     "missing_env": readiness["missing_env"],
+                    "credential_source": readiness.get("credential_source", ""),
+                    "connector_provider_id": readiness.get("connector_provider_id", ""),
                     "tools": server.get("tools", []) if isinstance(server.get("tools"), list) else [],
                     "source": str(server.get("source") or ""),
                 }
@@ -812,7 +814,7 @@ def _schema_summary(schema: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _setup_summary(setup: Any) -> dict[str, Any]:
+def _setup_summary(setup: Any, config: AgentConfig | None = None) -> dict[str, Any]:
     if not isinstance(setup, dict):
         return {"required_env": [], "optional_env": [], "required_binaries": []}
     required_env = [str(item) for item in setup.get("required_env", []) if str(item)] if isinstance(setup.get("required_env"), list) else []
@@ -822,10 +824,19 @@ def _setup_summary(setup: Any) -> dict[str, Any]:
         "required_env": required_env,
         "optional_env": optional_env,
         "required_binaries": required_binaries,
-        "missing_env": [name for name in required_env if not os.environ.get(name)],
-        "configured_optional_env": [name for name in optional_env if os.environ.get(name)],
+        "missing_env": [name for name in required_env if not _credential_value(config or AgentConfig(), name)],
+        "configured_optional_env": [name for name in optional_env if _credential_value(config or AgentConfig(), name)],
         "auth_choices": setup.get("auth_choices", []),
     }
+
+
+def _credential_value(config: AgentConfig, name: str) -> str | None:
+    try:
+        from humungousaur.tools.external.implementation import _connector_or_runtime_secret
+
+        return _connector_or_runtime_secret(config.normalized(), name)
+    except Exception:
+        return config.normalized().secret_value(name) or os.environ.get(name)
 
 
 def _plugin_description(plugin: dict[str, Any]) -> str:

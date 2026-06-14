@@ -219,6 +219,7 @@ BUILTIN_MCP_MANIFESTS = [
         "required_env": ["LINEAR_API_KEY"],
         "optional_env": [],
         "oauth": {"supported": True, "env_fallback": "LINEAR_API_KEY"},
+        "connector_provider_id": "linear",
     },
     {
         "server_id": "n8n",
@@ -653,7 +654,7 @@ class McpServerCatalogTool(Tool):
         manifests = _load_mcp_manifests(config)
         if server_id:
             manifests = [manifest for manifest in manifests if manifest.get("server_id") == server_id]
-        items = [_mcp_summary(manifest, include_tools=include_tools) for manifest in manifests]
+        items = [_mcp_summary(manifest, include_tools=include_tools, config=config) for manifest in manifests]
         return ToolResult(
             self.name,
             ActionStatus.SUCCEEDED,
@@ -683,7 +684,7 @@ class McpServerManifestTool(Tool):
             ActionStatus.SUCCEEDED,
             self.risk_level,
             f"Read MCP server manifest {server_id}.",
-            {"manifest": _redact_manifest(manifest), "readiness": _credential_readiness(manifest)},
+            {"manifest": _redact_manifest(manifest), "readiness": _credential_readiness(manifest, config)},
         )
 
 
@@ -717,7 +718,7 @@ class McpServerLaunchTool(Tool):
                 ActionStatus.BLOCKED,
                 self.risk_level,
                 f"MCP server {server_id} has no local launch command.",
-                {"manifest": _redact_manifest(manifest), "readiness": _credential_readiness(manifest)},
+                {"manifest": _redact_manifest(manifest), "readiness": _credential_readiness(manifest, config)},
             )
         if not bool(tool_input.get("approved", False)):
             return ToolResult(
@@ -725,7 +726,7 @@ class McpServerLaunchTool(Tool):
                 ActionStatus.NEEDS_APPROVAL,
                 self.risk_level,
                 f"Launching MCP server {server_id} requires approval.",
-                {"server_id": server_id, "argv": command, "readiness": _credential_readiness(manifest)},
+                {"server_id": server_id, "argv": command, "readiness": _credential_readiness(manifest, config)},
             )
         record = {
             "launch_id": f"mcp-launch-{uuid4().hex[:10]}",
@@ -839,7 +840,7 @@ class McpOauthStatusTool(Tool):
         manifests = _load_mcp_manifests(config)
         if server_id:
             manifests = [manifest for manifest in manifests if manifest.get("server_id") == server_id]
-        items = [{"server_id": manifest.get("server_id", ""), **_credential_readiness(manifest)} for manifest in manifests]
+        items = [{"server_id": manifest.get("server_id", ""), **_credential_readiness(manifest, config)} for manifest in manifests]
         return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Read OAuth readiness for {len(items)} MCP server(s).", {"servers": items})
 
 
@@ -903,7 +904,8 @@ class ProviderRegistryTool(Tool):
             if provider_id and provider.get("provider_id") != provider_id:
                 continue
             required_env = [str(item) for item in provider.get("required_env", [])]
-            items.append({**provider, "configured": all(os.environ.get(name) for name in required_env), "missing_env": [name for name in required_env if not os.environ.get(name)]})
+            readiness = _provider_connector_or_env_readiness(config, str(provider.get("provider_id") or ""), required_env)
+            items.append({**provider, **readiness})
         return ToolResult(self.name, ActionStatus.SUCCEEDED, self.risk_level, f"Found {len(items)} provider record(s).", {"providers": items})
 
 
@@ -1216,6 +1218,7 @@ class ServiceContractTool(Tool):
         required_env: list[str],
         mutating: bool = False,
         actions: list[str] | None = None,
+        connector_provider_id: str = "",
     ) -> None:
         properties = {
             "action": {"type": "string"},
@@ -1239,19 +1242,25 @@ class ServiceContractTool(Tool):
             capability_group=group,
         )
         self.required_env = required_env
+        self.connector_provider_id = connector_provider_id
 
     def execute(self, tool_input: dict[str, Any], config: AgentConfig) -> ToolResult:
         load_workspace_environment(config.normalized().workspace)
         missing = [name for name in self.required_env if not os.environ.get(name)]
+        connector_readiness = _service_connector_readiness(config, self.connector_provider_id)
+        connector_configured = bool(connector_readiness.get("connection_ready") or connector_readiness.get("tool_ready"))
         packet = {
             "tool": self.name,
             "input": _safe_contract_input(tool_input),
             "required_env": self.required_env,
-            "missing_env": missing,
-            "configured": not missing,
+            "missing_env": [] if connector_configured else missing,
+            "configured": connector_configured or not missing,
+            "credential_source": "connector" if connector_configured else ("env" if not missing else ""),
+            "connector_provider_id": self.connector_provider_id,
+            "connector_readiness": connector_readiness,
             "status_recorded_at": time.time(),
         }
-        if missing:
+        if missing and not connector_configured:
             return ToolResult(self.name, ActionStatus.BLOCKED, self.risk_level, f"{self.name} is not configured.", packet)
         if config.dry_run:
             return ToolResult(self.name, ActionStatus.SKIPPED, self.risk_level, f"Dry run: would execute {self.name}.", packet)
@@ -1804,8 +1813,8 @@ def _find_mcp_manifest(config: AgentConfig, server_id: str) -> dict[str, Any] | 
     return None
 
 
-def _mcp_summary(manifest: dict[str, Any], *, include_tools: bool) -> dict[str, Any]:
-    readiness = _credential_readiness(manifest)
+def _mcp_summary(manifest: dict[str, Any], *, include_tools: bool, config: AgentConfig | None = None) -> dict[str, Any]:
+    readiness = _credential_readiness(manifest, config)
     record = {
         "server_id": str(manifest.get("server_id", "")),
         "display_name": str(manifest.get("display_name") or manifest.get("server_id") or ""),
@@ -1821,19 +1830,70 @@ def _mcp_summary(manifest: dict[str, Any], *, include_tools: bool) -> dict[str, 
     return record
 
 
-def _credential_readiness(manifest: dict[str, Any]) -> dict[str, Any]:
+def _credential_readiness(manifest: dict[str, Any], config: AgentConfig | None = None) -> dict[str, Any]:
     required_env = [str(item) for item in manifest.get("required_env", [])] if isinstance(manifest.get("required_env"), list) else []
     optional_env = [str(item) for item in manifest.get("optional_env", [])] if isinstance(manifest.get("optional_env"), list) else []
     missing_env = [name for name in required_env if not os.environ.get(name)]
     configured_optional_env = [name for name in optional_env if os.environ.get(name)]
+    connector_readiness = _mcp_connector_readiness(manifest, config)
+    connector_configured = bool(connector_readiness.get("connection_ready") or connector_readiness.get("tool_ready"))
+    configured = not missing_env or connector_configured
     return {
         "required_env": required_env,
         "optional_env": optional_env,
-        "missing_env": missing_env,
+        "missing_env": [] if connector_configured else missing_env,
         "configured_optional_env": configured_optional_env,
-        "configured": not missing_env,
+        "configured": configured,
+        "credential_source": "connector" if connector_configured else ("env" if not missing_env else ""),
+        "connector_provider_id": _mcp_connector_provider_id(manifest),
+        "connector_readiness": connector_readiness,
         "oauth": manifest.get("oauth", {}) if isinstance(manifest.get("oauth"), dict) else {},
     }
+
+
+def _mcp_connector_provider_id(manifest: dict[str, Any]) -> str:
+    return str(manifest.get("connector_provider_id") or manifest.get("provider_id") or manifest.get("server_id") or "").strip()
+
+
+def _mcp_connector_readiness(manifest: dict[str, Any], config: AgentConfig | None) -> dict[str, Any]:
+    provider_id = _mcp_connector_provider_id(manifest)
+    if not provider_id or config is None:
+        return {}
+    try:
+        from humungousaur.connectors import ConnectorRuntime
+
+        return ConnectorRuntime(config).readiness(provider_id)
+    except Exception:
+        return {}
+
+
+def _provider_connector_or_env_readiness(config: AgentConfig, provider_id: str, required_env: list[str]) -> dict[str, Any]:
+    missing_env = [name for name in required_env if not os.environ.get(name)]
+    connector_readiness: dict[str, Any] = {}
+    try:
+        from humungousaur.connectors import ConnectorRuntime
+
+        connector_readiness = ConnectorRuntime(config).readiness(provider_id)
+    except Exception:
+        connector_readiness = {}
+    connector_configured = bool(connector_readiness.get("connection_ready") or connector_readiness.get("tool_ready"))
+    return {
+        "configured": connector_configured or not missing_env,
+        "missing_env": [] if connector_configured else missing_env,
+        "credential_source": "connector" if connector_configured else ("env" if not missing_env else ""),
+        "connector_readiness": connector_readiness,
+    }
+
+
+def _service_connector_readiness(config: AgentConfig, provider_id: str) -> dict[str, Any]:
+    if not provider_id:
+        return {}
+    try:
+        from humungousaur.connectors import ConnectorRuntime
+
+        return ConnectorRuntime(config).readiness(provider_id)
+    except Exception:
+        return {}
 
 
 def _redact_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
@@ -1883,7 +1943,7 @@ def _service_contract_tools() -> list[Tool]:
         ("spotify_albums", False),
         ("spotify_library", False),
     ]:
-        tools.append(ServiceContractTool(name, group="spotify", required_env=["SPOTIFY_ACCESS_TOKEN"], mutating=mutating))
+        tools.append(ServiceContractTool(name, group="spotify", required_env=["SPOTIFY_ACCESS_TOKEN"], mutating=mutating, connector_provider_id="spotify"))
     for name, mutating in [
         ("feishu_doc_read", False),
         ("feishu_drive_list_comments", False),

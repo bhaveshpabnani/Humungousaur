@@ -211,8 +211,8 @@ class PluginSetupPlanTool(Tool):
             if isinstance(setup.get("required_binaries", []), list)
             else []
         )
-        missing_env = [name for name in required_env if not os.environ.get(name)]
-        configured_optional_env = [name for name in optional_env if os.environ.get(name)]
+        missing_env = [name for name in required_env if not _credential_value(normalized, name)]
+        configured_optional_env = [name for name in optional_env if _credential_value(normalized, name)]
         missing_bins = [name for name in required_binaries if _which(name) is None]
         return ToolResult(
             self.name,
@@ -488,3 +488,12 @@ def _which(name: str) -> str | None:
     from shutil import which
 
     return which(name)
+
+
+def _credential_value(config: AgentConfig, name: str) -> str | None:
+    try:
+        from humungousaur.tools.external.implementation import _connector_or_runtime_secret
+
+        return _connector_or_runtime_secret(config.normalized(), name)
+    except Exception:
+        return config.normalized().secret_value(name) or os.environ.get(name)

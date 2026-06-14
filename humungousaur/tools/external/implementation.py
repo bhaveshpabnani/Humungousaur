@@ -131,11 +131,6 @@ async def main() -> int:
         return 2
     api_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENAI_API_TOKEN")
     if not api_key:
-        for key, value in os.environ.items():
-            if key.endswith("_API_KEY") and value:
-                api_key = value
-                break
-    if not api_key:
         print(json.dumps({"error": "No model API key found in subprocess environment."}))
         return 3
     kwargs = {}
@@ -405,13 +400,13 @@ class BrowserUseAgentRunTool(Tool):
                     "browser_use_not_run": True,
                 },
             )
-        api_key = normalized.secret_value(api_key_env)
+        api_key = _connector_or_runtime_secret(normalized, api_key_env)
         if not api_key:
             return ToolResult(
                 self.name,
                 ActionStatus.BLOCKED,
                 self.risk_level,
-                f"Model API key is not configured in runtime secrets/env: {api_key_env}.",
+                f"Model API key is not configured in connector credentials or runtime/env: {api_key_env}.",
                 error="missing_api_key",
             )
         payload = {
@@ -424,7 +419,7 @@ class BrowserUseAgentRunTool(Tool):
             "base_url": base_url,
         }
         env = {
-            **dict(os.environ),
+            **_safe_subprocess_env(),
             api_key_env: api_key,
             "OPENAI_API_KEY": api_key,
             "BROWSER_USE_SETUP_LOGGING": "false",
@@ -2370,7 +2365,71 @@ def _provider_base_url(record: dict[str, Any], config: AgentConfig) -> str:
 
 def _env_or_runtime_secret_present(config: AgentConfig, name: str) -> bool:
     cleaned = str(name or "").strip()
-    return bool(cleaned and (config.normalized().secret_value(cleaned) or os.environ.get(cleaned)))
+    return bool(cleaned and _connector_or_runtime_secret(config, cleaned))
+
+
+def _connector_or_runtime_secret(config: AgentConfig, name: str) -> str | None:
+    cleaned = str(name or "").strip()
+    if not cleaned:
+        return None
+    connector_value = _connector_secret_for_env(config, cleaned)
+    if connector_value:
+        return connector_value
+    return config.normalized().secret_value(cleaned) or os.environ.get(cleaned)
+
+
+def _connector_secret_for_env(config: AgentConfig, env_name: str) -> str | None:
+    provider_id, key = _connector_env_mapping(env_name)
+    if not provider_id:
+        return None
+    try:
+        from humungousaur.connectors import ConnectorRuntime
+
+        runtime = ConnectorRuntime(config.normalized())
+        return runtime.credential_value(provider_id, key) or runtime.credential_value(provider_id, "api_key") or runtime.credential_value(provider_id, "access_token")
+    except Exception:
+        return None
+
+
+def _connector_env_mapping(env_name: str) -> tuple[str, str]:
+    explicit = {
+        "OPENAI_API_KEY": ("openai", "api_key"),
+        "OPENAI_API_TOKEN": ("openai", "api_key"),
+        "ANTHROPIC_API_KEY": ("anthropic", "api_key"),
+        "GEMINI_API_KEY": ("gemini", "api_key"),
+        "GROQ_API_KEY": ("groq", "api_key"),
+        "XAI_API_KEY": ("grok_xai", "api_key"),
+        "HF_TOKEN": ("hugging_face", "api_key"),
+        "HUGGINGFACE_API_KEY": ("hugging_face", "api_key"),
+        "BRAVE_SEARCH_API_KEY": ("brave_search", "api_key"),
+        "EXA_API_KEY": ("exa", "api_key"),
+        "TAVILY_API_KEY": ("tavily", "api_key"),
+        "FIRECRAWL_API_KEY": ("firecrawl", "api_key"),
+    }
+    if env_name in explicit:
+        return explicit[env_name]
+    if env_name.endswith("_API_KEY"):
+        provider_id = env_name[: -len("_API_KEY")].lower()
+        return provider_id, "api_key"
+    if env_name.endswith("_TOKEN"):
+        provider_id = env_name[: -len("_TOKEN")].lower()
+        return provider_id, "access_token"
+    return "", ""
+
+
+def _safe_subprocess_env() -> dict[str, str]:
+    allowed = {
+        "PATH",
+        "HOME",
+        "TMPDIR",
+        "SSL_CERT_FILE",
+        "REQUESTS_CA_BUNDLE",
+        "PYTHONPATH",
+        "VIRTUAL_ENV",
+        "LANG",
+        "LC_ALL",
+    }
+    return {key: value for key, value in os.environ.items() if key in allowed and value}
 
 
 def _first_env(value: Any) -> str:
