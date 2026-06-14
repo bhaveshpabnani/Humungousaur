@@ -80,6 +80,7 @@ from humungousaur.cognition.loop import AutonomousLoopRunner, autonomous_loop_re
 from humungousaur.cognition.queue import RuntimeEventQueue
 from humungousaur.cognition.semantic_events import rebuild_current_context, semantic_events_status
 from humungousaur.cognition.triggers import TriggerStore, stimulus_from_input
+from humungousaur.desktop_chats import DesktopChatStore, chat_db_path
 from humungousaur.integrations.channel_listeners import (
     channel_listener_status,
     channel_listener_tick,
@@ -332,6 +333,26 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                     limit = _int_arg(query, "limit", 10)
                     self._send_json(AuditLog(effective_config().audit_db_path).recent_runs(limit=limit))
                     return
+                if path == "/chats":
+                    store = DesktopChatStore(chat_db_path(effective_config().data_dir))
+                    store.sync_run_messages(AuditLog(effective_config().audit_db_path))
+                    self._send_json({"conversations": store.list_conversations(limit=_int_arg(query, "limit", 50))})
+                    return
+                chat_route = _chat_route(path)
+                if chat_route is not None:
+                    conversation_id, child = chat_route
+                    store = DesktopChatStore(chat_db_path(effective_config().data_dir))
+                    store.sync_run_messages(AuditLog(effective_config().audit_db_path))
+                    conversation = store.get_conversation(conversation_id)
+                    if conversation is None:
+                        self._send_error(HTTPStatus.NOT_FOUND, "Unknown chat conversation.")
+                        return
+                    if child == "":
+                        self._send_json({"conversation": conversation})
+                        return
+                    if child == "messages":
+                        self._send_json({"conversation": conversation, "messages": store.messages(conversation_id, limit=_int_arg(query, "limit", 200))})
+                        return
                 run_route = _run_route(path)
                 if run_route is not None:
                     run_id, child = run_route
@@ -714,6 +735,8 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                         run_config,
                         channel_id=webhook_channel_id,
                         payload=payload,
+                        headers=dict(self.headers.items()),
+                        raw_body=getattr(self, "_request_raw_body", ""),
                         prepare_reply=_payload_bool(payload, "prepare_reply", True),
                         approve_high_risk=bool(payload.get("approve_high_risk", False)),
                         response_mode=payload.get("response_mode"),
@@ -729,6 +752,7 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                     self._send_json({"setup": setup, **channel_setup_status(effective_config(), channel_id=channel_id)}, HTTPStatus.CREATED)
                     return
                 if path == "/connectors/configure":
+                    credentials = payload.get("credentials")
                     try:
                         result = configure_connector_client(
                             effective_config(),
@@ -736,6 +760,7 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                             client_id=str(payload.get("client_id") or "").strip(),
                             client_secret=str(payload.get("client_secret") or "").strip(),
                             redirect_uri=str(payload.get("redirect_uri") or "").strip(),
+                            credentials={str(key): str(value) for key, value in credentials.items()} if isinstance(credentials, dict) else None,
                         )
                     except (KeyError, ValueError) as exc:
                         self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
@@ -819,6 +844,77 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
                         self._send_error(HTTPStatus.BAD_REQUEST, str(exc))
                         return
                     self._send_json(result, HTTPStatus.CREATED)
+                    return
+                if path == "/chats":
+                    store = DesktopChatStore(chat_db_path(effective_config().data_dir))
+                    conversation = store.create_conversation(
+                        title=str(payload.get("title") or ""),
+                        source=str(payload.get("source") or "desktop_app"),
+                        metadata=payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {},
+                    )
+                    self._send_json({"conversation": conversation}, HTTPStatus.CREATED)
+                    return
+                chat_route = _chat_route(path)
+                if chat_route is not None:
+                    conversation_id, child = chat_route
+                    if child != "runs/async":
+                        self._send_error(HTTPStatus.NOT_FOUND, "Unknown chat route.")
+                        return
+                    request = str(payload.get("request") or payload.get("text") or "").strip()
+                    if not request:
+                        self._send_error(HTTPStatus.BAD_REQUEST, "Field 'request' is required.")
+                        return
+                    store = DesktopChatStore(chat_db_path(effective_config().data_dir))
+                    if store.get_conversation(conversation_id) is None:
+                        self._send_error(HTTPStatus.NOT_FOUND, "Unknown chat conversation.")
+                        return
+                    run_config = request_config(effective_config(), payload)
+                    audit = AuditLog(run_config.audit_db_path)
+                    run_id = audit.start_run(request)
+                    display_text = str(payload.get("display_text") or payload.get("text") or request).strip()
+                    user_message = store.append_message(
+                        conversation_id,
+                        role="user",
+                        text=display_text,
+                        status="succeeded",
+                        source=str(payload.get("source") or "desktop_app"),
+                        run_id=run_id,
+                        metadata=payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {},
+                    )
+                    assistant_message = store.append_message(
+                        conversation_id,
+                        role="assistant",
+                        text="",
+                        status=ActionStatus.PLANNED.value,
+                        source="humungousaur",
+                        run_id=run_id,
+                        metadata={"user_message_id": user_message["message_id"]},
+                    )
+                    audit.log_run_event(
+                        run_id,
+                        "queued",
+                        "Chat run queued for background execution.",
+                        {"request": request, "conversation_id": conversation_id, "assistant_message_id": assistant_message["message_id"]},
+                    )
+                    worker = threading.Thread(
+                        target=_run_chat_background,
+                        args=(run_config, request, run_id, conversation_id, assistant_message["message_id"], bool(payload.get("approve_high_risk", False))),
+                        daemon=True,
+                    )
+                    self._send_json(
+                        {
+                            "conversation": store.get_conversation(conversation_id),
+                            "user_message": user_message,
+                            "assistant_message": assistant_message,
+                            "run_id": run_id,
+                            "status": ActionStatus.PLANNED.value,
+                        },
+                        HTTPStatus.ACCEPTED,
+                    )
+                    if isinstance(self.server, HumungousaurAPIServer):
+                        self.server.start_background_worker(worker)
+                    else:
+                        worker.start()
                     return
                 if path == "/runs/async":
                     request = str(payload.get("request", "")).strip()
@@ -1295,6 +1391,7 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
             self._request_started_at = time.perf_counter()
             self._request_received_at = datetime.now(timezone.utc).isoformat()
             self._request_payload_summary = {}
+            self._request_raw_body = ""
 
         def _route_parts(self) -> tuple[str, dict[str, list[str]]]:
             parsed = urlparse(self.path)
@@ -1305,6 +1402,7 @@ def make_handler(config: AgentConfig) -> type[BaseHTTPRequestHandler]:
             if length <= 0:
                 return {}
             body = self.rfile.read(length).decode("utf-8")
+            self._request_raw_body = body
             try:
                 payload = json.loads(body)
             except json.JSONDecodeError as exc:
@@ -1643,6 +1741,36 @@ def _run_agent_background(config: AgentConfig, request: str, run_id: str, approv
         audit.finish_run(run_id, ActionStatus.FAILED, f"Run failed: {exc}")
 
 
+def _run_chat_background(config: AgentConfig, request: str, run_id: str, conversation_id: str, assistant_message_id: str, approve_high_risk: bool) -> None:
+    audit = AuditLog(config.audit_db_path)
+    store = DesktopChatStore(chat_db_path(config.data_dir))
+    try:
+        store.update_message(assistant_message_id, status="running")
+        result = AgentOrchestrator(config).run(
+            request,
+            approve_high_risk=approve_high_risk,
+            run_id=run_id,
+            is_cancel_requested=lambda: audit.is_run_cancel_requested(run_id),
+        )
+        run = audit.get_run(run_id) or {}
+        status = str(run.get("status") or ActionStatus.SUCCEEDED.value)
+        store.update_message(
+            assistant_message_id,
+            text=result.final_response,
+            status=status,
+            metadata={"conversation_id": conversation_id},
+        )
+    except Exception as exc:
+        audit.log_run_event(run_id, "run_error", "Run failed with an unhandled error.", {"error": str(exc)})
+        audit.finish_run(run_id, ActionStatus.FAILED, f"Run failed: {exc}")
+        store.update_message(
+            assistant_message_id,
+            text=f"Run failed: {exc}",
+            status=ActionStatus.FAILED.value,
+            metadata={"conversation_id": conversation_id, "error": str(exc)},
+        )
+
+
 def _tool_catalog_payload(config: AgentConfig) -> dict[str, Any]:
     tools = default_tools(config)
     items = []
@@ -1874,6 +2002,17 @@ def _run_route(path: str) -> tuple[str, str] | None:
         return parts[1], ""
     if len(parts) == 3 and parts[0] == "runs" and parts[2] in {"timeline", "cancel"}:
         return parts[1], parts[2]
+    return None
+
+
+def _chat_route(path: str) -> tuple[str, str] | None:
+    parts = [part for part in path.split("/") if part]
+    if len(parts) == 2 and parts[0] == "chats":
+        return parts[1], ""
+    if len(parts) == 3 and parts[0] == "chats" and parts[2] == "messages":
+        return parts[1], "messages"
+    if len(parts) == 4 and parts[0] == "chats" and parts[2] == "runs" and parts[3] == "async":
+        return parts[1], "runs/async"
     return None
 
 

@@ -52,6 +52,46 @@ final class AgentAPIClient {
         try await get("runs?limit=30")
     }
 
+    func chatConversations() async throws -> [ChatConversation] {
+        let envelope: ChatConversationEnvelope = try await get("chats?limit=80")
+        return envelope.conversations
+    }
+
+    func createChat(title: String = "New chat", source: String = "macos_app") async throws -> ChatConversation {
+        let response: ChatConversationResponse = try await post(
+            "chats",
+            body: [
+                "title": title,
+                "source": source,
+                "metadata": ["client": "macos"]
+            ]
+        )
+        return response.conversation
+    }
+
+    func chatMessages(conversationID: String) async throws -> ChatMessagesEnvelope {
+        try await get("chats/\(Self.urlEncode(conversationID))/messages?limit=300")
+    }
+
+    func startChatRun(conversationID: String, text: String, displayText: String, source: String, responseMode: String, settings: AppSettings, secrets: RuntimeSecrets) async throws -> ChatRunQueuedResponse {
+        var payload = runtimePayload(settings: settings, secrets: secrets)
+        let voiceFriendly = isVoiceRequest(source: source, responseMode: responseMode)
+        payload["request"] = formattedRequestText(text, source: source, responseMode: responseMode)
+        payload["display_text"] = displayText
+        payload["source"] = source
+        payload["response_mode"] = responseMode
+        payload["metadata"] = [
+            "response_mode": responseMode,
+            "tts_provider": settings.ttsProvider,
+            "voice_id": settings.voiceId,
+            "response_format": "markdown",
+            "response_detail": voiceFriendly ? "voice_friendly" : "detailed",
+            "response_style": voiceFriendly ? "spoken_conversation" : "written_markdown",
+            "client": "macos"
+        ]
+        return try await post("chats/\(Self.urlEncode(conversationID))/runs/async", body: payload)
+    }
+
     func approvals() async throws -> [ApprovalItem] {
         try await get("approvals?status=pending&limit=30")
     }
@@ -64,13 +104,12 @@ final class AgentAPIClient {
         try await get("connectors")
     }
 
-    func configureConnector(providerID: String, clientID: String, clientSecret: String, redirectURI: String) async throws -> JSONValue {
+    func configureConnector(providerID: String, credentials: [String: String], redirectURI: String) async throws -> JSONValue {
         try await post(
             "connectors/configure",
             body: [
                 "provider_id": providerID,
-                "client_id": clientID,
-                "client_secret": clientSecret,
+                "credentials": credentials,
                 "redirect_uri": redirectURI
             ]
         )

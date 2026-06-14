@@ -1,19 +1,41 @@
 import Foundation
 
 struct ChatMessage: Identifiable, Equatable {
-    enum Role {
+    enum Role: String {
         case user
         case assistant
         case system
         case error
     }
 
-    let id = UUID()
+    let id: UUID
     var role: Role
     var text: String
-    var date = Date()
+    var date: Date
     var activities: [StreamActivityItem] = []
     var isStreaming = false
+    var status = ""
+    var runID: String?
+
+    init(
+        id: UUID = UUID(),
+        role: Role,
+        text: String,
+        date: Date = Date(),
+        activities: [StreamActivityItem] = [],
+        isStreaming: Bool = false,
+        status: String = "",
+        runID: String? = nil
+    ) {
+        self.id = id
+        self.role = role
+        self.text = text
+        self.date = date
+        self.activities = activities
+        self.isStreaming = isStreaming
+        self.status = status
+        self.runID = runID
+    }
 }
 
 struct StreamActivityItem: Identifiable, Equatable {
@@ -29,6 +51,113 @@ struct AgentStreamEvent: Identifiable, Equatable {
     let id = UUID()
     var event: String
     var data: JSONValue
+}
+
+struct ChatConversationEnvelope: Decodable {
+    var conversations: [ChatConversation]
+}
+
+struct ChatConversationResponse: Decodable {
+    var conversation: ChatConversation
+}
+
+struct ChatMessagesEnvelope: Decodable {
+    var conversation: ChatConversation
+    var messages: [DesktopChatMessage]
+}
+
+struct ChatRunQueuedResponse: Decodable {
+    var conversation: ChatConversation
+    var userMessage: DesktopChatMessage
+    var assistantMessage: DesktopChatMessage
+    var runId: String
+    var status: String
+
+    enum CodingKeys: String, CodingKey {
+        case conversation
+        case userMessage = "user_message"
+        case assistantMessage = "assistant_message"
+        case runId = "run_id"
+        case status
+    }
+}
+
+struct ChatConversation: Decodable, Identifiable, Hashable {
+    var id: String { conversationId }
+    var conversationId: String
+    var title: String
+    var source: String
+    var status: String
+    var createdAt: String
+    var updatedAt: String
+    var lastMessageAt: String
+    var messageCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case conversationId = "conversation_id"
+        case title
+        case source
+        case status
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case lastMessageAt = "last_message_at"
+        case messageCount = "message_count"
+    }
+
+    var displayTitle: String {
+        title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "New chat" : title
+    }
+
+    var subtitle: String {
+        messageCount == 1 ? "1 message" : "\(messageCount) messages"
+    }
+}
+
+struct DesktopChatMessage: Decodable, Identifiable, Hashable {
+    var id: String { messageId }
+    var messageId: String
+    var conversationId: String
+    var sequence: Int
+    var role: String
+    var text: String
+    var status: String
+    var source: String
+    var runId: String?
+    var createdAt: String
+    var updatedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case messageId = "message_id"
+        case conversationId = "conversation_id"
+        case sequence
+        case role
+        case text
+        case status
+        case source
+        case runId = "run_id"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+
+    var chatMessage: ChatMessage {
+        let roleValue = ChatMessage.Role(rawValue: role) ?? .system
+        let messageID = UUID(uuidString: messageId) ?? UUID()
+        let created = ISO8601DateFormatter().date(from: createdAt) ?? Date()
+        let isActive = ["queued", "planned", "running", "cancelling", "needs_approval"].contains(status)
+        let activities = isActive && roleValue == .assistant
+            ? [StreamActivityItem(kind: "thinking", title: "Thinking", detail: status.humanizedStatus, status: status)]
+            : []
+        return ChatMessage(
+            id: messageID,
+            role: roleValue,
+            text: text,
+            date: created,
+            activities: activities,
+            isStreaming: isActive && roleValue == .assistant,
+            status: status,
+            runID: runId
+        )
+    }
 }
 
 struct HealthPayload: Decodable {
@@ -300,6 +429,7 @@ struct ConnectorProvider: Decodable, Identifiable {
     var authUrl: String
     var tokenUrl: String
     var authType: String
+    var supportedConnectionTypes: [String]
     var credentialFields: [String]
     var oauthManagement: String
     var managedOAuthAvailable: Bool
@@ -316,6 +446,9 @@ struct ConnectorProvider: Decodable, Identifiable {
     var logoUrl: String
     var configured: Bool
     var clientId: String
+    var credentialProfile: String
+    var hasCredentialSecret: Bool
+    var configurationSource: String
     var connected: Bool
     var connectedAt: String
     var expiresAt: Double
@@ -329,6 +462,7 @@ struct ConnectorProvider: Decodable, Identifiable {
         case authUrl = "auth_url"
         case tokenUrl = "token_url"
         case authType = "auth_type"
+        case supportedConnectionTypes = "supported_connection_types"
         case credentialFields = "credential_fields"
         case oauthManagement = "oauth_management"
         case managedOAuthAvailable = "managed_oauth_available"
@@ -345,6 +479,9 @@ struct ConnectorProvider: Decodable, Identifiable {
         case logoUrl = "logo_url"
         case configured
         case clientId = "client_id"
+        case credentialProfile = "credential_profile"
+        case hasCredentialSecret = "has_credential_secret"
+        case configurationSource = "configuration_source"
         case connected
         case connectedAt = "connected_at"
         case expiresAt = "expires_at"
@@ -368,19 +505,24 @@ struct ConnectorProvider: Decodable, Identifiable {
 
     var setupTitle: String {
         if usesOAuth { return "Advanced OAuth Client" }
+        if authType == "mcp_oauth" { return "MCP Connection Profile" }
+        if authType == "api_key" { return "API Key Profile" }
         if credentialFields.count <= 1 { return "Local Connection" }
         return credentialFields.contains("bot_token") ? "Bot Credentials" : "Connection Credentials"
     }
 
     var setupCaption: String {
+        let connectionTypes = supportedConnectionTypes.isEmpty
+            ? ""
+            : " Supported paths: \(supportedConnectionTypes.map(\.humanizedIdentifier).joined(separator: ", "))."
         if usesOAuth {
             let scopeText = defaultScopes.isEmpty ? "OAuth scopes: none declared" : "OAuth scopes: \(defaultScopes.joined(separator: ", "))"
-            return "Managed OAuth is the normal user path. Use these fields only for self-hosted or development builds. \(scopeText)"
+            return "Managed OAuth is the normal user path. Use these fields only for self-hosted or development builds. \(scopeText)\(connectionTypes)"
         }
         if credentialFields.count <= 1 {
-            return "No provider API secret is required here. Save a local connection name so tools and collectors can check readiness."
+            return "No provider API secret is required here. Save a local connection name so tools and collectors can check readiness.\(connectionTypes)"
         }
-        return "Credential fields: \(credentialFields.map(\.humanizedIdentifier).joined(separator: ", "))"
+        return "Saved once in the connector vault, then reused by tools, MCP surfaces, and collectors. Credential fields: \(credentialFields.map(\.humanizedIdentifier).joined(separator: ", ")).\(connectionTypes)"
     }
 
     var primaryCredentialLabel: String {
@@ -410,6 +552,13 @@ struct ConnectorProvider: Decodable, Identifiable {
 
     var authModeText: String {
         authType.humanizedIdentifier
+    }
+
+    var credentialStatusText: String {
+        if usesOAuth {
+            return "Advanced OAuth client: \(advancedClientConfigured ? clientId : "not configured")"
+        }
+        return "Credential profile: \(credentialProfile.isEmpty ? (configured ? clientId : "not configured") : credentialProfile)"
     }
 
     var collectorSourceText: String {
@@ -1023,5 +1172,10 @@ extension String {
         case "low": "Low attention"
         default: humanizedIdentifier
         }
+    }
+
+    var isCredentialSecretField: Bool {
+        let lower = lowercased()
+        return ["secret", "token", "key", "password", "credential"].contains { lower.contains($0) }
     }
 }

@@ -9,45 +9,97 @@ struct ChatView: View {
     @State private var selectedFileURLs: [URL] = []
 
     var body: some View {
-        VStack(spacing: 0) {
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(spacing: 18) {
-                        if model.messages.isEmpty {
-                            welcome
-                        }
-                        ForEach(model.messages) { message in
-                            MessageBubble(message: message)
-                                .id(message.id)
-                        }
-                    }
-                    .padding(28)
-                }
-                .onChange(of: model.messages.count) {
-                    if let id = model.messages.last?.id {
-                        proxy.scrollTo(id, anchor: .bottom)
-                    }
-                }
-            }
+        HStack(spacing: 0) {
+            chatHistory
+                .frame(width: 236)
+                .background(.bar)
+                .overlay(Rectangle().fill(DS.line).frame(width: 1), alignment: .trailing)
 
-            ComposerView(
-                prompt: $prompt,
-                modelName: $model.settings.modelName,
-                voiceInputMode: $voiceInputMode,
-                selectedFiles: $selectedFileURLs
-            ) {
-                let files = selectedFileURLs
-                let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-                let requestText = composedRequestText(prompt: text, files: files)
-                let displayText = composedDisplayText(prompt: text, files: files)
-                let source = voiceInputMode ? "voice_transcript" : "user_text"
-                prompt = ""
-                selectedFileURLs = []
-                Task { await model.send(requestText, source: source, responseMode: "text", displayText: displayText) }
+            VStack(spacing: 0) {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 18) {
+                            if model.messages.isEmpty {
+                                welcome
+                            }
+                            ForEach(model.messages) { message in
+                                MessageBubble(message: message)
+                                    .id(message.id)
+                            }
+                        }
+                        .padding(28)
+                    }
+                    .onChange(of: model.messages.count) {
+                        if let id = model.messages.last?.id {
+                            proxy.scrollTo(id, anchor: .bottom)
+                        }
+                    }
+                }
+
+                ComposerView(
+                    prompt: $prompt,
+                    modelName: $model.settings.modelName,
+                    voiceInputMode: $voiceInputMode,
+                    selectedFiles: $selectedFileURLs
+                ) {
+                    let files = selectedFileURLs
+                    let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let requestText = composedRequestText(prompt: text, files: files)
+                    let displayText = composedDisplayText(prompt: text, files: files)
+                    let source = voiceInputMode ? "voice_transcript" : "user_text"
+                    prompt = ""
+                    selectedFileURLs = []
+                    Task { await model.send(requestText, source: source, responseMode: "text", displayText: displayText) }
+                }
+                .padding(.horizontal, 28)
+                .padding(.top, 6)
+                .padding(.bottom, 20)
             }
-            .padding(.horizontal, 28)
-            .padding(.top, 6)
-            .padding(.bottom, 20)
+        }
+    }
+
+    private var chatHistory: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Chats")
+                    .font(.headline.weight(.semibold))
+                Spacer()
+                Button {
+                    model.startNewSession()
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .buttonStyle(.borderless)
+                .help("New chat")
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 14)
+
+            List(selection: conversationSelection) {
+                ForEach(model.conversations) { conversation in
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(conversation.displayTitle)
+                            .font(.callout.weight(.medium))
+                            .lineLimit(1)
+                        Text(conversation.subtitle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    .padding(.vertical, 4)
+                    .tag(Optional(conversation.conversationId))
+                }
+            }
+            .listStyle(.sidebar)
+        }
+    }
+
+    private var conversationSelection: Binding<String?> {
+        Binding {
+            model.selectedConversationID
+        } set: { value in
+            guard let value else { return }
+            Task { await model.loadConversation(value) }
         }
     }
 

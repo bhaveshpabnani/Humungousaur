@@ -163,6 +163,9 @@ public sealed class ConnectorProvider
     [JsonPropertyName("auth_type")]
     public string AuthType { get; set; } = "";
 
+    [JsonPropertyName("supported_connection_types")]
+    public List<string> SupportedConnectionTypes { get; set; } = [];
+
     [JsonPropertyName("credential_fields")]
     public List<string> CredentialFields { get; set; } = [];
 
@@ -211,6 +214,15 @@ public sealed class ConnectorProvider
     [JsonPropertyName("client_id")]
     public string ClientId { get; set; } = "";
 
+    [JsonPropertyName("credential_profile")]
+    public string CredentialProfile { get; set; } = "";
+
+    [JsonPropertyName("has_credential_secret")]
+    public bool HasCredentialSecret { get; set; }
+
+    [JsonPropertyName("configuration_source")]
+    public string ConfigurationSource { get; set; } = "";
+
     [JsonPropertyName("connected")]
     public bool Connected { get; set; }
 
@@ -234,16 +246,36 @@ public sealed class ConnectorProvider
             : Configured ? "Credentials saved" : "Needs credentials";
     public string AppsText => WorkspaceApps.Count == 0 ? "-" : string.Join(", ", WorkspaceApps);
     public string AuthModeText => Humanize(AuthType);
-    public string SetupTitle => UsesOAuth ? "Advanced OAuth Client" : CredentialFields.Count <= 1 ? "Local Connection" : CredentialFields.Contains("bot_token") ? "Bot Credentials" : "Connection Credentials";
+    public string SetupTitle => UsesOAuth
+        ? "Advanced OAuth Client"
+        : AuthType == "mcp_oauth"
+            ? "MCP Connection Profile"
+            : AuthType == "api_key"
+                ? "API Key Profile"
+                : CredentialFields.Count <= 1 ? "Local Connection" : CredentialFields.Contains("bot_token") ? "Bot Credentials" : "Connection Credentials";
     public string SetupCaption => UsesOAuth
-        ? $"Managed OAuth is the normal user path. Use these fields only for self-hosted or development builds. {(DefaultScopes.Count == 0 ? "OAuth scopes: none declared" : $"OAuth scopes: {string.Join(", ", DefaultScopes)}")}"
+        ? $"Managed OAuth is the normal user path. Use these fields only for self-hosted or development builds. {(DefaultScopes.Count == 0 ? "OAuth scopes: none declared" : $"OAuth scopes: {string.Join(", ", DefaultScopes)}")}{ConnectionTypesText}"
         : CredentialFields.Count <= 1
-            ? "No provider API secret is required here. Save a local connection name so tools and collectors can check readiness."
-            : $"Credential fields: {string.Join(", ", CredentialFields.Select(Humanize))}";
+            ? $"No provider API secret is required here. Save a local connection name so tools and collectors can check readiness.{ConnectionTypesText}"
+            : $"Saved once in the connector vault, then reused by tools, MCP surfaces, and collectors. Credential fields: {string.Join(", ", CredentialFields.Select(Humanize))}.{ConnectionTypesText}";
     public string PrimaryCredentialLabel => CredentialFields.Count > 0 ? Humanize(CredentialFields[0]) : UsesOAuth ? "Client ID" : "Connection ID";
     public string SecondaryCredentialLabel => UsesOAuth && SupportsPkce ? "Client Secret (optional)" : CredentialFields.Count > 1 ? Humanize(CredentialFields[1]) : UsesOAuth ? "Client secret" : "Secret or token";
+    public List<string> EffectiveCredentialFields => CredentialFields.Count == 0 ? ["client_id", "client_secret"] : CredentialFields;
+    public string CredentialLabel(string field) => Humanize(field);
+    public static bool IsCredentialSecretField(string field)
+    {
+        var lower = (field ?? "").ToLowerInvariant();
+        return lower.Contains("secret", StringComparison.Ordinal)
+            || lower.Contains("token", StringComparison.Ordinal)
+            || lower.Contains("key", StringComparison.Ordinal)
+            || lower.Contains("password", StringComparison.Ordinal)
+            || lower.Contains("credential", StringComparison.Ordinal);
+    }
     public string SaveButtonLabel => UsesOAuth ? "Save Advanced OAuth Client" : "Save Credentials";
     public string ConnectionButtonLabel => UsesOAuth ? Connected ? "Reconnect" : "Connect" : Configured ? "Check Readiness" : "Show Setup";
+    public string CredentialStatusText => UsesOAuth
+        ? $"Advanced OAuth client: {(AdvancedClientConfigured ? ClientId : "not configured")}"
+        : $"Credential profile: {(string.IsNullOrWhiteSpace(CredentialProfile) ? (Configured ? ClientId : "not configured") : CredentialProfile)}";
     public string LogoInitial => string.IsNullOrWhiteSpace(DisplayName) ? "?" : DisplayName.Trim()[0].ToString().ToUpperInvariant();
     public ImageSource? LogoImageSource => ConnectorLogoSource(LogoAsset);
     public Visibility LogoImageVisibility => LogoImageSource is null ? Visibility.Collapsed : Visibility.Visible;
@@ -280,6 +312,10 @@ public sealed class ConnectorProvider
             }.Where(line => !string.IsNullOrWhiteSpace(line)));
         }
     }
+
+    private string ConnectionTypesText => SupportedConnectionTypes.Count == 0
+        ? ""
+        : $" Supported paths: {string.Join(", ", SupportedConnectionTypes.Select(Humanize))}.";
 
     private static string Humanize(string value)
     {
@@ -850,6 +886,119 @@ public sealed class RuntimeRunItem
     public string Title => $"{Status}  {ShortRunId}";
     public string Subtitle => string.IsNullOrWhiteSpace(Request) ? ShortRunId : Request;
     public string ShortRunId => RunId.Length <= 12 ? RunId : RunId[..12];
+}
+
+public sealed class ChatConversationEnvelope
+{
+    [JsonPropertyName("conversations")]
+    public List<ChatConversationItem> Conversations { get; set; } = [];
+}
+
+public sealed class ChatConversationResponse
+{
+    [JsonPropertyName("conversation")]
+    public ChatConversationItem Conversation { get; set; } = new();
+}
+
+public sealed class ChatMessagesEnvelope
+{
+    [JsonPropertyName("conversation")]
+    public ChatConversationItem Conversation { get; set; } = new();
+
+    [JsonPropertyName("messages")]
+    public List<DesktopChatMessage> Messages { get; set; } = [];
+}
+
+public sealed class ChatRunQueuedResponse
+{
+    [JsonPropertyName("conversation")]
+    public ChatConversationItem Conversation { get; set; } = new();
+
+    [JsonPropertyName("user_message")]
+    public DesktopChatMessage UserMessage { get; set; } = new();
+
+    [JsonPropertyName("assistant_message")]
+    public DesktopChatMessage AssistantMessage { get; set; } = new();
+
+    [JsonPropertyName("run_id")]
+    public string RunId { get; set; } = "";
+
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "";
+}
+
+public sealed class ChatConversationItem
+{
+    [JsonPropertyName("conversation_id")]
+    public string ConversationId { get; set; } = "";
+
+    [JsonPropertyName("title")]
+    public string Title { get; set; } = "";
+
+    [JsonPropertyName("source")]
+    public string Source { get; set; } = "";
+
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "";
+
+    [JsonPropertyName("last_message_at")]
+    public string LastMessageAt { get; set; } = "";
+
+    [JsonPropertyName("message_count")]
+    public int MessageCount { get; set; }
+
+    public string DisplayTitle => string.IsNullOrWhiteSpace(Title) ? "New chat" : Title;
+    public string Subtitle => MessageCount == 1 ? "1 message" : $"{MessageCount} messages";
+}
+
+public sealed class DesktopChatMessage
+{
+    [JsonPropertyName("message_id")]
+    public string MessageId { get; set; } = "";
+
+    [JsonPropertyName("role")]
+    public string Role { get; set; } = "";
+
+    [JsonPropertyName("text")]
+    public string Text { get; set; } = "";
+
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "";
+
+    [JsonPropertyName("run_id")]
+    public string? RunId { get; set; }
+
+    [JsonPropertyName("created_at")]
+    public string CreatedAt { get; set; } = "";
+
+    public ChatLogItem ToChatLogItem()
+    {
+        var speaker = Role switch
+        {
+            "user" => "You",
+            "assistant" => "Humungousaur",
+            "error" => "Humungousaur",
+            _ => "System",
+        };
+        var tone = Role switch
+        {
+            "user" => "user",
+            "assistant" => ActiveStatuses.Contains(Status) ? "activity" : "assistant",
+            "error" => "error",
+            _ => "activity",
+        };
+        var text = string.IsNullOrWhiteSpace(Text) && ActiveStatuses.Contains(Status) ? $"Thinking... {Status}" : Text;
+        return new ChatLogItem { Speaker = speaker, Text = text, Tone = tone, Timestamp = ParseTimestamp(CreatedAt) };
+    }
+
+    private static readonly HashSet<string> ActiveStatuses = ["queued", "planned", "running", "cancelling", "needs_approval"];
+
+    private static DateTimeOffset ParseTimestamp(string value)
+    {
+        return DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var parsed)
+            ? parsed
+            : DateTimeOffset.Now;
+    }
 }
 
 public sealed class ApprovalItem

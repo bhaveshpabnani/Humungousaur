@@ -73,8 +73,7 @@ struct ConnectorListRow: View {
 struct ConnectorDetailView: View {
     @EnvironmentObject private var model: AppViewModel
     let connector: ConnectorProvider
-    @State private var clientID = ""
-    @State private var clientSecret = ""
+    @State private var credentialValues: [String: String] = [:]
 
     var body: some View {
         ScrollView {
@@ -89,9 +88,7 @@ struct ConnectorDetailView: View {
             .padding(28)
         }
         .onAppear {
-            if clientID.isEmpty, connector.clientId != "" {
-                clientID = connector.clientId
-            }
+            seedCredentialValues()
         }
     }
 
@@ -125,15 +122,19 @@ struct ConnectorDetailView: View {
             Text(connector.setupTitle)
                 .font(.headline)
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 10) {
-                GridRow {
-                    TextField(connector.primaryCredentialLabel, text: $clientID)
-                    SecureField(connector.secondaryCredentialLabel, text: $clientSecret)
+                ForEach(Array(credentialFields.enumerated()), id: \.offset) { _, field in
+                    GridRow {
+                        Text(field.humanizedIdentifier)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        credentialInput(field: field)
+                    }
                 }
             }
             HStack {
                 Button {
                     Task {
-                        await model.configureConnector(connector, clientID: clientID, clientSecret: clientSecret)
+                        await model.configureConnector(connector, credentials: credentialValues)
                     }
                 } label: {
                     Label(connector.saveButtonTitle, systemImage: "key")
@@ -153,6 +154,32 @@ struct ConnectorDetailView: View {
                 .textSelection(.enabled)
         }
         .glassPanel()
+    }
+
+    private var credentialFields: [String] {
+        connector.credentialFields.isEmpty ? ["client_id", "client_secret"] : connector.credentialFields
+    }
+
+    @ViewBuilder
+    private func credentialInput(field: String) -> some View {
+        if field.isCredentialSecretField {
+            SecureField(field.humanizedIdentifier, text: binding(for: field))
+        } else {
+            TextField(field.humanizedIdentifier, text: binding(for: field))
+        }
+    }
+
+    private func binding(for field: String) -> Binding<String> {
+        Binding(
+            get: { credentialValues[field, default: ""] },
+            set: { credentialValues[field] = $0 }
+        )
+    }
+
+    private func seedCredentialValues() {
+        guard credentialValues.isEmpty else { return }
+        guard let firstField = credentialFields.first, !connector.clientId.isEmpty else { return }
+        credentialValues[firstField] = connector.clientId
     }
 
     private var actionsPanel: some View {

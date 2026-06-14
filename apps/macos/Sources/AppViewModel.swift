@@ -27,6 +27,8 @@ final class AppViewModel: ObservableObject {
     @Published var voiceStatus: JSONValue = .object([:])
     @Published var updateInfo: UpdateInfo?
     @Published var updateStatusText = "Check for release updates."
+    @Published var conversations: [ChatConversation] = []
+    @Published var selectedConversationID: String?
     @Published var messages: [ChatMessage] = []
     @Published var selectedRun: RunItem?
     @Published var selectedApproval: ApprovalItem?
@@ -75,6 +77,8 @@ final class AppViewModel: ObservableObject {
     private var isCapturingVoiceTask = false
     private var voiceWakePausedForResponse = false
     private var voiceResponseStopRequested = false
+    private var activeVoiceResponseID: UUID?
+    private var postResponseCaptureResponseID: UUID?
     private var activeVoiceResponseTask: Task<Void, Never>?
     private var voiceAcknowledgementIndex = 0
     private let wakeAcknowledgementSpeaker = AVSpeechSynthesizer()
@@ -111,6 +115,7 @@ final class AppViewModel: ObservableObject {
         await refreshHealth()
         await refreshModelProviders()
         await refreshTools()
+        await refreshConversations()
         await refreshRuns()
         await refreshApprovals()
         await refreshChannels()
@@ -156,6 +161,38 @@ final class AppViewModel: ObservableObject {
             }
         } catch {
             runs = []
+        }
+    }
+
+    func refreshConversations() async {
+        do {
+            conversations = try await api.chatConversations()
+            if let selectedConversationID,
+               conversations.contains(where: { $0.conversationId == selectedConversationID }) {
+                if messages.isEmpty {
+                    await loadConversation(selectedConversationID)
+                }
+                return
+            }
+            if let first = conversations.first {
+                await loadConversation(first.conversationId)
+            } else {
+                selectedConversationID = nil
+                messages = []
+            }
+        } catch {
+            conversations = []
+        }
+    }
+
+    func loadConversation(_ conversationID: String) async {
+        do {
+            let envelope = try await api.chatMessages(conversationID: conversationID)
+            selectedConversationID = envelope.conversation.conversationId
+            upsertConversation(envelope.conversation)
+            messages = envelope.messages.map(\.chatMessage)
+        } catch {
+            notice = error.localizedDescription
         }
     }
 
@@ -337,11 +374,13 @@ final class AppViewModel: ObservableObject {
         source: String,
         responseMode: String,
         displayText: String? = nil,
-        speakWhenVisible: Bool = false
+        speakWhenVisible: Bool = false,
+        onVisibleSpeechFinished: (() async -> Void)? = nil
     ) async -> String? {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        messages.append(ChatMessage(role: .user, text: displayText ?? trimmed))
+        let visiblePrompt = displayText ?? trimmed
+        messages.append(ChatMessage(role: .user, text: visiblePrompt, status: "succeeded"))
         let assistantMessage = ChatMessage(
             role: .assistant,
             text: "",
@@ -352,7 +391,8 @@ final class AppViewModel: ObservableObject {
                     detail: ""
                 )
             ],
-            isStreaming: true
+            isStreaming: true,
+            status: "planned"
         )
         let assistantID = assistantMessage.id
         messages.append(assistantMessage)
@@ -360,44 +400,30 @@ final class AppViewModel: ObservableObject {
         var didSpeakVisibleResponse = false
         defer { isSending = false }
         do {
-            let stream = try api.streamStimulus(
-                trimmed,
+            let conversation = try await ensureConversation()
+            let queued = try await api.startChatRun(
+                conversationID: conversation.conversationId,
+                text: trimmed,
+                displayText: visiblePrompt,
                 source: source,
                 responseMode: responseMode,
                 settings: settingsWithChannelSecrets(),
                 secrets: secrets
             )
-            for try await event in stream {
-                if Task.isCancelled {
-                    throw CancellationError()
-                }
-                applyStreamEvent(event, to: assistantID)
-                if speakWhenVisible,
-                   !didSpeakVisibleResponse,
-                   let response = completedMessageText(for: assistantID) {
-                    didSpeakVisibleResponse = true
-                    await speakVisibleResponse(response)
-                }
-            }
-            updateMessage(assistantID) { message in
-                message.isStreaming = false
-                if message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    message.text = "The agent returned a structured response."
-                }
-                if !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    message.activities = []
-                }
-            }
+            selectedConversationID = queued.conversation.conversationId
+            upsertConversation(queued.conversation)
+            await loadConversation(queued.conversation.conversationId)
+            let response = try await pollChatRun(conversationID: queued.conversation.conversationId, runID: queued.runId)
             await refreshRuns()
             await refreshApprovals()
             await refreshAutonomy()
             if speakWhenVisible,
-               !didSpeakVisibleResponse,
-               let response = messageText(for: assistantID) {
+               !didSpeakVisibleResponse {
                 didSpeakVisibleResponse = true
                 await speakVisibleResponse(response)
+                await handleVisibleSpeechFinished(onVisibleSpeechFinished)
             }
-            return messageText(for: assistantID)
+            return response
         } catch {
             if error is CancellationError {
                 updateMessage(assistantID) { message in
@@ -408,12 +434,20 @@ final class AppViewModel: ObservableObject {
                 return nil
             }
             if isLegacyStreamError(error) {
-                return await sendLegacyStimulus(
+                let response = await sendLegacyStimulus(
                     trimmed,
                     source: source,
                     responseMode: responseMode,
                     assistantID: assistantID
                 )
+                if speakWhenVisible,
+                   !didSpeakVisibleResponse,
+                   let response {
+                    didSpeakVisibleResponse = true
+                    await speakVisibleResponse(response)
+                    await handleVisibleSpeechFinished(onVisibleSpeechFinished)
+                }
+                return response
             }
             updateMessage(assistantID) { message in
                 message.role = .error
@@ -424,8 +458,20 @@ final class AppViewModel: ObservableObject {
         }
     }
 
-    func sendSpokenResponse(_ prompt: String, source: String = "voice_transcript", displayText: String? = nil) async {
-        _ = await send(prompt, source: source, responseMode: "text", displayText: displayText, speakWhenVisible: true)
+    func sendSpokenResponse(
+        _ prompt: String,
+        source: String = "voice_transcript",
+        displayText: String? = nil,
+        onSpeechFinished: (() async -> Void)? = nil
+    ) async {
+        _ = await send(
+            prompt,
+            source: source,
+            responseMode: "text",
+            displayText: displayText,
+            speakWhenVisible: true,
+            onVisibleSpeechFinished: onSpeechFinished
+        )
     }
 
     func runQuickCommand(_ command: String, display: String? = nil) {
@@ -441,8 +487,19 @@ final class AppViewModel: ObservableObject {
     }
 
     func startNewSession() {
-        messages = []
         selectedSection = .chat
+        Task {
+            do {
+                let conversation = try await api.createChat()
+                conversations.insert(conversation, at: 0)
+                selectedConversationID = conversation.conversationId
+                messages = []
+            } catch {
+                messages = []
+                selectedConversationID = nil
+                notice = error.localizedDescription
+            }
+        }
     }
 
     func saveSettings() {
@@ -493,6 +550,7 @@ final class AppViewModel: ObservableObject {
         defaultBaseUrl: "https://api.openai.com/v1",
         aliases: ["openai-responses"]
     )
+    private static let terminalChatStatuses: Set<String> = ["succeeded", "failed", "cancelled", "skipped", "blocked"]
 
     func saveVoiceSettings() async {
         saveSettings()
@@ -765,31 +823,22 @@ final class AppViewModel: ObservableObject {
         if !settings.voiceContinuousAfterWake {
             voiceWakeIsAwake = false
         }
+        let responseID = UUID()
+        activeVoiceResponseID = responseID
+        postResponseCaptureResponseID = nil
         let responseTask = Task { [weak self] in
             guard let self else { return }
             voiceResponseStopRequested = false
             await pauseVoiceListeningForResponse()
             if Task.isCancelled || voiceResponseStopRequested { return }
-            await sendSpokenResponse(trimmed, displayText: "Voice: \(trimmed)")
-            if Task.isCancelled || voiceResponseStopRequested { return }
-            voiceWakePausedForResponse = false
-            if keepListening && settings.voiceContinuousAfterWake {
-                scheduleNextVoiceCapture()
-            } else {
-                voiceWakeIsAwake = false
-                await resumeWakeDetection()
+            await sendSpokenResponse(trimmed, displayText: "Voice: \(trimmed)") { [weak self] in
+                await self?.openPostResponseVoiceCapture(responseID: responseID, keepListening: keepListening)
             }
-            activeVoiceResponseTask = nil
+            if Task.isCancelled || voiceResponseStopRequested { return }
+            await openPostResponseVoiceCapture(responseID: responseID, keepListening: keepListening)
+            finishVoiceResponseTask(responseID: responseID)
         }
         activeVoiceResponseTask = responseTask
-    }
-
-    private func scheduleNextVoiceCapture() {
-        guard settings.voiceWakeEnabled, settings.voiceContinuousAfterWake, voiceWakeIsAwake, !voiceWakePausedForResponse else { return }
-        Task {
-            try? await Task.sleep(nanoseconds: 1_500_000_000)
-            startVoiceTaskCapture(acknowledge: false)
-        }
     }
 
     private func pauseVoiceListeningForResponse() async {
@@ -812,6 +861,8 @@ final class AppViewModel: ObservableObject {
         voiceResponseStopRequested = true
         activeVoiceResponseTask?.cancel()
         activeVoiceResponseTask = nil
+        activeVoiceResponseID = nil
+        postResponseCaptureResponseID = nil
         stopLocalSpeechPlayback()
         voiceWakePausedForResponse = false
         voiceWakeIsAwake = true
@@ -819,6 +870,31 @@ final class AppViewModel: ObservableObject {
         if settings.voiceWakeEnabled {
             startVoiceTaskCapture(acknowledge: false)
         }
+    }
+
+    private func openPostResponseVoiceCapture(responseID: UUID, keepListening: Bool) async {
+        guard activeVoiceResponseID == responseID else { return }
+        guard postResponseCaptureResponseID != responseID else { return }
+        postResponseCaptureResponseID = responseID
+        voiceWakePausedForResponse = false
+        guard settings.voiceWakeEnabled else {
+            voiceWakeStatusText = "Voice wake-up is off."
+            return
+        }
+        guard keepListening && settings.voiceContinuousAfterWake else {
+            voiceWakeIsAwake = false
+            await resumeWakeDetection()
+            return
+        }
+        voiceWakeIsAwake = true
+        voiceWakeStatusText = "Listening for your task..."
+        startVoiceTaskCapture(acknowledge: false)
+    }
+
+    private func finishVoiceResponseTask(responseID: UUID) {
+        guard activeVoiceResponseID == responseID else { return }
+        activeVoiceResponseTask = nil
+        activeVoiceResponseID = nil
     }
 
     private func stopLocalSpeechPlayback() {
@@ -937,21 +1013,31 @@ final class AppViewModel: ObservableObject {
         connectorCatalog.providers.first { $0.providerId == selectedConnectorID } ?? connectorCatalog.providers.first
     }
 
-    func configureConnector(_ connector: ConnectorProvider, clientID: String, clientSecret: String) async {
-        let cleanID = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanID.isEmpty else {
-            notice = "\(connector.primaryCredentialLabel) is required."
+    func configureConnector(_ connector: ConnectorProvider, credentials: [String: String]) async {
+        let cleanedCredentials = credentials.reduce(into: [String: String]()) { result, item in
+            let key = item.key.trimmingCharacters(in: .whitespacesAndNewlines)
+            let value = item.value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !key.isEmpty, !value.isEmpty {
+                result[key] = value
+            }
+        }
+        let fields = connector.credentialFields.isEmpty ? ["client_id", "client_secret"] : connector.credentialFields
+        let primaryField = fields.first ?? "client_id"
+        guard !(cleanedCredentials[primaryField] ?? "").isEmpty else {
+            notice = "\(primaryField.humanizedIdentifier) is required."
             return
         }
-        if !connector.usesOAuth, connector.credentialFields.count > 1, clientSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            notice = "\(connector.secondaryCredentialLabel) is required."
-            return
+        if !connector.usesOAuth {
+            let missing = fields.dropFirst().filter { (cleanedCredentials[$0] ?? "").isEmpty }
+            if let firstMissing = missing.first {
+                notice = "\(firstMissing.humanizedIdentifier) is required."
+                return
+            }
         }
         do {
             _ = try await api.configureConnector(
                 providerID: connector.providerId,
-                clientID: cleanID,
-                clientSecret: clientSecret.trimmingCharacters(in: .whitespacesAndNewlines),
+                credentials: cleanedCredentials,
                 redirectURI: connectorCatalog.redirectUri
             )
             notice = "\(connector.displayName) \(connector.usesOAuth ? "advanced OAuth client" : "credentials") saved."
@@ -1024,7 +1110,7 @@ final class AppViewModel: ObservableObject {
             "State: \(connector.statusText)",
             "Auth mode: \(connector.authModeText)",
             "Managed OAuth: \(connector.managedOAuthAvailable ? "available" : "not configured for this build")",
-            "Advanced OAuth client: \(connector.advancedClientConfigured ? connector.clientId : "not configured")",
+            connector.credentialStatusText,
             "Refresh token: \(connector.usesOAuth ? (connector.hasRefreshToken ? "available" : "not stored") : "not used")",
             "Credential fields: \(connector.credentialFields.map(\.humanizedIdentifier).joined(separator: ", "))",
             "Apps: \(connector.workspaceApps.joined(separator: ", "))",
@@ -1371,6 +1457,48 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    private func ensureConversation() async throws -> ChatConversation {
+        if let selectedConversationID,
+           let conversation = conversations.first(where: { $0.conversationId == selectedConversationID }) {
+            return conversation
+        }
+        let conversation = try await api.createChat()
+        conversations.insert(conversation, at: 0)
+        selectedConversationID = conversation.conversationId
+        return conversation
+    }
+
+    private func upsertConversation(_ conversation: ChatConversation) {
+        if let index = conversations.firstIndex(where: { $0.conversationId == conversation.conversationId }) {
+            conversations[index] = conversation
+        } else {
+            conversations.insert(conversation, at: 0)
+        }
+        conversations.sort { $0.lastMessageAt > $1.lastMessageAt }
+    }
+
+    private func pollChatRun(conversationID: String, runID: String) async throws -> String {
+        var latestText = ""
+        for _ in 0..<600 {
+            if Task.isCancelled {
+                throw CancellationError()
+            }
+            let envelope = try await api.chatMessages(conversationID: conversationID)
+            upsertConversation(envelope.conversation)
+            if selectedConversationID == conversationID {
+                messages = envelope.messages.map(\.chatMessage)
+            }
+            if let assistant = envelope.messages.last(where: { $0.runId == runID && $0.role == "assistant" }) {
+                latestText = assistant.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if Self.terminalChatStatuses.contains(assistant.status) {
+                    return latestText.isEmpty ? "The agent finished with status: \(assistant.status.humanizedStatus)." : latestText
+                }
+            }
+            try await Task.sleep(nanoseconds: 1_000_000_000)
+        }
+        return latestText.isEmpty ? "The agent is still working. This chat will update when the run finishes." : latestText
+    }
+
     private func speakVisibleResponse(_ response: String) async {
         let spokenText = Self.speechText(from: response)
         guard !spokenText.isEmpty else { return }
@@ -1401,6 +1529,11 @@ final class AppViewModel: ObservableObject {
             }
             notice = "Could not speak response: \(error.localizedDescription)"
         }
+    }
+
+    private func handleVisibleSpeechFinished(_ callback: (() async -> Void)?) async {
+        guard !voiceResponseStopRequested, !Task.isCancelled else { return }
+        await callback?()
     }
 
     private func speakWithSystemVoice(_ text: String) async throws {

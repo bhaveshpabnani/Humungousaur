@@ -13,6 +13,7 @@ namespace Humungousaur.App;
 
 public sealed partial class MainWindow : Window
 {
+    private static readonly HashSet<string> TerminalChatStatuses = ["succeeded", "failed", "cancelled", "skipped", "blocked"];
     private readonly AppSettingsStore _settingsStore = new();
     private readonly AgentApiClient _api = new();
     private readonly LocalAgentProcess _agentProcess = new();
@@ -20,10 +21,12 @@ public sealed partial class MainWindow : Window
     private readonly DispatcherTimer _autonomyTimer = new();
     private readonly DispatcherTimer _channelListenerTimer = new();
     private readonly ObservableCollection<ChatLogItem> _chat = [];
+    private readonly ObservableCollection<ChatConversationItem> _chatConversations = [];
     private readonly ObservableCollection<string> _processLines = [];
     private AppSettings _settings = new();
     private List<ChannelInfo> _channels = [];
     private List<ConnectorProvider> _connectors = [];
+    private readonly Dictionary<string, Control> _connectorCredentialInputs = [];
     private string _connectorRedirectUri = "http://127.0.0.1:8765/connectors/callback";
     private List<ModelProviderInfo> _modelProviders = [];
     private List<ToolInfo> _tools = [];
@@ -34,6 +37,8 @@ public sealed partial class MainWindow : Window
     private CollectorStatusResponse _collectorStatus = new();
     private string _latestDownloadUrl = "";
     private string _lastHandledVoiceTranscript = "";
+    private string _currentConversationId = "";
+    private string _activeChatRunId = "";
     private string _activeVoiceRunId = "";
     private bool _autonomyCycleRunning;
     private bool _channelListenerTickRunning;
@@ -41,6 +46,7 @@ public sealed partial class MainWindow : Window
     private bool _voiceWakePausedForResponse;
     private bool _isCapturingVoiceTask;
     private bool _applyingSettingsToUi;
+    private bool _loadingChatSelection;
     private int _voiceAcknowledgementIndex;
     private CancellationTokenSource? _activeVoiceResponseCts;
 
@@ -54,6 +60,7 @@ public sealed partial class MainWindow : Window
 
         RootGrid.Loaded += RootGrid_Loaded;
         ChatLog.ItemsSource = _chat;
+        ChatConversationList.ItemsSource = _chatConversations;
         ProcessLog.ItemsSource = _processLines;
         _agentProcess.OutputReceived += line => DispatcherQueue.TryEnqueue(() => AddProcessLine(line));
         _autonomyTimer.Tick += AutonomyTimer_Tick;
@@ -68,8 +75,11 @@ public sealed partial class MainWindow : Window
         ApplySettingsToUi();
         ShellNav.SelectedItem = FirstNavigationItem("assistant");
         ShowPage("assistant");
-        AddChat("Humungousaur", "Native shell ready. Connect to the local agent or start it from Runtime.", "assistant");
         await RefreshAllAsync();
+        if (_chat.Count == 0)
+        {
+            AddChat("Humungousaur", "Native shell ready. Connect to the local agent or start it from Runtime.", "assistant");
+        }
         if (_settings.VoiceWakeEnabled)
         {
             await SetVoiceWakeEnabledAsync(true, persist: false);
@@ -148,6 +158,7 @@ public sealed partial class MainWindow : Window
         _api.SetBaseUrl(_settings.ApiBaseUrl);
         await RefreshHealthAsync();
         await RefreshModelProvidersAsync();
+        await RefreshChatsAsync();
         await RefreshChannelsAsync();
         await RefreshConnectorsAsync();
         await RefreshVoiceAsync();
@@ -174,6 +185,126 @@ public sealed partial class MainWindow : Window
             RuntimeSummaryText.Text = $"API offline at {_settings.ApiBaseUrl}";
             SetStatus(false, "Offline");
             AddProcessLine(exc.Message);
+        }
+    }
+
+    private async Task RefreshChatsAsync()
+    {
+        try
+        {
+            var conversations = await _api.GetChatConversationsAsync();
+            _chatConversations.Clear();
+            foreach (var conversation in conversations)
+            {
+                _chatConversations.Add(conversation);
+            }
+            if (!string.IsNullOrWhiteSpace(_currentConversationId) && conversations.Any(item => item.ConversationId == _currentConversationId))
+            {
+                if (_chat.Count == 0)
+                {
+                    await LoadChatConversationAsync(_currentConversationId);
+                }
+                return;
+            }
+            if (conversations.Count > 0)
+            {
+                await LoadChatConversationAsync(conversations[0].ConversationId);
+            }
+        }
+        catch (Exception exc)
+        {
+            AddProcessLine(exc.Message);
+        }
+    }
+
+    private async Task<ChatConversationItem> EnsureChatConversationAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(_currentConversationId))
+        {
+            var existing = _chatConversations.FirstOrDefault(item => item.ConversationId == _currentConversationId);
+            if (existing is not null)
+            {
+                return existing;
+            }
+        }
+        var conversation = await _api.CreateChatAsync();
+        UpsertConversation(conversation);
+        _currentConversationId = conversation.ConversationId;
+        return conversation;
+    }
+
+    private async Task LoadChatConversationAsync(string conversationId)
+    {
+        if (string.IsNullOrWhiteSpace(conversationId))
+        {
+            return;
+        }
+        var envelope = await _api.GetChatMessagesAsync(conversationId);
+        _currentConversationId = envelope.Conversation.ConversationId;
+        UpsertConversation(envelope.Conversation);
+        _chat.Clear();
+        foreach (var message in envelope.Messages)
+        {
+            _chat.Add(message.ToChatLogItem());
+        }
+        _loadingChatSelection = true;
+        try
+        {
+            ChatConversationList.SelectedItem = _chatConversations.FirstOrDefault(item => item.ConversationId == _currentConversationId);
+        }
+        finally
+        {
+            _loadingChatSelection = false;
+        }
+        if (_chat.Count > 0)
+        {
+            ChatLog.ScrollIntoView(_chat.Last());
+        }
+    }
+
+    private async Task PollChatRunAsync(string conversationId, string runId)
+    {
+        for (var attempt = 0; attempt < 600; attempt++)
+        {
+            var envelope = await _api.GetChatMessagesAsync(conversationId);
+            UpsertConversation(envelope.Conversation);
+            if (_currentConversationId == conversationId)
+            {
+                _chat.Clear();
+                foreach (var message in envelope.Messages)
+                {
+                    _chat.Add(message.ToChatLogItem());
+                }
+                if (_chat.Count > 0)
+                {
+                    ChatLog.ScrollIntoView(_chat.Last());
+                }
+            }
+            var assistant = envelope.Messages.LastOrDefault(message => message.RunId == runId && message.Role == "assistant");
+            if (assistant is not null && TerminalChatStatuses.Contains(assistant.Status))
+            {
+                _activeChatRunId = "";
+                return;
+            }
+            await Task.Delay(TimeSpan.FromSeconds(1));
+        }
+    }
+
+    private void UpsertConversation(ChatConversationItem conversation)
+    {
+        if (string.IsNullOrWhiteSpace(conversation.ConversationId))
+        {
+            return;
+        }
+        var existing = _chatConversations.FirstOrDefault(item => item.ConversationId == conversation.ConversationId);
+        if (existing is not null)
+        {
+            var index = _chatConversations.IndexOf(existing);
+            _chatConversations[index] = conversation;
+        }
+        else
+        {
+            _chatConversations.Insert(0, conversation);
         }
     }
 
@@ -561,11 +692,13 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            AddChat("Thinking", "Connected to the live agent stream.", "activity");
-            await foreach (var streamEvent in _api.StreamStimulusAsync(text, source, responseMode, _settings))
-            {
-                ApplyStreamEvent(streamEvent);
-            }
+            var conversation = await EnsureChatConversationAsync();
+            AddChat("Thinking", "Queued with the local agent.", "activity");
+            var queued = await _api.StartChatRunAsync(conversation.ConversationId, text, source, responseMode, _settings);
+            _activeChatRunId = queued.RunId;
+            UpsertConversation(queued.Conversation);
+            await LoadChatConversationAsync(queued.Conversation.ConversationId);
+            await PollChatRunAsync(queued.Conversation.ConversationId, queued.RunId);
             await RefreshAutonomyAsync();
             await RefreshRuntimeAsync();
         }
@@ -573,6 +706,32 @@ public sealed partial class MainWindow : Window
         {
             AddChat("Humungousaur", exc.Message, "error");
             ShowNotice("The agent request failed.", InfoBarSeverity.Error);
+        }
+    }
+
+    private async void NewChatButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var conversation = await _api.CreateChatAsync();
+            UpsertConversation(conversation);
+            await LoadChatConversationAsync(conversation.ConversationId);
+        }
+        catch (Exception exc)
+        {
+            ShowNotice(exc.Message, InfoBarSeverity.Error);
+        }
+    }
+
+    private async void ChatConversationList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingChatSelection)
+        {
+            return;
+        }
+        if (ChatConversationList.SelectedItem is ChatConversationItem conversation)
+        {
+            await LoadChatConversationAsync(conversation.ConversationId);
         }
     }
 
@@ -1587,6 +1746,8 @@ public sealed partial class MainWindow : Window
             ConnectConnectorButton.IsEnabled = false;
             RefreshConnectorButton.IsEnabled = false;
             DisconnectConnectorButton.IsEnabled = false;
+            ConnectorCredentialFieldsPanel.Children.Clear();
+            _connectorCredentialInputs.Clear();
             return;
         }
         ConnectorTitleText.Text = connector.DisplayName;
@@ -1602,14 +1763,13 @@ public sealed partial class MainWindow : Window
             $"State: {connector.StatusText}",
             $"Auth mode: {connector.AuthModeText}",
             $"Managed OAuth: {(connector.ManagedOAuthAvailable ? "available" : "not configured for this build")}",
-            $"Advanced OAuth client: {(connector.AdvancedClientConfigured ? connector.ClientId : "not configured")}",
+            connector.CredentialStatusText,
             $"Refresh token: {(connector.UsesOAuth ? (connector.HasRefreshToken ? "available" : "not stored") : "not used")}",
             $"Redirect: {_connectorRedirectUri}",
         });
         ConnectorSetupTitleText.Text = connector.SetupTitle;
         ConnectorSetupCaptionText.Text = connector.SetupCaption;
-        ConnectorClientIdBox.Header = connector.PrimaryCredentialLabel;
-        ConnectorClientSecretBox.Header = connector.SecondaryCredentialLabel;
+        BuildConnectorCredentialFields(connector);
         SaveConnectorClientButton.Content = connector.SaveButtonLabel;
         ConnectConnectorButton.Content = connector.ConnectionButtonLabel;
         ConnectConnectorButton.IsEnabled = true;
@@ -1619,8 +1779,57 @@ public sealed partial class MainWindow : Window
         ConnectorAppsText.Text = connector.WorkspaceApps.Count == 0 ? "-" : string.Join(", ", connector.WorkspaceApps);
         ConnectorToolsText.Text = connector.ToolHints.Count == 0 ? "-" : string.Join(", ", connector.ToolHints);
         ConnectorSourceText.Text = connector.CollectorSourceText;
-        ConnectorClientIdBox.Text = connector.ClientId;
-        ConnectorClientSecretBox.Password = "";
+    }
+
+    private void BuildConnectorCredentialFields(ConnectorProvider connector)
+    {
+        ConnectorCredentialFieldsPanel.Children.Clear();
+        _connectorCredentialInputs.Clear();
+        var fields = connector.EffectiveCredentialFields;
+        foreach (var field in fields)
+        {
+            Control input;
+            if (ConnectorProvider.IsCredentialSecretField(field))
+            {
+                input = new PasswordBox
+                {
+                    Header = connector.CredentialLabel(field),
+                };
+            }
+            else
+            {
+                input = new TextBox
+                {
+                    Header = connector.CredentialLabel(field),
+                    Text = field == fields.FirstOrDefault() ? connector.ClientId : "",
+                };
+            }
+            _connectorCredentialInputs[field] = input;
+            ConnectorCredentialFieldsPanel.Children.Add(input);
+        }
+    }
+
+    private Dictionary<string, string> ReadConnectorCredentialValues(ConnectorProvider connector)
+    {
+        var credentials = new Dictionary<string, string>();
+        foreach (var field in connector.EffectiveCredentialFields)
+        {
+            if (!_connectorCredentialInputs.TryGetValue(field, out var input))
+            {
+                continue;
+            }
+            var value = input switch
+            {
+                TextBox textBox => textBox.Text.Trim(),
+                PasswordBox passwordBox => passwordBox.Password.Trim(),
+                _ => "",
+            };
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                credentials[field] = value;
+            }
+        }
+        return credentials;
     }
 
     private async void SaveConnectorClientButton_Click(object sender, RoutedEventArgs e)
@@ -1631,7 +1840,24 @@ public sealed partial class MainWindow : Window
         }
         try
         {
-            await _api.ConfigureConnectorAsync(connector, ConnectorClientIdBox.Text.Trim(), ConnectorClientSecretBox.Password.Trim(), _connectorRedirectUri);
+            var credentials = ReadConnectorCredentialValues(connector);
+            var fields = connector.EffectiveCredentialFields;
+            var primaryField = fields.FirstOrDefault() ?? "client_id";
+            if (!credentials.TryGetValue(primaryField, out var primaryValue) || string.IsNullOrWhiteSpace(primaryValue))
+            {
+                ShowNotice($"{connector.CredentialLabel(primaryField)} is required.", InfoBarSeverity.Warning);
+                return;
+            }
+            if (!connector.UsesOAuth)
+            {
+                var missing = fields.Skip(1).FirstOrDefault(field => !credentials.TryGetValue(field, out var value) || string.IsNullOrWhiteSpace(value));
+                if (!string.IsNullOrWhiteSpace(missing))
+                {
+                    ShowNotice($"{connector.CredentialLabel(missing)} is required.", InfoBarSeverity.Warning);
+                    return;
+                }
+            }
+            await _api.ConfigureConnectorAsync(connector, credentials, _connectorRedirectUri);
             ShowNotice($"{connector.DisplayName} {(connector.UsesOAuth ? "advanced OAuth client" : "credentials")} saved.", InfoBarSeverity.Success);
             await RefreshConnectorsAsync();
         }

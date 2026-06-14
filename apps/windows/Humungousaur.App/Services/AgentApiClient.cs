@@ -265,13 +265,20 @@ public sealed class AgentApiClient
         return await GetAsync<ConnectorCatalog>("connectors") ?? new ConnectorCatalog();
     }
 
-    public Task<JsonObject> ConfigureConnectorAsync(ConnectorProvider connector, string clientId, string clientSecret, string redirectUri)
+    public Task<JsonObject> ConfigureConnectorAsync(ConnectorProvider connector, IReadOnlyDictionary<string, string> credentials, string redirectUri)
     {
+        var credentialObject = new JsonObject();
+        foreach (var item in credentials)
+        {
+            if (!string.IsNullOrWhiteSpace(item.Key) && !string.IsNullOrWhiteSpace(item.Value))
+            {
+                credentialObject[item.Key.Trim()] = item.Value.Trim();
+            }
+        }
         return PostJsonObjectAsync("connectors/configure", new JsonObject
         {
             ["provider_id"] = connector.ProviderId,
-            ["client_id"] = clientId,
-            ["client_secret"] = clientSecret,
+            ["credentials"] = credentialObject,
             ["redirect_uri"] = redirectUri,
         });
     }
@@ -295,6 +302,45 @@ public sealed class AgentApiClient
     public async Task<List<RuntimeRunItem>> GetRunsAsync()
     {
         return await GetAsync<List<RuntimeRunItem>>("runs?limit=20") ?? [];
+    }
+
+    public async Task<List<ChatConversationItem>> GetChatConversationsAsync()
+    {
+        var envelope = await GetAsync<ChatConversationEnvelope>("chats?limit=80") ?? new ChatConversationEnvelope();
+        return envelope.Conversations;
+    }
+
+    public async Task<ChatConversationItem> CreateChatAsync(string title = "New chat")
+    {
+        var response = await PostAsync<ChatConversationResponse>("chats", new JsonObject
+        {
+            ["title"] = title,
+            ["source"] = "windows_app",
+            ["metadata"] = new JsonObject { ["client"] = "windows" },
+        }) ?? new ChatConversationResponse();
+        return response.Conversation;
+    }
+
+    public async Task<ChatMessagesEnvelope> GetChatMessagesAsync(string conversationId)
+    {
+        return await GetAsync<ChatMessagesEnvelope>($"chats/{Uri.EscapeDataString(conversationId)}/messages?limit=300") ?? new ChatMessagesEnvelope();
+    }
+
+    public async Task<ChatRunQueuedResponse> StartChatRunAsync(string conversationId, string text, string source, string responseMode, AppSettings settings)
+    {
+        var payload = RuntimePayload(settings);
+        payload["request"] = text;
+        payload["display_text"] = text;
+        payload["source"] = source;
+        payload["response_mode"] = responseMode;
+        payload["metadata"] = new JsonObject
+        {
+            ["response_mode"] = responseMode,
+            ["tts_provider"] = settings.TtsProvider,
+            ["voice_id"] = settings.VoiceId,
+            ["client"] = "windows",
+        };
+        return await PostAsync<ChatRunQueuedResponse>($"chats/{Uri.EscapeDataString(conversationId)}/runs/async", payload) ?? new ChatRunQueuedResponse();
     }
 
     public async Task<List<JsonObject>> GetRunTimelineAsync(string runId)
