@@ -1,18 +1,27 @@
 # Workspace Connector Tool Matrix
 
-Last checked: 2026-06-11
+Last checked: 2026-06-13
 
 This is the connector backlog for turning Humungousaur into a one-click desktop workspace hub. It is based on the current native catalog:
 
 - 527 registered native tools.
 - 28 communication channel manifests.
-- 152 connector provider manifests.
+- 160 connector provider manifests.
 - 11 connector tools: `workspace_connector_catalog`, `workspace_connector_status`, `workspace_connector_configure`, `workspace_connector_connect_prepare`, `workspace_connector_refresh`, `workspace_connector_disconnect`, `workspace_connector_source_manifest`, `workspace_connector_source_status`, `workspace_connector_source_tick`, `workspace_connector_source_event_ingest`, `workspace_connector_source_health`.
 
 The important product boundary is:
 
 - A connector authenticates and stores provider grants locally so tools and
   collector adapters can ask, "is this provider connection ready?"
+- OAuth, API-key, local-permission, browser-session, and MCP-backed providers
+  should all surface through this same connector readiness path. Environment
+  variables remain a self-hosted fallback; once a connector profile/token exists,
+  tools, MCP manifests, and collector sources should consume connector readiness
+  instead of asking for a separate per-tool secret.
+- Channel send/listen credentials follow the same rule: Slack, Telegram,
+  Discord, WhatsApp, Google Chat, Teams webhooks, SMS, and voice-call adapters
+  may still read legacy env vars, but connector-vault credentials are now a
+  first-class readiness source for channel setup, doctor, smoke, and send paths.
 - Domain tools keep their current ownership. Office stays in `office` and `productivity`; chat stays in `channels`; GitHub stays in `github`; model/MLOps stays in `mlops`; media stays in `media`.
 - A connector adapter should expose read/list/search/create/update/send methods only where there is already a native tool family or channel surface that can use it.
 - Collector source adapters own provider-event mapping, metadata-first
@@ -46,7 +55,7 @@ adapters still belong to the owning tool packages.
 | Developer/devops | `azure_devops`, `bitbucket`, `cloudflare`, `datadog`, `docker_hub`, `github`, `gitlab`, `grafana`, `kubernetes`, `netlify`, `opsgenie`, `pagerduty`, `sentry`, `vercel` |
 | Developer tools | `cursor`, `jetbrains`, `vscode`, `xcode` |
 | Design/meetings | `adobe_xd`, `canva`, `figjam`, `figma`, `miro`, `sketch`, `webex`, `zoom` |
-| Files/knowledge/education | `box`, `canvas_lms`, `coda`, `confluence`, `dropbox`, `evernote`, `notion`, `obsidian`, `onenote`, `siyuan` |
+| Files/knowledge/education | `box`, `canvas_lms`, `coda`, `confluence`, `dropbox`, `evernote`, `nextcloud`, `notion`, `obsidian`, `onenote`, `readwise`, `siyuan` |
 | Media/voice/ML ops | `blender`, `comfyui`, `deepgram`, `elevenlabs`, `fal`, `hugging_face`, `hugging_face_datasets`, `hyperframes`, `lambda_labs`, `modal`, `pinecone`, `qdrant`, `replicate`, `spotify`, `stability_ai`, `wandb`, `youtube` |
 | Office/planning | `asana`, `atlassian`, `clickup`, `google_workspace`, `icloud`, `jira`, `linear`, `microsoft_365`, `monday`, `nextcloud`, `notion_projects`, `todoist`, `trello`, `zoho` |
 | Research/social/security/IoT | `arxiv`, `brave_search`, `crossref`, `duckduckgo`, `exa`, `firecrawl`, `homeassistant`, `onepassword`, `polymarket`, `rss`, `searxng`, `tavily`, `x_twitter` |
@@ -60,7 +69,8 @@ adapters still belong to the owning tool packages.
 | Token vault | Store access/refresh tokens behind a vault abstraction with redacted status responses | `humungousaur/connectors/vault.py` |
 | Profile/state store | Persist connector profiles, OAuth states, token references, and operation audit rows | `humungousaur/connectors/store.py` |
 | Runtime facade | Single connection-readiness API for tools, collectors, API routes, and desktop UI | `humungousaur/connectors/runtime.py` |
-| Provider API adapter | Execute provider calls with scoped token and typed request/response envelopes | `humungousaur/connectors/http.py` plus provider packages |
+| API-key / local / MCP profile adapter | Store a redacted connector profile plus vault-backed credential once, then expose readiness to provider registries, MCP manifests, channels, tools, and collectors | `humungousaur/connectors/runtime.py`, `humungousaur/integrations/channels.py`, `humungousaur/tools/native_parity/implementation.py` |
+| Provider API adapter | Execute provider calls with scoped token or provider-specific credential and typed request/response envelopes | `humungousaur/connectors/http.py` plus provider packages |
 | Tool bridge | Convert native tool input into provider calls or operation packets | owning tool package |
 | Sync cache | Store bounded metadata, cursors, ETags, page tokens, and webhook receipts | owning integration package |
 | Webhook/listener | Receive provider events and normalize them into channel or activity events | `channels`, `collectors`, or provider package |
@@ -81,6 +91,7 @@ These are not app connectors; they are the platform features needed before provi
 | Webhook ingress registry | Slack/Discord/Linear/GitHub/Teams/Twilio events need one normalized entry point | `channel_webhook_ingest`, `activity_ingest`, `collector_status` |
 | Sync jobs | Background refresh for mail, calendar, issues, PRs, tasks, and files | `cronjob`, `automation_daemon_tick`, `activity_search` |
 | Connector health checks | Per-provider doctor with token validity, scopes, API reachability, webhook health | `channel_doctor`, `http_endpoint_check`, `workspace_connector_status` |
+| Collector source visibility | Connector catalog/status attach `collector_source`, granted scopes, and missing default scopes so desktop UI and tools can show connector-to-collector readiness without separate source calls | `workspace_connector_catalog`, `workspace_connector_status`, desktop Connectors views |
 | Collector source ingestion | Webhook/poller events enter the durable collector event log with metadata-first redaction after connector-readiness checks | `workspace_connector_source_event_ingest`, `/connectors/source-events`, `/connectors/sources` |
 | Connector data export/delete | User can inspect and remove local connector cache/token data | `activity_prune`, `plugin_state`, `workspace_connector_disconnect` |
 
@@ -160,7 +171,10 @@ Todoist now have metadata-first planning source manifests and dedicated
 webhook, browser-extension, or local relay ingestion for task/issue created,
 assigned, moved, commented, completed/reopened, priority changed, due date
 changed, sprint changed, and project navigation/change events. Provider-specific
-pollers remain adapter work.
+pollers remain adapter work. Jira, Asana, ClickUp, Monday.com, Todoist, and
+Trello now have first-class provider manifest metadata instead of generated
+`connectors.local` placeholders; Trello is modeled as key/token, while the
+others expose their OAuth/API base URLs and current official docs.
 
 ## Priority 1: Developer Platform Connectors
 
@@ -276,7 +290,7 @@ pollers remain adapter work.
 
 | Connector | Native tools to integrate | Adapter work |
 | --- | --- | --- |
-| Spotify | `spotify_search`, `spotify_playlists`, `spotify_albums`, `spotify_library`, `spotify_devices`, `spotify_playback`, `spotify_queue` | Full OAuth token adapter, playback control, playlist/library writes |
+| Spotify | `spotify_search`, `spotify_playlists`, `spotify_albums`, `spotify_library`, `spotify_devices`, `spotify_playback`, `spotify_queue` | Native tool readiness now accepts the Spotify OAuth connector or `SPOTIFY_ACCESS_TOKEN`; full playback-control and playlist/library write adapters remain approval-gated live work |
 | YouTube | `transcript_summary_create`, `video_analyze`, `media_remote_fetch_plan`, `writing_draft_create` | Search/video metadata/transcripts/upload comments |
 | TikTok | `video_analyze`, `writing_draft_create`, `x_social_post_prepare` equivalent | Profile/video/post scheduling if available |
 | Instagram | `media_reference_create`, `writing_draft_create`, `outbound_attachment_prepare` | Media library, post/comment/DM boundary |
