@@ -624,7 +624,7 @@ def _env_tts_provider() -> str:
 def _secret(config: AgentConfig, name: str) -> str | None:
     import os
 
-    return config.normalized().secret_value(name) or os.environ.get(name)
+    return _connector_voice_secret(config, name) or config.normalized().secret_value(name) or os.environ.get(name)
 
 
 def _elevenlabs_secret(config: AgentConfig) -> str | None:
@@ -632,10 +632,28 @@ def _elevenlabs_secret(config: AgentConfig) -> str | None:
 
     normalized = config.normalized()
     for name in ("ELEVENLABS_API_KEY", "ELEVEN_LABS_API_KEY", "ELEVAN_LABS_API_KEY", "ELEVANLABS_API_KEY"):
-        value = normalized.secret_value(name) or os.environ.get(name)
+        value = _connector_voice_secret(config, name) or normalized.secret_value(name) or os.environ.get(name)
         if value:
             return value
     return None
+
+
+def _connector_voice_secret(config: AgentConfig, env_name: str) -> str | None:
+    provider_id = {
+        "DEEPGRAM_API_KEY": "deepgram",
+        "ELEVENLABS_API_KEY": "elevenlabs",
+        "ELEVEN_LABS_API_KEY": "elevenlabs",
+        "ELEVAN_LABS_API_KEY": "elevenlabs",
+        "ELEVANLABS_API_KEY": "elevenlabs",
+    }.get(str(env_name or ""))
+    if not provider_id:
+        return None
+    try:
+        from humungousaur.connectors import ConnectorRuntime
+
+        return ConnectorRuntime(config.normalized()).credential_value(provider_id, "api_key")
+    except Exception:
+        return None
 
 
 def _resolve_read_path(config: AgentConfig, raw_path: str) -> tuple[Path | None, str | None]:

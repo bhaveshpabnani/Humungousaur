@@ -743,6 +743,9 @@ def _channel_status(config: AgentConfig, channel: dict[str, Any], setups: dict[s
     setup = channel.get("setup", {}) if isinstance(channel.get("setup"), dict) else {}
     contract = _official_send_contract(channel)
     required_env = [str(item) for item in contract.get("required_env", []) if str(item)]
+    missing_send_env = _missing_env(config, required_env)
+    credential_source = _credential_source(config, required_env)
+    connector_readiness = _channel_connector_readiness(config, str(channel["channel_id"]))
     setup_checks = [str(item) for item in setup.get("doctor_checks", []) if str(item)]
     missing_setup = [check for check in setup_checks if not _check_available(config, check)]
     enabled = bool(saved.get("enabled", False))
@@ -757,10 +760,13 @@ def _channel_status(config: AgentConfig, channel: dict[str, Any], setups: dict[s
         "can_prepare": bool(channel.get("delivery", {}).get("prepared_outbox", True)),
         "send_implemented": bool(contract.get("implemented", False)),
         "send_mode": str(contract.get("mode", "")),
-        "missing_send_env": _missing_env(config, required_env),
+        "missing_send_env": missing_send_env,
+        "credential_source": credential_source,
+        "connector_provider_id": _channel_connector_provider_id(str(channel["channel_id"])) or "",
+        "connector_readiness": connector_readiness,
         "missing_setup_checks": missing_setup,
         "configured_secret_refs": sorted((saved.get("secret_refs", {}) or {}).keys()) if isinstance(saved.get("secret_refs", {}), dict) else [],
-        "ready_for_send": bool(contract.get("implemented", False)) and not _missing_env(config, required_env),
+        "ready_for_send": bool(contract.get("implemented", False)) and not missing_send_env,
         "ready_for_inbound": enabled and listen_enabled and not missing_setup,
         "setup": setup,
     }
@@ -1084,7 +1090,82 @@ def _missing_env(config: AgentConfig, required_env: list[str]) -> list[str]:
 
 
 def _secret(config: AgentConfig, name: str) -> str | None:
-    return config.normalized().secret_value(name) or os.environ.get(name)
+    return config.normalized().secret_value(name) or os.environ.get(name) or _connector_secret(config, name)
+
+
+def _credential_source(config: AgentConfig, required_env: list[str]) -> str:
+    names = [name for name in required_env if name]
+    if not names:
+        return "none"
+    env_count = sum(1 for name in names if config.normalized().secret_value(name) or os.environ.get(name))
+    connector_count = sum(1 for name in names if _connector_secret(config, name))
+    if env_count == len(names):
+        return "env"
+    if connector_count == len(names):
+        return "connector"
+    if env_count or connector_count:
+        return "mixed"
+    return "missing"
+
+
+_CHANNEL_ENV_CREDENTIALS: dict[str, tuple[tuple[str, str], ...]] = {
+    "SLACK_BOT_TOKEN": (("slack", "bot_access_token"), ("slack", "access_token"), ("slack", "bot_token")),
+    "TELEGRAM_BOT_TOKEN": (("telegram", "bot_token"),),
+    "DISCORD_BOT_TOKEN": (("discord", "bot_token"),),
+    "WHATSAPP_PHONE_NUMBER_ID": (("whatsapp", "phone_number_id"),),
+    "WHATSAPP_ACCESS_TOKEN": (("whatsapp", "access_token"),),
+    "GOOGLE_CHAT_WEBHOOK_URL": (("googlechat", "webhook_url"),),
+    "TEAMS_WEBHOOK_URL": (("msteams", "webhook_url"),),
+    "TWILIO_ACCOUNT_SID": (("sms", "account_sid"), ("voice_call", "account_sid")),
+    "TWILIO_AUTH_TOKEN": (("sms", "auth_token"), ("voice_call", "auth_token")),
+    "TWILIO_FROM_NUMBER": (("sms", "from_number"), ("voice_call", "from_number")),
+}
+
+
+def _connector_secret(config: AgentConfig, env_name: str) -> str | None:
+    candidates = _CHANNEL_ENV_CREDENTIALS.get(str(env_name or ""), ())
+    if not candidates:
+        return None
+    try:
+        from humungousaur.connectors import ConnectorRuntime
+
+        runtime = ConnectorRuntime(config.normalized())
+    except Exception:
+        return None
+    for provider_id, key in candidates:
+        try:
+            value = runtime.credential_value(provider_id, key)
+        except Exception:
+            value = None
+        if value:
+            return value
+    return None
+
+
+def _channel_connector_provider_id(channel_id: str) -> str:
+    mapping = {
+        "slack": "slack",
+        "telegram": "telegram",
+        "discord": "discord",
+        "whatsapp": "whatsapp",
+        "googlechat": "googlechat",
+        "msteams": "msteams",
+        "sms": "sms",
+        "voice_call": "voice_call",
+    }
+    return mapping.get(str(channel_id or ""), "")
+
+
+def _channel_connector_readiness(config: AgentConfig, channel_id: str) -> dict[str, Any]:
+    provider_id = _channel_connector_provider_id(channel_id)
+    if not provider_id:
+        return {}
+    try:
+        from humungousaur.connectors import ConnectorRuntime
+
+        return ConnectorRuntime(config.normalized()).readiness(provider_id)
+    except Exception:
+        return {}
 
 
 def _required_secret(config: AgentConfig, name: str) -> str:

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
+import hmac
 import json
 import os
 from pathlib import Path
@@ -17,6 +19,7 @@ from humungousaur.integrations.channels import (
     handle_channel_inbound,
     load_channel_catalog,
     load_channel_setups,
+    _connector_secret,
 )
 
 
@@ -93,6 +96,8 @@ def process_channel_webhook(
     *,
     channel_id: str,
     payload: dict[str, Any],
+    headers: dict[str, Any] | None = None,
+    raw_body: str = "",
     prepare_reply: bool = True,
     approve_high_risk: bool = False,
     response_mode: str | None = None,
@@ -102,6 +107,7 @@ def process_channel_webhook(
     channel = find_channel(channel_id)
     if channel is None:
         raise ValueError(f"Unknown channel_id: {channel_id}")
+    _verify_webhook_signature(normalized, channel["channel_id"], payload, headers or {}, raw_body)
     special = _provider_handshake(channel["channel_id"], payload)
     if special is not None:
         return special
@@ -176,6 +182,8 @@ def _listener_record(config: AgentConfig, channel: dict[str, Any], setups: dict[
         "webhook_available": webhook_available,
         "webhook_path": f"/channels/webhook/{channel_id}",
         "missing_env": missing_env,
+        "missing_credentials": missing_env,
+        "credential_source": _credential_source(config, required_env),
         "missing_binaries": missing_binaries,
         "last_poll_at": channel_state.get("last_poll_at", ""),
         "last_event_at": channel_state.get("last_event_at", ""),
@@ -437,6 +445,31 @@ def _provider_handshake(channel_id: str, payload: dict[str, Any]) -> dict[str, A
     return None
 
 
+def _verify_webhook_signature(config: AgentConfig, channel_id: str, payload: dict[str, Any], headers: dict[str, Any], raw_body: str) -> None:
+    if channel_id != "slack":
+        return
+    secret = _secret(config, "SLACK_SIGNING_SECRET") or ""
+    if not secret:
+        return
+    normalized_headers = {str(key).lower(): str(value) for key, value in headers.items()}
+    timestamp = normalized_headers.get("x-slack-request-timestamp") or str(payload.get("x-slack-request-timestamp") or "")
+    signature = normalized_headers.get("x-slack-signature") or str(payload.get("x-slack-signature") or "")
+    if not timestamp or not signature:
+        raise ValueError("Slack webhook signature headers are required when SLACK_SIGNING_SECRET is configured.")
+    try:
+        request_time = int(timestamp)
+    except ValueError as exc:
+        raise ValueError("Slack webhook timestamp is invalid.") from exc
+    if abs(int(time.time()) - request_time) > 60 * 5:
+        raise ValueError("Slack webhook timestamp is outside the allowed replay window.")
+    body = raw_body or json.dumps(payload, separators=(",", ":"), sort_keys=True)
+    base = f"v0:{timestamp}:{body}".encode("utf-8")
+    digest = hmac.new(secret.encode("utf-8"), base, hashlib.sha256).hexdigest()
+    expected = f"v0={digest}"
+    if not hmac.compare_digest(expected, signature):
+        raise ValueError("Slack webhook signature verification failed.")
+
+
 def _append_listener_events(config: AgentConfig, channel_id: str, events: list[Any]) -> None:
     state = _load_listener_state(config)
     channel_state = _channel_state(state, channel_id)
@@ -468,7 +501,7 @@ def _event_summary(event: Any) -> dict[str, Any]:
 def _listener_notes(channel: dict[str, Any], listener_mode: str) -> list[str]:
     notes = [f"Native listener mode: {listener_mode}."]
     if channel.get("channel_id") == "telegram":
-        notes.append("Polling is available locally when TELEGRAM_BOT_TOKEN is configured.")
+        notes.append("Polling is available locally when the Telegram connector has a bot token; env vars remain a migration fallback.")
     else:
         notes.append("Inbound uses the first-party webhook endpoint or a future trusted bridge for provider events.")
     return notes
@@ -515,7 +548,21 @@ def _binary_available(name: str) -> bool:
 
 
 def _secret(config: AgentConfig, name: str) -> str | None:
-    return config.normalized().secret_value(name) or os.environ.get(name)
+    return _connector_secret(config, name) or config.normalized().secret_value(name) or os.environ.get(name)
+
+
+def _credential_source(config: AgentConfig, names: list[str]) -> str:
+    if not names:
+        return "none_required"
+    connector_count = sum(1 for name in names if _connector_secret(config, name))
+    env_count = sum(1 for name in names if config.normalized().secret_value(name) or os.environ.get(name))
+    if connector_count == len(names):
+        return "connector"
+    if env_count == len(names):
+        return "env"
+    if connector_count or env_count:
+        return "mixed"
+    return "missing"
 
 
 def _first_mapping(payload: dict[str, Any], keys: list[str]) -> dict[str, Any]:
