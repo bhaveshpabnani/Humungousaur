@@ -39,11 +39,15 @@ class KeepCollector:
             app_state.setdefault("seen_notes", {})
             return _app_result("keep", "running", "Google Keep note baseline recorded.", cursor=app_state["baseline_at"], source_channel=self.source_channel, implementation_level=self.implementation_level)
 
+        page_token = str(app_state.get("page_token") or "").strip()
+        query = {"pageSize": max_events, "fields": "notes(name,createTime,updateTime,trashTime),nextPageToken"}
+        if page_token:
+            query["pageToken"] = page_token
         response = _connector_request(
             runtime,
             operation="keep_notes_list",
             path="/keep/v1/notes",
-            query={"pageSize": max_events, "fields": "notes(name,createTime,updateTime,trashTime),nextPageToken"},
+            query=query,
             required_scopes=self.required_scopes,
         )
         body = response.get("response") if isinstance(response.get("response"), dict) else {}
@@ -62,8 +66,13 @@ class KeepCollector:
             append_google_workspace_event(config, _keep_note_to_event(item, created=note_id not in seen))
             seen[note_id] = updated
             events_appended += 1
+        next_page = str(body.get("nextPageToken") or "")
+        if next_page:
+            app_state["page_token"] = next_page
+        else:
+            app_state.pop("page_token", None)
         app_state["last_polled_at"] = _utc_now()
-        return _app_result("keep", "running", "Google Keep note metadata polled.", cursor=app_state.get("baseline_at", ""), events_appended=events_appended, source_channel=self.source_channel, implementation_level=self.implementation_level)
+        return _app_result("keep", "running", "Google Keep note metadata polled.", cursor=app_state.get("page_token") or app_state.get("baseline_at", ""), events_appended=events_appended, source_channel=self.source_channel, implementation_level=self.implementation_level)
 
 
 def _keep_note_to_event(item: Any, *, created: bool) -> dict[str, Any]:

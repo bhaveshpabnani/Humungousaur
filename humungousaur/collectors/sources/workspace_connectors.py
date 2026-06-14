@@ -181,6 +181,7 @@ def _meeting_source_manifest(provider_id: str) -> ConnectorSourceManifest:
         collector_mappings=_meeting_event_mappings(provider_id),
         poller_supported=entry.poller_supported,
         webhook_supported=entry.webhook_supported,
+        official_docs=(entry.docs_url,) if entry.docs_url else (),
         notes=entry.notes,
     )
 
@@ -228,6 +229,7 @@ def _planning_source_manifest(
     *,
     issue_tracker: bool,
     notes: str,
+    official_docs: tuple[str, ...] = (),
 ) -> ConnectorSourceManifest:
     return ConnectorSourceManifest(
         provider_id=provider_id,
@@ -237,6 +239,7 @@ def _planning_source_manifest(
         collector_mappings=_prefixed_mappings(provider_id, display_name, _ISSUE_SOURCE_EVENTS if issue_tracker else _TASK_SOURCE_EVENTS),
         poller_supported=False,
         webhook_supported=True,
+        official_docs=official_docs,
         notes=notes,
     )
 
@@ -286,6 +289,18 @@ _EVERNOTE_KNOWLEDGE_MAPPINGS: tuple[ConnectorEventMapping, ...] = (
     ConnectorEventMapping("evernote_comment_added", "knowledge_base_activity", "page_commented", "Evernote note received a comment"),
     ConnectorEventMapping("evernote_link_created", "knowledge_base_activity", "link_created", "Evernote note link was created"),
     ConnectorEventMapping("evernote_workspace_opened", "knowledge_base_activity", "workspace_opened", "Evernote workspace was opened"),
+)
+
+_READWISE_KNOWLEDGE_MAPPINGS: tuple[ConnectorEventMapping, ...] = (
+    ConnectorEventMapping("readwise_highlight_created", "notes_activity", "note_created", "Readwise highlight metadata was created"),
+    ConnectorEventMapping("readwise_highlight_updated", "notes_activity", "note_edited", "Readwise highlight metadata was updated"),
+    ConnectorEventMapping("readwise_highlight_note_added", "notes_activity", "note_edited", "Readwise highlight note metadata was added"),
+    ConnectorEventMapping("readwise_document_saved", "knowledge_base_activity", "page_created", "Readwise Reader document metadata was saved"),
+    ConnectorEventMapping("readwise_document_updated", "knowledge_base_activity", "page_edited", "Readwise Reader document metadata was updated"),
+    ConnectorEventMapping("readwise_document_archived", "knowledge_base_activity", "page_edited", "Readwise Reader document metadata was archived"),
+    ConnectorEventMapping("readwise_tag_added", "knowledge_base_activity", "database_changed", "Readwise tag metadata changed"),
+    ConnectorEventMapping("readwise_link_created", "knowledge_base_activity", "link_created", "Readwise source link metadata was created"),
+    ConnectorEventMapping("readwise_workspace_opened", "knowledge_base_activity", "workspace_opened", "Readwise workspace was opened"),
 )
 
 _APPLE_NOTES_KNOWLEDGE_MAPPINGS: tuple[ConnectorEventMapping, ...] = (
@@ -403,6 +418,11 @@ CONNECTOR_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = (
             ConnectorEventMapping("contacts_phone_number_clicked", "contact_activity", "phone_number_clicked", "Google Contacts phone number was clicked"),
         ),
         webhook_supported=True,
+        official_docs=(
+            "https://developers.google.com/workspace/drive/api/reference/rest/v3/changes/watch",
+            "https://developers.google.com/workspace/gmail/api/guides/push",
+            "https://developers.google.com/workspace/calendar/api/guides/sync",
+        ),
         notes="Use Google Workspace push notifications where available; poll Drive/Gmail/Calendar deltas otherwise.",
     ),
     ConnectorSourceManifest(
@@ -518,6 +538,11 @@ CONNECTOR_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = (
             *_ONENOTE_KNOWLEDGE_MAPPINGS,
         ),
         webhook_supported=True,
+        official_docs=(
+            "https://learn.microsoft.com/en-us/graph/delta-query-overview",
+            "https://learn.microsoft.com/en-us/graph/change-notifications-overview",
+            "https://learn.microsoft.com/en-us/graph/permissions-reference",
+        ),
         notes="Use Microsoft Graph delta queries for files, mail, calendar, OneNote, and To Do; use Graph change notifications, Office add-ins, Teams app/browser ingress, and Loop web ingress for richer app workflow events.",
     ),
     ConnectorSourceManifest(
@@ -528,6 +553,7 @@ CONNECTOR_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = (
         collector_mappings=_NOTION_KNOWLEDGE_MAPPINGS,
         poller_supported=True,
         webhook_supported=True,
+        official_docs=("https://developers.notion.com/reference/intro", "https://developers.notion.com/reference/webhooks"),
         notes="Use Notion webhooks for page/database events where available; browser/add-on ingress can emit workspace-open and link/backlink metadata.",
     ),
     ConnectorSourceManifest(
@@ -538,6 +564,7 @@ CONNECTOR_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = (
         collector_mappings=_CONFLUENCE_KNOWLEDGE_MAPPINGS,
         poller_supported=True,
         webhook_supported=True,
+        official_docs=("https://developer.atlassian.com/cloud/confluence/rest/", "https://developer.atlassian.com/cloud/confluence/modules/webhook/"),
         notes="Use Atlassian Confluence REST APIs and webhooks for page/comment/database metadata; page bodies stay redacted.",
     ),
     ConnectorSourceManifest(
@@ -548,6 +575,7 @@ CONNECTOR_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = (
         collector_mappings=_CODA_KNOWLEDGE_MAPPINGS,
         poller_supported=True,
         webhook_supported=True,
+        official_docs=("https://coda.io/developers/apis/v1", "https://coda.io/developers/apis/v1#section/Webhooks"),
         notes="Use Coda docs/pages/tables/rows metadata and Pack/browser ingress; row values and page contents stay redacted.",
     ),
     ConnectorSourceManifest(
@@ -559,6 +587,7 @@ CONNECTOR_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = (
         poller_supported=False,
         webhook_supported=False,
         requires_connector=False,
+        official_docs=("https://docs.obsidian.md/Plugins/Getting+started/Plugin+structure",),
         notes="Use an Obsidian plugin or local vault bridge for note, task, link, backlink, and vault-open metadata; paths and note text stay redacted.",
     ),
     ConnectorSourceManifest(
@@ -569,7 +598,19 @@ CONNECTOR_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = (
         collector_mappings=_EVERNOTE_KNOWLEDGE_MAPPINGS,
         poller_supported=True,
         webhook_supported=True,
+        official_docs=("https://dev.evernote.com/doc/", "https://dev.evernote.com/doc/articles/authentication.php"),
         notes="Use Evernote note/task metadata from API polling or webhooks; note bodies and resource names stay redacted.",
+    ),
+    ConnectorSourceManifest(
+        provider_id="readwise",
+        display_name="Readwise",
+        source_type="saas_api_poller_or_reader_extension_or_mcp",
+        auth_method="api_key_token",
+        collector_mappings=_READWISE_KNOWLEDGE_MAPPINGS,
+        poller_supported=True,
+        webhook_supported=False,
+        official_docs=("https://readwise.io/api_deets", "https://readwise.io/reader_api"),
+        notes="Use Readwise/Reader API or extension metadata for highlights, saved documents, tags, and source links; highlight text and article content stay redacted.",
     ),
     ConnectorSourceManifest(
         provider_id="apple_local",
@@ -580,6 +621,7 @@ CONNECTOR_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = (
         poller_supported=False,
         webhook_supported=False,
         requires_connector=False,
+        official_docs=("https://developer.apple.com/documentation/appkit",),
         notes="Use local Apple Notes automation or app bridge metadata; titles, account names, folders, links, and note contents stay redacted.",
     ),
     ConnectorSourceManifest(
@@ -593,6 +635,11 @@ CONNECTOR_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = (
         ),
         poller_supported=False,
         webhook_supported=True,
+        official_docs=(
+            "https://api.slack.com/events-api",
+            "https://api.slack.com/apis/connections/socket",
+            "https://docs.slack.dev/authentication/installing-with-oauth",
+        ),
         notes="Events API or Socket Mode should feed redacted chat/channel metadata into channel collectors.",
     ),
     ConnectorSourceManifest(
@@ -603,6 +650,10 @@ CONNECTOR_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = (
         collector_mappings=_chat_connector_mappings("Microsoft Teams"),
         poller_supported=False,
         webhook_supported=True,
+        official_docs=(
+            "https://learn.microsoft.com/en-us/graph/teams-changenotifications-chatmessage",
+            "https://learn.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/how-to/add-incoming-webhook",
+        ),
         notes="Use Microsoft Graph Teams message change notifications or Teams app/bot events; browser/native app bridges can emit navigation, draft, presence, and DND metadata.",
     ),
     _meeting_source_manifest("zoom"),
@@ -615,6 +666,10 @@ CONNECTOR_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = (
         collector_mappings=_chat_connector_mappings("Discord") + _meeting_event_mappings("discord"),
         poller_supported=False,
         webhook_supported=True,
+        official_docs=(
+            "https://docs.discord.com/developers/docs/topics/gateway-events",
+            "https://docs.discord.com/developers/reference",
+        ),
         notes="Discord Gateway dispatch events should feed message, thread, channel, presence, and voice-state metadata without raw message or transcript content.",
     ),
     ConnectorSourceManifest(
@@ -625,6 +680,7 @@ CONNECTOR_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = (
         collector_mappings=_chat_connector_mappings("Telegram"),
         poller_supported=True,
         webhook_supported=True,
+        official_docs=("https://core.telegram.org/bots/api",),
         notes="Telegram Bot API updates should feed message, edit, channel post, attachment, and chat navigation metadata.",
     ),
     ConnectorSourceManifest(
@@ -635,6 +691,10 @@ CONNECTOR_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = (
         collector_mappings=_chat_connector_mappings("WhatsApp"),
         poller_supported=False,
         webhook_supported=True,
+        official_docs=(
+            "https://developers.facebook.com/docs/whatsapp/cloud-api",
+            "https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks",
+        ),
         notes="WhatsApp Cloud API webhooks cover business messages and status updates; personal account collectors require a local paired bridge.",
     ),
     ConnectorSourceManifest(
@@ -645,6 +705,7 @@ CONNECTOR_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = (
         collector_mappings=_chat_connector_mappings("Signal"),
         poller_supported=True,
         webhook_supported=False,
+        official_docs=("https://github.com/AsamK/signal-cli/wiki",),
         notes="Signal collectors should use signal-cli JSON-RPC/daemon metadata and avoid raw message bodies or attachment filenames.",
     ),
     ConnectorSourceManifest(
@@ -662,42 +723,70 @@ CONNECTOR_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = (
         ),
         poller_supported=False,
         webhook_supported=True,
+        official_docs=(
+            "https://linear.app/developers/oauth-2-0-authentication",
+            "https://linear.app/developers/webhooks",
+            "https://linear.app/developers/graphql",
+        ),
         notes="Linear webhooks should emit issue metadata and project/task changes with titles redacted by default.",
     ),
     _planning_source_manifest(
         "jira",
         "Jira",
         issue_tracker=True,
+        official_docs=(
+            "https://developer.atlassian.com/cloud/jira/platform/rest/v3/intro/",
+            "https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-webhooks/",
+            "https://developer.atlassian.com/cloud/jira/software/oauth-2-3lo-apps/",
+        ),
         notes="Jira webhooks should emit issue, sprint, board, and project navigation metadata with summaries and comments redacted.",
     ),
     _planning_source_manifest(
         "asana",
         "Asana",
         issue_tracker=False,
+        official_docs=(
+            "https://developers.asana.com/docs/oauth",
+            "https://developers.asana.com/docs/webhooks-guide",
+        ),
         notes="Asana webhooks should emit task, story, section, and project metadata with task names and comments redacted.",
     ),
     _planning_source_manifest(
         "trello",
         "Trello",
         issue_tracker=False,
+        official_docs=(
+            "https://developer.atlassian.com/cloud/trello/rest/",
+            "https://developer.atlassian.com/cloud/trello/guides/rest-api/webhooks/",
+        ),
         notes="Trello webhooks should emit card, list, board, and comment metadata with card names and comment bodies redacted.",
     ),
     _planning_source_manifest(
         "clickup",
         "ClickUp",
         issue_tracker=False,
+        official_docs=(
+            "https://developer.clickup.com/docs/authentication",
+            "https://developer.clickup.com/docs/webhooks",
+            "https://developer.clickup.com/docs/webhooksignature",
+        ),
         notes="ClickUp webhooks should emit task, list, sprint, priority, assignee, and comment metadata with names and comments redacted.",
     ),
     _planning_source_manifest(
         "monday",
         "Monday.com",
         issue_tracker=False,
+        official_docs=(
+            "https://developer.monday.com/apps/docs/oauth",
+            "https://developer.monday.com/api-reference/reference/webhooks",
+        ),
         notes="Monday.com webhooks should emit item, board, column, status, priority, date, and update metadata with values redacted.",
     ),
     _planning_source_manifest(
         "todoist",
         "Todoist",
         issue_tracker=False,
+        official_docs=("https://developer.todoist.com/api/v1/",),
         notes="Todoist webhooks or activity relays should emit task, project, comment, and due-date metadata with content redacted.",
     ),
     ConnectorSourceManifest(
@@ -735,6 +824,10 @@ CONNECTOR_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = (
         collector_mappings=_crm_connector_mappings("salesforce", "Salesforce") + _analytics_connector_mappings("salesforce", "Salesforce"),
         poller_supported=False,
         webhook_supported=True,
+        official_docs=(
+            "https://developer.salesforce.com/docs/atlas.en-us.change_data_capture.meta/change_data_capture/cdc_intro.htm",
+            "https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/intro_oauth_and_connected_apps.htm",
+        ),
         notes="Use Salesforce Change Data Capture or Platform Events for record changes; browser/app ingress is required for record-view and dashboard-view metadata.",
     ),
     ConnectorSourceManifest(
@@ -749,6 +842,10 @@ CONNECTOR_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = (
         ),
         poller_supported=False,
         webhook_supported=True,
+        official_docs=(
+            "https://developers.hubspot.com/docs/apps/developer-platform/build-apps/authentication/overview",
+            "https://developers.hubspot.com/docs/apps/legacy-apps/private-apps/overview",
+        ),
         notes="Use HubSpot CRM webhooks for object property changes and ticket events; browser/add-on ingress is required for viewed dashboards and records.",
     ),
     ConnectorSourceManifest(
@@ -759,6 +856,10 @@ CONNECTOR_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = (
         collector_mappings=_support_connector_mappings("zendesk", "Zendesk"),
         poller_supported=False,
         webhook_supported=True,
+        official_docs=(
+            "https://developer.zendesk.com/api-reference/introduction/security-and-auth/",
+            "https://developer.zendesk.com/api-reference/webhooks/webhooks-api/webhooks/",
+        ),
         notes="Use Zendesk webhooks/triggers for ticket lifecycle metadata; browser/app ingress covers agent-side views and macros without message bodies.",
     ),
     ConnectorSourceManifest(
@@ -769,6 +870,7 @@ CONNECTOR_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = (
         collector_mappings=_support_connector_mappings("intercom", "Intercom"),
         poller_supported=False,
         webhook_supported=True,
+        official_docs=("https://developers.intercom.com/docs/build-an-integration/learn-more/authentication",),
         notes="Use Intercom webhooks for conversation and ticket events; browser/app ingress covers inbox navigation and views with conversation content redacted.",
     ),
     ConnectorSourceManifest(
@@ -779,6 +881,10 @@ CONNECTOR_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = (
         collector_mappings=_support_connector_mappings("freshdesk", "Freshdesk"),
         poller_supported=False,
         webhook_supported=True,
+        official_docs=(
+            "https://developers.freshdesk.com/api/",
+            "https://support.freshdesk.com/support/solutions/articles/132589-using-webhooks-in-automation-rules",
+        ),
         notes="Use Freshdesk ticket automations/webhooks for ticket lifecycle metadata; browser/app ingress covers agent views and dashboard metadata.",
     ),
     ConnectorSourceManifest(
@@ -793,6 +899,7 @@ CONNECTOR_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = (
         ),
         poller_supported=False,
         webhook_supported=True,
+        official_docs=("https://docs.stripe.com/webhooks",),
         notes="Use Stripe webhook events for payments, invoices, customers, refunds, and subscriptions; dashboard views require browser/app ingress.",
     ),
     ConnectorSourceManifest(
@@ -803,7 +910,33 @@ CONNECTOR_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = (
         collector_mappings=_commerce_connector_mappings("shopify", "Shopify") + _analytics_connector_mappings("shopify", "Shopify"),
         poller_supported=False,
         webhook_supported=True,
+        official_docs=(
+            "https://shopify.dev/docs/api/admin-rest",
+            "https://shopify.dev/docs/apps/build/webhooks",
+        ),
         notes="Use Shopify Admin webhooks for order/customer/refund/fulfillment metadata; admin dashboard/report views require browser/app ingress.",
+    ),
+    ConnectorSourceManifest(
+        provider_id="square",
+        display_name="Square",
+        source_type="payment_webhook_or_browser_extension",
+        auth_method="access_token_or_oauth2",
+        collector_mappings=_commerce_connector_mappings("square", "Square") + _finance_connector_mappings("square", "Square") + _analytics_connector_mappings("square", "Square"),
+        poller_supported=False,
+        webhook_supported=True,
+        official_docs=("https://developer.squareup.com/docs/webhooks/overview", "https://developer.squareup.com/docs/build-basics/access-tokens"),
+        notes="Use Square webhooks for payment, order, customer, and refund metadata; dashboard/report views require browser/app ingress.",
+    ),
+    ConnectorSourceManifest(
+        provider_id="paypal",
+        display_name="PayPal",
+        source_type="payment_webhook_or_browser_extension",
+        auth_method="oauth2_client_credentials_or_access_token",
+        collector_mappings=_commerce_connector_mappings("paypal", "PayPal") + _finance_connector_mappings("paypal", "PayPal") + _support_connector_mappings("paypal", "PayPal") + _analytics_connector_mappings("paypal", "PayPal"),
+        poller_supported=False,
+        webhook_supported=True,
+        official_docs=("https://developer.paypal.com/api/rest/authentication/", "https://developer.paypal.com/api/rest/webhooks/"),
+        notes="Use PayPal webhooks for checkout/order/payment/invoice/refund/subscription metadata; dashboard views require browser/app ingress.",
     ),
     ConnectorSourceManifest(
         provider_id="quickbooks",
@@ -813,6 +946,10 @@ CONNECTOR_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = (
         collector_mappings=_finance_connector_mappings("quickbooks", "QuickBooks") + _analytics_connector_mappings("quickbooks", "QuickBooks"),
         poller_supported=False,
         webhook_supported=True,
+        official_docs=(
+            "https://developer.intuit.com/app/developer/qbo/docs/develop/authentication-and-authorization/oauth-2.0",
+            "https://developer.intuit.com/app/developer/qbo/docs/develop/webhooks",
+        ),
         notes="Use QuickBooks Online webhooks for accounting entity changes; report exports and dashboard views require browser/app ingress.",
     ),
     ConnectorSourceManifest(
@@ -823,7 +960,77 @@ CONNECTOR_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = (
         collector_mappings=_finance_connector_mappings("xero", "Xero") + _analytics_connector_mappings("xero", "Xero"),
         poller_supported=False,
         webhook_supported=True,
+        official_docs=(
+            "https://developer.xero.com/documentation/guides/oauth2/overview/",
+            "https://developer.xero.com/documentation/guides/webhooks/overview/",
+        ),
         notes="Use Xero webhooks for accounting events; report exports and dashboard views require browser/app ingress.",
+    ),
+    ConnectorSourceManifest(
+        provider_id="plaid",
+        display_name="Plaid",
+        source_type="finance_webhook",
+        auth_method="client_id_secret_json_body",
+        collector_mappings=_finance_connector_mappings("plaid", "Plaid") + _analytics_connector_mappings("plaid", "Plaid"),
+        poller_supported=False,
+        webhook_supported=True,
+        official_docs=("https://plaid.com/docs/api/", "https://plaid.com/docs/api/webhooks/"),
+        notes="Use Plaid item, transaction, and sync webhooks for account/transaction metadata; financial values and account identities stay redacted.",
+    ),
+    ConnectorSourceManifest(
+        provider_id="wise",
+        display_name="Wise",
+        source_type="finance_webhook_or_browser_extension",
+        auth_method="personal_api_token_or_oauth2",
+        collector_mappings=_finance_connector_mappings("wise", "Wise") + _analytics_connector_mappings("wise", "Wise"),
+        poller_supported=False,
+        webhook_supported=True,
+        official_docs=("https://docs.wise.com/guides/developer/auth-and-security", "https://docs.wise.com/api-docs/guides/webhooks-notifications"),
+        notes="Use Wise webhooks/API relays for transfer, balance, recipient, and statement metadata; dashboard views require browser/app ingress.",
+    ),
+    ConnectorSourceManifest(
+        provider_id="mercury",
+        display_name="Mercury",
+        source_type="finance_api_or_browser_extension",
+        auth_method="bearer_api_key",
+        collector_mappings=_finance_connector_mappings("mercury", "Mercury") + _analytics_connector_mappings("mercury", "Mercury"),
+        poller_supported=False,
+        webhook_supported=True,
+        official_docs=("https://docs.mercury.com/reference/getting-started-with-your-api",),
+        notes="Use Mercury API/webhook relays for account, transaction, card, and payment metadata; banking details stay redacted.",
+    ),
+    ConnectorSourceManifest(
+        provider_id="brex",
+        display_name="Brex",
+        source_type="finance_api_or_webhook_or_browser_extension",
+        auth_method="access_token_or_partner_oauth",
+        collector_mappings=_finance_connector_mappings("brex", "Brex") + _analytics_connector_mappings("brex", "Brex"),
+        poller_supported=False,
+        webhook_supported=True,
+        official_docs=("https://developer.brex.com/guides/authentication",),
+        notes="Use Brex API/webhook relays for card, transaction, user, vendor, and reimbursement metadata; financial details stay redacted.",
+    ),
+    ConnectorSourceManifest(
+        provider_id="ramp",
+        display_name="Ramp",
+        source_type="finance_api_or_webhook_or_browser_extension",
+        auth_method="oauth2_client_credentials_or_access_token",
+        collector_mappings=_finance_connector_mappings("ramp", "Ramp") + _analytics_connector_mappings("ramp", "Ramp"),
+        poller_supported=False,
+        webhook_supported=True,
+        official_docs=("https://docs.ramp.com/developer-api/v1/authorization",),
+        notes="Use Ramp API/webhook relays for transaction, card, bill, reimbursement, and vendor metadata; financial details stay redacted.",
+    ),
+    ConnectorSourceManifest(
+        provider_id="mailchimp",
+        display_name="Mailchimp",
+        source_type="marketing_webhook_or_browser_extension",
+        auth_method="api_key_basic_or_oauth2",
+        collector_mappings=_analytics_connector_mappings("mailchimp", "Mailchimp"),
+        poller_supported=False,
+        webhook_supported=True,
+        official_docs=("https://mailchimp.com/developer/marketing/docs/fundamentals/", "https://mailchimp.com/developer/marketing/guides/sync-audience-data-webhooks/"),
+        notes="Use Mailchimp webhooks/API relays for audience, member, campaign, automation, and report metadata; email/content stays redacted.",
     ),
     *CLOUD_FILE_SOURCE_MANIFESTS,
     *DESIGN_SOURCE_MANIFESTS,

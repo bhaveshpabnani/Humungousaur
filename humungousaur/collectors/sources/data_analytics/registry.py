@@ -41,13 +41,13 @@ DATABASE_EVENT_MAPPINGS: tuple[ConnectorEventMapping, ...] = (
 
 DATA_ANALYTICS_APP_COLLECTORS: tuple[DataAnalyticsAppCollector, ...] = (
     DataAnalyticsAppCollector("bigquery", "bigquery", "database", "BigQuery job, audit-log, table, schema, and query metadata.", "api_poller_or_audit_log", "https://cloud.google.com/bigquery/docs/reference/auditlogs", required_scopes=("https://www.googleapis.com/auth/bigquery.readonly",)),
-    DataAnalyticsAppCollector("snowflake", "snowflake", "database", "Snowflake query history, task, alert, schema, and warehouse metadata.", "api_poller_or_event_table", "https://docs.snowflake.com/en/user-guide/event-table", required_scopes=("MONITOR",)),
+    DataAnalyticsAppCollector("snowflake", "snowflake", "database", "Snowflake query history, task, alert, schema, and warehouse metadata.", "api_poller_or_event_table", "https://docs.snowflake.com/en/developer-guide/logging-tracing/event-table-setting-up", required_scopes=("MONITOR",)),
     DataAnalyticsAppCollector("databricks", "databricks", "database", "Databricks job, query, notebook, warehouse, and Unity Catalog metadata.", "api_poller_or_audit_log", "https://docs.databricks.com/en/admin/account-settings/audit-logs.html"),
     DataAnalyticsAppCollector("postgres", "postgres", "database", "Postgres client/local bridge metadata for connections, queries, migrations, and schema changes.", "local_client_or_log_bridge", "https://www.postgresql.org/docs/current/monitoring-stats.html", implementation_level="local_client_or_log_bridge", webhook_supported=False, requires_connector=False),
     DataAnalyticsAppCollector("supabase", "supabase", "database", "Supabase database, edge function, auth, storage, and SQL editor metadata.", "api_poller_or_webhook", "https://supabase.com/docs/reference/api", required_scopes=("project:read",)),
     DataAnalyticsAppCollector("mysql", "mysql", "database", "MySQL client/local bridge metadata for connections, queries, migrations, and schema changes.", "local_client_or_log_bridge", "https://dev.mysql.com/doc/", implementation_level="local_client_or_log_bridge", webhook_supported=False, requires_connector=False),
     DataAnalyticsAppCollector("mongodb_atlas", "mongodb_atlas", "database", "MongoDB Atlas alert, query, cluster, backup, and schema metadata.", "api_poller_or_alert_webhook", "https://www.mongodb.com/docs/atlas/api/", required_scopes=("Project Read Only",)),
-    DataAnalyticsAppCollector("tableau", "tableau", "analytics", "Tableau workbook, datasource, view, refresh, and webhook metadata.", "rest_api_or_webhook", "https://help.tableau.com/current/api/rest_api/en-us/REST/rest_api_concepts_webhooks.htm"),
+    DataAnalyticsAppCollector("tableau", "tableau", "analytics", "Tableau workbook, datasource, view, refresh, and webhook metadata.", "rest_api_or_webhook", "https://help.tableau.com/current/developer/webhooks/en-us/"),
     DataAnalyticsAppCollector("looker", "looker", "analytics", "Looker dashboard, explore, query task, schedule, and alert metadata.", "api_poller_or_webhook", "https://cloud.google.com/looker/docs/api-intro"),
     DataAnalyticsAppCollector("metabase", "metabase", "analytics", "Metabase dashboard, question, subscription, alert, and query metadata.", "api_poller_or_webhook", "https://www.metabase.com/docs/latest/api-documentation"),
     DataAnalyticsAppCollector("power_bi", "power_bi", "analytics", "Power BI activity event, dashboard, report, dataset, and refresh metadata.", "activity_events_api_or_webhook", "https://learn.microsoft.com/en-us/rest/api/power-bi/admin/get-activity-events"),
@@ -75,6 +75,7 @@ DATA_ANALYTICS_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = tuple(
         poller_supported=collector.poller_supported,
         webhook_supported=collector.webhook_supported,
         requires_connector=collector.requires_connector,
+        official_docs=(collector.docs_url,),
         notes=collector.description,
     )
     for collector in DATA_ANALYTICS_APP_COLLECTORS

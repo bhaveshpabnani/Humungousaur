@@ -26,6 +26,9 @@ _APP_PROVIDER_ALIASES = {
     "obsidian": ("obsidian", "obsidian"),
     "obsidian_vault": ("obsidian", "obsidian"),
     "evernote": ("evernote", "evernote"),
+    "readwise": ("readwise", "readwise"),
+    "readwise_reader": ("readwise", "readwise"),
+    "reader": ("readwise", "readwise"),
     "apple_notes": ("apple_local", "apple_notes"),
     "notes": ("apple_local", "apple_notes"),
     "onenote": ("microsoft_365", "onenote"),
@@ -75,6 +78,16 @@ _EVENT_ALIASES = {
     ("evernote", "comment_added"): "evernote_comment_added",
     ("evernote", "link_created"): "evernote_link_created",
     ("evernote", "workspace_opened"): "evernote_workspace_opened",
+    ("readwise", "highlight_created"): "readwise_highlight_created",
+    ("readwise", "highlight_updated"): "readwise_highlight_updated",
+    ("readwise", "highlight_note_added"): "readwise_highlight_note_added",
+    ("readwise", "document_saved"): "readwise_document_saved",
+    ("readwise", "document_created"): "readwise_document_saved",
+    ("readwise", "document_updated"): "readwise_document_updated",
+    ("readwise", "document_archived"): "readwise_document_archived",
+    ("readwise", "tag_added"): "readwise_tag_added",
+    ("readwise", "link_created"): "readwise_link_created",
+    ("readwise", "workspace_opened"): "readwise_workspace_opened",
     ("apple_notes", "note_created"): "apple_notes_note_created",
     ("apple_notes", "note_updated"): "apple_notes_note_updated",
     ("apple_notes", "note_edited"): "apple_notes_note_updated",
@@ -106,6 +119,9 @@ def append_knowledge_base_event(config: AgentConfig, payload: dict[str, Any]) ->
                 payload.get("object_id")
                 or payload.get("page_id")
                 or payload.get("note_id")
+                or payload.get("highlight_id")
+                or payload.get("document_id")
+                or payload.get("book_id")
                 or payload.get("database_id")
                 or payload.get("table_id")
                 or payload.get("workspace_id")
@@ -161,7 +177,7 @@ def knowledge_base_source_status(config: AgentConfig) -> dict[str, Any]:
         "sources": sources,
         "source_count": len(sources),
         "app_collectors": knowledge_base_app_status_records(),
-        "supported_apps": ["apple_notes", "coda", "confluence", "evernote", "notion", "obsidian", "onenote"],
+        "supported_apps": ["apple_notes", "coda", "confluence", "evernote", "notion", "obsidian", "onenote", "readwise"],
         "mapping_count": sum(len(source.get("collector_mappings", ())) for source in sources if isinstance(source, dict)),
         "dead_letters_path": str(_dead_letters_path(config)),
         "privacy_contract": {
@@ -228,6 +244,10 @@ def _metadata_from_payload(payload: dict[str, Any], app: str, source_event: str)
         "comment_count",
         "database_id",
         "database_count",
+        "book_id",
+        "document_id",
+        "highlight_count",
+        "highlight_id",
         "has_attachments",
         "link_count",
         "note_id",
@@ -237,6 +257,7 @@ def _metadata_from_payload(payload: dict[str, Any], app: str, source_event: str)
         "row_count",
         "table_id",
         "task_id",
+        "tag_count",
         "vault_id",
         "workspace_id",
     ):

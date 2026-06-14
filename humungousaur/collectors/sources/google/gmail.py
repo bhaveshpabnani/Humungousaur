@@ -47,15 +47,19 @@ class GmailCollector:
                 app_state["baseline_at"] = _utc_now()
             return _app_result("gmail", "running", "Gmail history baseline recorded.", cursor=baseline, source_channel=self.source_channel)
 
+        page_token = str(app_state.get("page_token") or "").strip()
+        query = {
+            "startHistoryId": history_id,
+            "maxResults": max_events,
+            "fields": "history(id,messagesAdded(message(id,threadId,labelIds)),messagesDeleted(message(id,threadId,labelIds)),labelsAdded(message(id,threadId,labelIds),labelIds),labelsRemoved(message(id,threadId,labelIds),labelIds)),historyId,nextPageToken",
+        }
+        if page_token:
+            query["pageToken"] = page_token
         response = _connector_request(
             runtime,
             operation="gmail_history_list",
             path="/gmail/v1/users/me/history",
-            query={
-                "startHistoryId": history_id,
-                "maxResults": max_events,
-                "fields": "history(id,messagesAdded(message(id,threadId,labelIds)),messagesDeleted(message(id,threadId,labelIds)),labelsAdded(message(id,threadId,labelIds),labelIds),labelsRemoved(message(id,threadId,labelIds),labelIds)),historyId,nextPageToken",
-            },
+            query=query,
             required_scopes=self.required_scopes,
         )
         body = response.get("response") if isinstance(response.get("response"), dict) else {}
@@ -66,8 +70,13 @@ class GmailCollector:
                     break
                 append_google_workspace_event(config, event_payload)
                 events_appended += 1
+        next_page = str(body.get("nextPageToken") or "")
+        if next_page:
+            app_state["page_token"] = next_page
+        else:
+            app_state.pop("page_token", None)
         latest = str(body.get("historyId") or "")
-        if latest:
+        if latest and not next_page:
             app_state["history_id"] = latest
         app_state["last_polled_at"] = _utc_now()
         return _app_result("gmail", "running", "Gmail history polled.", cursor=app_state.get("history_id", ""), events_appended=events_appended, source_channel=self.source_channel)

@@ -76,6 +76,17 @@ KNOWLEDGE_BASE_APP_COLLECTORS: tuple[KnowledgeBaseAppCollector, ...] = (
         official_docs=("https://dev.evernote.com/doc/",),
     ),
     KnowledgeBaseAppCollector(
+        provider_id="readwise",
+        app="readwise",
+        display_name="Readwise",
+        description="Accepts Readwise highlight, Reader document, tag, note, and saved-item metadata from API pollers, exports, browser extensions, or MCP bridges.",
+        source_channel="readwise_api_or_reader_extension_or_mcp",
+        implementation_level="api_or_extension_ingress",
+        poller_supported=True,
+        webhook_supported=False,
+        official_docs=("https://readwise.io/api_deets", "https://readwise.io/reader_api"),
+    ),
+    KnowledgeBaseAppCollector(
         provider_id="apple_local",
         app="apple_notes",
         display_name="Apple Notes",

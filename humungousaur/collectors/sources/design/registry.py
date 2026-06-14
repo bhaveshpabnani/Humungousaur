@@ -46,7 +46,7 @@ DESIGN_APP_COLLECTORS: tuple[DesignAppCollector, ...] = (
         description="Figma webhooks and plugin/app bridge events for file, version, comment, component, prototype, and export metadata.",
         source_channel="figma_webhook_or_plugin",
         docs_url="https://developers.figma.com/docs/rest-api/webhooks/",
-        required_scopes=("file_read",),
+        required_scopes=("file_content:read", "file_metadata:read"),
         poller_supported=True,
         webhook_supported=True,
     ),
@@ -57,7 +57,7 @@ DESIGN_APP_COLLECTORS: tuple[DesignAppCollector, ...] = (
         description="FigJam/Figma bridge events for board, collaborator, sticky, comment, and export metadata.",
         source_channel="figma_webhook_or_plugin",
         docs_url="https://developers.figma.com/docs/rest-api/webhooks/",
-        required_scopes=("file_read",),
+        required_scopes=("file_content:read", "file_metadata:read"),
         poller_supported=True,
         webhook_supported=True,
     ),
@@ -126,6 +126,7 @@ DESIGN_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = tuple(
         poller_supported=collector.poller_supported,
         webhook_supported=collector.webhook_supported,
         requires_connector=collector.requires_connector,
+        official_docs=(collector.docs_url,),
         notes=collector.description,
     )
     for collector in DESIGN_APP_COLLECTORS

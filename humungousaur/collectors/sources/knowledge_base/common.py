@@ -14,6 +14,7 @@ KNOWLEDGE_BASE_PROVIDER_IDS = (
     "coda",
     "obsidian",
     "evernote",
+    "readwise",
     "apple_local",
     "microsoft_365",
 )

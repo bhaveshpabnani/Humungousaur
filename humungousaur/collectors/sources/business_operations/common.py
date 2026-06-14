@@ -13,8 +13,16 @@ BUSINESS_OPERATIONS_PROVIDER_IDS = (
     "freshdesk",
     "stripe",
     "shopify",
+    "square",
+    "paypal",
     "quickbooks",
     "xero",
+    "plaid",
+    "wise",
+    "mercury",
+    "brex",
+    "ramp",
+    "mailchimp",
 )
 BUSINESS_OPERATIONS_CONSUMER = "connector_sources"
 BUSINESS_OPERATIONS_MAX_EVENTS_PER_APP = 20
@@ -27,8 +35,16 @@ BUSINESS_OPERATIONS_PROVIDER_DISPLAY_NAMES = {
     "freshdesk": "Freshdesk",
     "stripe": "Stripe",
     "shopify": "Shopify",
+    "square": "Square",
+    "paypal": "PayPal",
     "quickbooks": "QuickBooks",
     "xero": "Xero",
+    "plaid": "Plaid",
+    "wise": "Wise",
+    "mercury": "Mercury",
+    "brex": "Brex",
+    "ramp": "Ramp",
+    "mailchimp": "Mailchimp",
 }
 
 
@@ -65,7 +81,7 @@ class BusinessOperationsCollector:
         )
         return app_result(
             self.app,
-            "running",
+            "running" if connected else "permission_denied",
             message,
             provider_id=self.provider_id,
             domain=self.domain,

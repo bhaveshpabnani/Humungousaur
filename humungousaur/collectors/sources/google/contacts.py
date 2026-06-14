@@ -39,15 +39,19 @@ class ContactsCollector:
             app_state.setdefault("seen_people", {})
             return _app_result("contacts", "running", "Google Contacts baseline recorded.", cursor=app_state["baseline_at"], source_channel=self.source_channel, implementation_level=self.implementation_level)
 
+        page_token = str(app_state.get("page_token") or "").strip()
+        query = {
+            "pageSize": max_events,
+            "personFields": "metadata",
+            "fields": "connections(resourceName,metadata(sources(updateTime,type))),nextPageToken",
+        }
+        if page_token:
+            query["pageToken"] = page_token
         response = _connector_request(
             runtime,
             operation="contacts_connections_list",
             path="https://people.googleapis.com/v1/people/me/connections",
-            query={
-                "pageSize": max_events,
-                "personFields": "metadata",
-                "fields": "connections(resourceName,metadata(sources(updateTime,type))),nextPageToken",
-            },
+            query=query,
             required_scopes=self.required_scopes,
         )
         body = response.get("response") if isinstance(response.get("response"), dict) else {}
@@ -65,8 +69,13 @@ class ContactsCollector:
             append_google_workspace_event(config, _contact_to_event(contact_id, updated, created=contact_id not in seen))
             seen[contact_id] = updated
             events_appended += 1
+        next_page = str(body.get("nextPageToken") or "")
+        if next_page:
+            app_state["page_token"] = next_page
+        else:
+            app_state.pop("page_token", None)
         app_state["last_polled_at"] = _utc_now()
-        return _app_result("contacts", "running", "Google Contacts metadata polled.", cursor=app_state.get("baseline_at", ""), events_appended=events_appended, source_channel=self.source_channel, implementation_level=self.implementation_level)
+        return _app_result("contacts", "running", "Google Contacts metadata polled.", cursor=app_state.get("page_token") or app_state.get("baseline_at", ""), events_appended=events_appended, source_channel=self.source_channel, implementation_level=self.implementation_level)
 
 
 def _contact_identity(item: Any) -> tuple[str, str]:

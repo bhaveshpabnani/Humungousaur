@@ -25,6 +25,9 @@ _PROVIDER_ALIASES = {
     "onedrive": "microsoft_365",
     "one_drive": "microsoft_365",
     "sharepoint": "microsoft_365",
+    "nextcloud": "nextcloud",
+    "nextcloud_files": "nextcloud",
+    "nextcloud_drive": "nextcloud",
 }
 
 _EVENT_ALIASES = {

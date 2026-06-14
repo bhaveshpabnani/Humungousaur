@@ -11,6 +11,7 @@ from .common import (
     BUSINESS_OPERATIONS_MAX_EVENTS_PER_APP,
     BUSINESS_OPERATIONS_PROVIDER_DISPLAY_NAMES,
     BUSINESS_OPERATIONS_PROVIDER_IDS,
+    BusinessOperationsCollector,
     aggregate_app_status,
     collector_status_record,
     utc_now,
@@ -26,6 +27,72 @@ from .xero import XERO_COLLECTOR
 from .zendesk import ZENDESK_COLLECTOR
 
 
+SQUARE_COLLECTOR = BusinessOperationsCollector(
+    provider_id="square",
+    app="square",
+    domain="commerce",
+    description="Accepts Square webhook/browser metadata for payments, orders, customers, refunds, and dashboard activity.",
+    source_channel="square_webhooks+browser_extension",
+    docs_url="https://developer.squareup.com/docs/webhooks/overview",
+)
+PAYPAL_COLLECTOR = BusinessOperationsCollector(
+    provider_id="paypal",
+    app="paypal",
+    domain="commerce",
+    description="Accepts PayPal webhook/browser metadata for payments, orders, invoices, refunds, subscriptions, and dashboard activity.",
+    source_channel="paypal_webhooks+browser_extension",
+    docs_url="https://developer.paypal.com/api/rest/webhooks/",
+)
+PLAID_COLLECTOR = BusinessOperationsCollector(
+    provider_id="plaid",
+    app="plaid",
+    domain="finance",
+    description="Accepts Plaid webhook metadata for item, transaction, account, and sync status events.",
+    source_channel="plaid_webhooks",
+    docs_url="https://plaid.com/docs/api/webhooks/",
+)
+WISE_COLLECTOR = BusinessOperationsCollector(
+    provider_id="wise",
+    app="wise",
+    domain="finance",
+    description="Accepts Wise webhook/browser metadata for profiles, transfers, balances, recipients, and statements.",
+    source_channel="wise_webhooks+browser_extension",
+    docs_url="https://docs.wise.com/api-docs/guides/webhooks-notifications",
+)
+MERCURY_COLLECTOR = BusinessOperationsCollector(
+    provider_id="mercury",
+    app="mercury",
+    domain="finance",
+    description="Accepts Mercury API/webhook/browser metadata for accounts, transactions, payments, cards, and statements.",
+    source_channel="mercury_api_or_browser_extension",
+    docs_url="https://docs.mercury.com/reference/getting-started-with-your-api",
+)
+BREX_COLLECTOR = BusinessOperationsCollector(
+    provider_id="brex",
+    app="brex",
+    domain="finance",
+    description="Accepts Brex API/webhook/browser metadata for cards, expenses, transactions, vendors, and reimbursements.",
+    source_channel="brex_api_or_webhooks+browser_extension",
+    docs_url="https://developer.brex.com/guides/authentication",
+)
+RAMP_COLLECTOR = BusinessOperationsCollector(
+    provider_id="ramp",
+    app="ramp",
+    domain="finance",
+    description="Accepts Ramp API/webhook/browser metadata for transactions, cards, bills, reimbursements, and vendors.",
+    source_channel="ramp_api_or_webhooks+browser_extension",
+    docs_url="https://docs.ramp.com/developer-api/v1/authorization",
+)
+MAILCHIMP_COLLECTOR = BusinessOperationsCollector(
+    provider_id="mailchimp",
+    app="mailchimp",
+    domain="marketing",
+    description="Accepts Mailchimp webhook/API/browser metadata for campaign, audience, member, automation, and report activity.",
+    source_channel="mailchimp_webhooks+browser_extension",
+    docs_url="https://mailchimp.com/developer/marketing/guides/sync-audience-data-webhooks/",
+)
+
+
 BUSINESS_OPERATIONS_APP_COLLECTORS: tuple[Any, ...] = (
     SALESFORCE_COLLECTOR,
     HUBSPOT_COLLECTOR,
@@ -34,8 +101,16 @@ BUSINESS_OPERATIONS_APP_COLLECTORS: tuple[Any, ...] = (
     FRESHDESK_COLLECTOR,
     STRIPE_COLLECTOR,
     SHOPIFY_COLLECTOR,
+    SQUARE_COLLECTOR,
+    PAYPAL_COLLECTOR,
     QUICKBOOKS_COLLECTOR,
     XERO_COLLECTOR,
+    PLAID_COLLECTOR,
+    WISE_COLLECTOR,
+    MERCURY_COLLECTOR,
+    BREX_COLLECTOR,
+    RAMP_COLLECTOR,
+    MAILCHIMP_COLLECTOR,
 )
 
 

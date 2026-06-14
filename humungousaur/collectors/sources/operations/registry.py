@@ -61,7 +61,7 @@ OPERATIONS_APP_COLLECTORS: tuple[OperationsAppCollector, ...] = (
     OperationsAppCollector("datadog", "datadog", "observability", "Datadog monitor, event, dashboard, log alert, and incident metadata.", "webhook_or_events_api", "https://docs.datadoghq.com/integrations/webhooks/"),
     OperationsAppCollector("grafana", "grafana", "observability", "Grafana alert, dashboard, annotation, incident, and on-call metadata.", "webhook_or_api_poller", "https://grafana.com/docs/grafana/latest/alerting/configure-notifications/manage-contact-points/integrations/webhook-notifier/"),
     OperationsAppCollector("pagerduty", "pagerduty", "incident_response", "PagerDuty incident, trigger, acknowledge, escalation, resolve, and runbook metadata.", "webhook_or_api_poller", "https://developer.pagerduty.com/docs/webhooks-overview"),
-    OperationsAppCollector("opsgenie", "opsgenie", "incident_response", "Opsgenie alert, acknowledge, escalation, close, and on-call metadata.", "webhook_or_api_poller", "https://support.atlassian.com/opsgenie/docs/webhook-integration/"),
+    OperationsAppCollector("opsgenie", "opsgenie", "incident_response", "Opsgenie alert, acknowledge, escalation, close, and on-call metadata.", "webhook_or_api_poller", "https://support.atlassian.com/opsgenie/docs/integrate-opsgenie-with-webhook/"),
     OperationsAppCollector("aws", "aws", "cloud", "AWS CloudTrail/EventBridge console, deployment, resource, secret, permission, and billing metadata.", "cloudtrail_or_eventbridge", "https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-service-event.html"),
     OperationsAppCollector("azure", "azure", "cloud", "Azure Activity Log/Event Grid resource, deployment, secret, permission, and billing metadata.", "activity_log_or_event_grid", "https://learn.microsoft.com/en-us/azure/event-grid/event-schema"),
     OperationsAppCollector("gcp", "gcp", "cloud", "Google Cloud audit log, resource, deployment, secret, permission, and billing metadata.", "audit_log_or_eventarc", "https://cloud.google.com/eventarc/docs/reference/supported-events"),
@@ -101,6 +101,7 @@ OPERATIONS_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = tuple(
         poller_supported=collector.poller_supported,
         webhook_supported=collector.webhook_supported,
         requires_connector=collector.requires_connector,
+        official_docs=(collector.docs_url,),
         notes=collector.description,
     )
     for collector in OPERATIONS_APP_COLLECTORS

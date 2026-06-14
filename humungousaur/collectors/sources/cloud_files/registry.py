@@ -8,9 +8,10 @@ from humungousaur.connectors import ConnectorRuntime
 
 from ..workspace_connectors import ConnectorEventMapping, ConnectorSourceManifest
 from .box import BOX_CLOUD_FILE_COLLECTOR
-from .common import BOX_PROVIDER_ID, CLOUD_FILE_CONSUMER, CLOUD_FILE_MAX_EVENTS_PER_PROVIDER, CLOUD_FILE_PROVIDER_IDS, DROPBOX_PROVIDER_ID, GOOGLE_WORKSPACE_PROVIDER_ID, ICLOUD_PROVIDER_ID, MICROSOFT_365_PROVIDER_ID, app_result, utc_now
+from .common import BOX_PROVIDER_ID, CLOUD_FILE_CONSUMER, CLOUD_FILE_MAX_EVENTS_PER_PROVIDER, CLOUD_FILE_PROVIDER_IDS, DROPBOX_PROVIDER_ID, GOOGLE_WORKSPACE_PROVIDER_ID, ICLOUD_PROVIDER_ID, MICROSOFT_365_PROVIDER_ID, NEXTCLOUD_PROVIDER_ID, app_result, utc_now
 from .dropbox import DROPBOX_CLOUD_FILE_COLLECTOR
 from .icloud import ICLOUD_DRIVE_COLLECTOR
+from .nextcloud import NEXTCLOUD_CLOUD_FILE_COLLECTOR
 
 
 def _cloud_file_mappings(prefix: str, display_name: str) -> tuple[ConnectorEventMapping, ...]:
@@ -42,6 +43,7 @@ CLOUD_FILE_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = (
         collector_mappings=_cloud_file_mappings("dropbox", "Dropbox"),
         poller_supported=True,
         webhook_supported=True,
+        official_docs=("https://www.dropbox.com/developers/documentation/http/documentation", "https://www.dropbox.com/developers/reference/webhooks"),
         notes="Use files/list_folder cursors for metadata deltas; webhooks wake the local poller.",
     ),
     ConnectorSourceManifest(
@@ -52,6 +54,7 @@ CLOUD_FILE_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = (
         collector_mappings=_cloud_file_mappings("box", "Box"),
         poller_supported=True,
         webhook_supported=True,
+        official_docs=("https://developer.box.com/reference/resources/event/", "https://developer.box.com/guides/webhooks/"),
         notes="Use the Box Events stream position for metadata deltas; webhooks can trigger focused polling.",
     ),
     ConnectorSourceManifest(
@@ -63,7 +66,22 @@ CLOUD_FILE_SOURCE_MANIFESTS: tuple[ConnectorSourceManifest, ...] = (
         poller_supported=False,
         webhook_supported=False,
         requires_connector=False,
+        official_docs=("https://developer.apple.com/documentation/fileprovider",),
         notes="Use macOS File Provider/CloudDocs bridge events; no token is read by the collector.",
+    ),
+    ConnectorSourceManifest(
+        provider_id=NEXTCLOUD_PROVIDER_ID,
+        display_name="Nextcloud Files",
+        source_type="webdav_ocs_activity_or_local_sync_bridge",
+        auth_method="app_password_or_oidc_token",
+        collector_mappings=_cloud_file_mappings("nextcloud", "Nextcloud"),
+        poller_supported=False,
+        webhook_supported=False,
+        official_docs=(
+            "https://docs.nextcloud.com/server/stable/developer_manual/client_apis/WebDAV/basic.html",
+            "https://docs.nextcloud.com/server/stable/developer_manual/client_apis/OCS/ocs-api-overview.html",
+        ),
+        notes="Use Nextcloud WebDAV/OCS metadata relays or local sync bridge events; file paths, share links, and names stay redacted.",
     ),
 )
 
@@ -72,6 +90,7 @@ _COLLECTORS = {
     DROPBOX_PROVIDER_ID: DROPBOX_CLOUD_FILE_COLLECTOR,
     BOX_PROVIDER_ID: BOX_CLOUD_FILE_COLLECTOR,
     ICLOUD_PROVIDER_ID: ICLOUD_DRIVE_COLLECTOR,
+    NEXTCLOUD_PROVIDER_ID: NEXTCLOUD_CLOUD_FILE_COLLECTOR,
 }
 
 
@@ -79,7 +98,7 @@ def run_cloud_file_source_tick(config: AgentConfig, *, provider_id: str | None =
     from ..workspace_connectors import record_connector_source_health
 
     normalized = config.normalized()
-    providers = [str(provider_id)] if provider_id else [DROPBOX_PROVIDER_ID, BOX_PROVIDER_ID, ICLOUD_PROVIDER_ID]
+    providers = [str(provider_id)] if provider_id else [DROPBOX_PROVIDER_ID, BOX_PROVIDER_ID, ICLOUD_PROVIDER_ID, NEXTCLOUD_PROVIDER_ID]
     log = CollectorEventLog(normalized.collector_events_db_path)
     state = log.consumer_state(CLOUD_FILE_CONSUMER)
     source_state = state.setdefault("sources", {})

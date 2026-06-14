@@ -16,16 +16,19 @@ BOX_PROVIDER_ID = "box"
 ICLOUD_PROVIDER_ID = "icloud"
 GOOGLE_WORKSPACE_PROVIDER_ID = "google_workspace"
 MICROSOFT_365_PROVIDER_ID = "microsoft_365"
+NEXTCLOUD_PROVIDER_ID = "nextcloud"
 CLOUD_FILE_PROVIDER_IDS = (
     DROPBOX_PROVIDER_ID,
     BOX_PROVIDER_ID,
     ICLOUD_PROVIDER_ID,
     GOOGLE_WORKSPACE_PROVIDER_ID,
     MICROSOFT_365_PROVIDER_ID,
+    NEXTCLOUD_PROVIDER_ID,
 )
 
 DROPBOX_METADATA_SCOPES = ("files.metadata.read", "sharing.read")
 BOX_METADATA_SCOPES = ("root_readonly",)
+NEXTCLOUD_METADATA_SCOPES: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

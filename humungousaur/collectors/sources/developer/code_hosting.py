@@ -271,6 +271,9 @@ def _normalize_github_webhook(payload: dict[str, Any], headers: dict[str, Any]) 
     event_name = _header(headers, "x-github-event") or str(payload.get("event") or "")
     action = str(payload.get("action") or "").strip().lower()
     source_event = _GITHUB_EVENT_BY_ACTION.get((event_name, action), "")
+    if event_name == "pull_request" and action == "closed":
+        pull_request = payload.get("pull_request") if isinstance(payload.get("pull_request"), dict) else {}
+        source_event = "pull_request_merged" if bool(pull_request.get("merged")) else "issue_status_changed"
     if event_name == "push":
         source_event = "commit_pushed"
     if event_name == "create" and str(payload.get("ref_type") or "") == "branch":
