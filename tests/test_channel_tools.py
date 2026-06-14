@@ -1,10 +1,15 @@
+import hashlib
+import hmac
 import json
+import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from humungousaur.config import AgentConfig
+from humungousaur.connectors import ConnectorRuntime
 from humungousaur.integrations.channel_listeners import channel_listener_status, process_channel_webhook
 from humungousaur.integrations.channels import channel_setup_status, handle_channel_inbound
 from humungousaur.schemas import ActionStatus
@@ -200,6 +205,43 @@ class ChannelToolTests(unittest.TestCase):
         self.assertFalse(listener["listeners"][0]["listen_enabled"])
         self.assertFalse(listener["listeners"][0]["polling_available"])
 
+    def test_channel_setup_status_uses_connector_credentials_without_env(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
+            ConnectorRuntime(config).configure_client("telegram", client_id="telegram-bot", client_secret="tg-connector-token")
+
+            with patch.dict("os.environ", {}, clear=True):
+                status = channel_setup_status(config, channel_id="telegram")
+
+        channel = status["channels"][0]
+        self.assertEqual(channel["missing_send_env"], [])
+        self.assertEqual(channel["credential_source"], "connector")
+        self.assertEqual(channel["connector_provider_id"], "telegram")
+        self.assertTrue(channel["connector_readiness"]["connection_ready"])
+        self.assertTrue(channel["ready_for_send"])
+
+    def test_channel_listener_status_uses_connector_credentials_without_env(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
+            ConnectorRuntime(config).configure_client("telegram", client_id="telegram-bot", client_secret="tg-connector-token")
+            ChannelSetupSaveTool().execute(
+                {
+                    "channel_id": "telegram",
+                    "enabled": True,
+                    "listen_enabled": True,
+                    "conversation_defaults": {"conversation_id": "42", "conversation_type": "dm"},
+                },
+                config,
+            )
+
+            with patch.dict("os.environ", {}, clear=True):
+                listener = channel_listener_status(config, channel_id="telegram")["listeners"][0]
+
+        self.assertEqual(listener["missing_env"], [])
+        self.assertEqual(listener["credential_source"], "connector")
+        self.assertTrue(listener["polling_available"])
+        self.assertTrue(listener["ready"])
+
     def test_channel_integration_smoke_reports_runtime_secret_readiness_without_live_send(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)
@@ -379,6 +421,50 @@ class ChannelToolTests(unittest.TestCase):
         self.assertEqual(outbox.output["messages"][0]["channel_id"], "slack")
         self.assertEqual(tool_result.status, ActionStatus.SUCCEEDED)
         self.assertEqual(tool_result.output["message_count"], 1)
+
+    def test_slack_webhook_signature_is_verified_when_secret_is_configured(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir, patch.dict(os.environ, {"SLACK_SIGNING_SECRET": "signing-secret"}, clear=False):
+            workspace = Path(tmp_dir)
+            (workspace / "README.md").write_text("# Slack Signature\n", encoding="utf-8")
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", planner_provider="explicit").normalized()
+            payload = {
+                "event_id": "EvSigned",
+                "event": {
+                    "type": "message",
+                    "channel": "C123",
+                    "channel_type": "im",
+                    "user": "U123",
+                    "text": "hello",
+                    "client_msg_id": "m-signed",
+                },
+            }
+            raw_body = json.dumps(payload, separators=(",", ":"))
+            timestamp = str(int(time.time()))
+            signature = "v0=" + hmac.new(
+                b"signing-secret",
+                f"v0:{timestamp}:{raw_body}".encode("utf-8"),
+                hashlib.sha256,
+            ).hexdigest()
+
+            result = process_channel_webhook(
+                config,
+                channel_id="slack",
+                payload=payload,
+                headers={"X-Slack-Request-Timestamp": timestamp, "X-Slack-Signature": signature},
+                raw_body=raw_body,
+            )
+
+            with self.assertRaises(ValueError):
+                process_channel_webhook(
+                    config,
+                    channel_id="slack",
+                    payload=payload,
+                    headers={"X-Slack-Request-Timestamp": timestamp, "X-Slack-Signature": "v0=bad"},
+                    raw_body=raw_body,
+                )
+
+        self.assertTrue(result["accepted"])
+        self.assertEqual(result["message_count"], 1)
 
     def test_native_channel_catalog_includes_remaining_channel_contracts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

@@ -5,6 +5,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from humungousaur.config import AgentConfig
+from humungousaur.connectors import ConnectorRuntime
+from humungousaur.connectors.models import ConnectorTokenStatus
 from humungousaur.planning.model_clients import ModelClientError, StaticModelClient
 from humungousaur.planning.prompt_templates import load_prompt_templates
 from humungousaur.schemas import ActionStatus
@@ -491,6 +493,46 @@ class ToolTests(unittest.TestCase):
         self.assertTrue(result.output["browser_use_not_run"])
         self.assertEqual(result.output["model"], "gpt-5.4")
         self.assertEqual(result.output["allowed_domains"], ["example.com"])
+
+    def test_voice_provider_status_uses_connector_credentials_without_env(self) -> None:
+        from humungousaur.connectors import ConnectorRuntime
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
+            runtime = ConnectorRuntime(config)
+            runtime.configure_credentials("deepgram", credentials={"profile_name": "deepgram", "api_key": "dg-secret"})
+            runtime.configure_credentials("elevenlabs", credentials={"profile_name": "elevenlabs", "api_key": "el-secret"})
+
+            with patch.dict("os.environ", {}, clear=True):
+                result = default_tools()["voice_provider_status"].execute({}, config)
+
+        self.assertEqual(result.status, ActionStatus.SUCCEEDED)
+        self.assertTrue(result.output["stt"]["deepgram"]["configured"])
+        self.assertTrue(result.output["tts"]["elevenlabs"]["configured"])
+        self.assertNotIn("dg-secret", json.dumps(result.output))
+        self.assertNotIn("el-secret", json.dumps(result.output))
+
+    def test_external_provider_registries_use_connector_credentials_without_env(self) -> None:
+        from humungousaur.connectors import ConnectorRuntime
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = AgentConfig(workspace=Path(tmp_dir), data_dir=Path(tmp_dir) / "artifacts").normalized()
+            runtime = ConnectorRuntime(config)
+            runtime.configure_credentials("mistral", credentials={"profile_name": "mistral", "api_key": "mistral-secret"})
+            runtime.configure_credentials("brave_search", credentials={"profile_name": "brave", "api_key": "brave-secret"})
+
+            with patch.dict("os.environ", {}, clear=True):
+                native = default_tools()["native_provider_registry"].execute({"provider_id": "mistral"}, config)
+                web = default_tools()["web_provider_registry"].execute({"provider_id": "brave"}, config)
+
+        self.assertEqual(native.status, ActionStatus.SUCCEEDED)
+        self.assertTrue(native.output["providers"][0]["configured"])
+        self.assertEqual(native.output["providers"][0]["missing_env"], [])
+        self.assertEqual(web.status, ActionStatus.SUCCEEDED)
+        self.assertTrue(web.output["providers"][0]["configured"])
+        self.assertEqual(web.output["providers"][0]["missing_env"], [])
+        self.assertNotIn("mistral-secret", json.dumps({"native": native.output, "web": web.output}))
+        self.assertNotIn("brave-secret", json.dumps({"native": native.output, "web": web.output}))
 
     def test_codex_prompt_templates_are_loaded_from_bundled_resource(self) -> None:
         templates = load_prompt_templates(CODEX_PROMPT_RESOURCE)
@@ -1338,6 +1380,23 @@ class ToolTests(unittest.TestCase):
             self.assertEqual(mcp_catalog.output["servers"][0]["missing_env"], ["DEMO_MCP_TOKEN"])
             manifest = tools["mcp_server_manifest"].execute({"server_id": "linear"}, config)
             self.assertEqual(manifest.status, ActionStatus.SUCCEEDED)
+            self.assertFalse(manifest.output["readiness"]["configured"])
+            self.assertEqual(manifest.output["readiness"]["missing_env"], ["LINEAR_API_KEY"])
+
+            from humungousaur.connectors import ConnectorRuntime
+
+            runtime = ConnectorRuntime(config)
+            runtime.configure_client("linear", client_id="linear-client")
+            runtime.oauth._save_token_from_response(  # type: ignore[attr-defined]
+                runtime.registry.provider("linear"),
+                {"access_token": "linear-access-token", "refresh_token": "linear-refresh-token", "scope": "read write"},
+                scopes=["read", "write"],
+            )
+            connector_manifest = tools["mcp_server_manifest"].execute({"server_id": "linear"}, config)
+            self.assertTrue(connector_manifest.output["readiness"]["configured"])
+            self.assertEqual(connector_manifest.output["readiness"]["missing_env"], [])
+            self.assertEqual(connector_manifest.output["readiness"]["credential_source"], "connector")
+            self.assertTrue(connector_manifest.output["readiness"]["connector_readiness"]["tool_ready"])
             discovered = tools["mcp_tool_discover"].execute({"server_id": "demo"}, config)
             self.assertEqual(discovered.output["tools"], ["demo_echo"])
             needs_approval = tools["mcp_tool_call"].execute({"server_id": "demo", "tool": "demo_echo", "arguments": {"x": 1}}, config)
@@ -1356,6 +1415,11 @@ class ToolTests(unittest.TestCase):
             self.assertTrue(enabled.output["plugin"]["enabled"])
             providers = tools["provider_registry"].execute({"provider_id": "anthropic"}, config)
             self.assertEqual(providers.output["providers"][0]["missing_env"], ["ANTHROPIC_API_KEY"])
+            runtime.configure_client("anthropic", client_id="anthropic-profile", client_secret="anthropic-secret")
+            connector_provider = tools["provider_registry"].execute({"provider_id": "anthropic"}, config)
+            self.assertTrue(connector_provider.output["providers"][0]["configured"])
+            self.assertEqual(connector_provider.output["providers"][0]["missing_env"], [])
+            self.assertEqual(connector_provider.output["providers"][0]["credential_source"], "connector")
             hooks = tools["runtime_hook_catalog"].execute({"event": "tool_call"}, config)
             self.assertEqual({hook["hook_id"] for hook in hooks.output["hooks"]}, {"tool.before_execute", "tool.after_execute"})
 
@@ -1448,6 +1512,28 @@ class ToolTests(unittest.TestCase):
             self.assertEqual(spotify.output["missing_env"], ["SPOTIFY_ACCESS_TOKEN"])
             x_search = tools["x_search"].execute({"query": "humungousaur"}, config)
             self.assertEqual(x_search.output["missing_env"], ["XAI_API_KEY"])
+
+    def test_spotify_tools_accept_connector_runtime_credentials(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir, patch.dict("os.environ", {}, clear=True):
+            workspace = Path(tmp_dir)
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", dry_run=True).normalized()
+            runtime = ConnectorRuntime(config)
+            runtime.store.save_token(
+                ConnectorTokenStatus(
+                    provider_id="spotify",
+                    connected=True,
+                    access_token_ref="connector:spotify:access_token",
+                    scopes=("user-read-playback-state", "playlist-read-private"),
+                    connected_at="2026-06-13T00:00:00Z",
+                )
+            )
+            result = default_tools(config)["spotify_search"].execute({"query": "song"}, config)
+
+        self.assertEqual(result.status, ActionStatus.SKIPPED)
+        self.assertEqual(result.output["missing_env"], [])
+        self.assertTrue(result.output["configured"])
+        self.assertEqual(result.output["credential_source"], "connector")
+        self.assertEqual(result.output["connector_provider_id"], "spotify")
 
     def test_native_gateway_security_ops_and_skill_pack_surfaces(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

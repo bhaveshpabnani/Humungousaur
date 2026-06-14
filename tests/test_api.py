@@ -1221,6 +1221,35 @@ class APITests(unittest.TestCase):
         self.assertGreater(status_after["sources"][0]["health_count"], 0)
         self.assertNotIn("raw message body", serialized)
 
+    def test_api_configures_manifest_field_connector_credentials(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            config = AgentConfig(workspace=workspace, data_dir=workspace / "artifacts", planner_provider="explicit").normalized()
+
+            with running_api(config) as base_url:
+                configured = api_post(
+                    base_url,
+                    "/connectors/configure",
+                    {
+                        "provider_id": "datadog",
+                        "credentials": {
+                            "profile_name": "datadog-us",
+                            "api_key": "dd-api-secret",
+                            "application_key": "dd-app-secret",
+                        },
+                    },
+                )
+                status = api_get(base_url, "/connectors/status?provider_id=datadog")
+
+        serialized = json.dumps({"configured": configured, "status": status}, ensure_ascii=False)
+        connector = status["connectors"][0]
+        self.assertTrue(configured["configured"])
+        self.assertEqual(configured["configured_fields"], ["profile_name", "api_key", "application_key"])
+        self.assertTrue(connector["connected"])
+        self.assertEqual(connector["credential_fields"], ["profile_name", "api_key", "application_key"])
+        self.assertNotIn("dd-api-secret", serialized)
+        self.assertNotIn("dd-app-secret", serialized)
+
     def test_api_approval_lifecycle(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)
@@ -1313,6 +1342,40 @@ class APITests(unittest.TestCase):
                 ]:
                     self.assertIn(expected, event_types)
                 self.assertEqual(timeline[-1]["payload"]["status"], "succeeded")
+
+    def test_api_desktop_chats_persist_messages_and_async_result(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            (workspace / "README.md").write_text("# Chat Demo\n\nPersistent runtime.", encoding="utf-8")
+            with running_api(AgentConfig(workspace=workspace, data_dir=workspace / "artifacts")) as base_url:
+                created = api_post(base_url, "/chats", {"title": "Support thread", "source": "macos_app"})
+                conversation_id = created["conversation"]["conversation_id"]
+
+                queued = api_post(
+                    base_url,
+                    f"/chats/{conversation_id}/runs/async",
+                    {
+                        "request": 'read_file {"path":"README.md"}',
+                        "display_text": "Read the project README",
+                        "source": "macos_app",
+                        "planner": "explicit",
+                    },
+                )
+                self.assertEqual(queued["status"], "planned")
+                self.assertEqual(queued["user_message"]["text"], "Read the project README")
+                self.assertEqual(queued["assistant_message"]["status"], "planned")
+
+                run = wait_for_finished_run(base_url, queued["run_id"])
+                self.assertEqual(run["status"], "succeeded")
+
+                messages = api_get(base_url, f"/chats/{conversation_id}/messages")
+                self.assertEqual([message["role"] for message in messages["messages"]], ["user", "assistant"])
+                self.assertIn("README.md", messages["messages"][1]["text"])
+                self.assertEqual(messages["messages"][1]["status"], "succeeded")
+
+                conversations = api_get(base_url, "/chats")
+                self.assertEqual(conversations["conversations"][0]["conversation_id"], conversation_id)
+                self.assertEqual(conversations["conversations"][0]["message_count"], 2)
 
     def test_api_cancel_run_before_worker_starts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
